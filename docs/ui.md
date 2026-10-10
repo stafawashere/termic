@@ -387,6 +387,38 @@ badge, and none of them touches the parent tab's work badge or bell.
   selection like a terminal child does, so the header drops its highlight and
   that row draws `--color-sel`.
 
+### The subagent transcript view
+
+Clicking a subagent row opens a read-only, live view of that agent's
+transcript in the task's preview slot (`openSubagentPreview` in
+`store/subagentPreview.ts`, which calls `openPreviewTab` with a `"subagent"`
+target keyed by agent id). A second row recycles the slot; double-clicking the
+pill pins it like any preview tab. The `SubagentTab` carries the parent tab
+id, session id and agent id, never a path, and is never persisted: only
+terminal tabs are durable.
+
+- **No terminal.** `SubagentPane.tsx` is a lazy React list styled after the
+  Claude TUI. It mounts no xterm and creates no WebGL context.
+- **Windowed by hand.** Only rows near the viewport are mounted, measured in
+  a layout effect so a corrected height lands before paint. Row keys are
+  entry indices in the whole transcript, so a page loaded above keeps every
+  mounted row where it was.
+- **Paged and tailed.** The view opens the host tail first and then reads
+  the last 500 entries, so the page always reaches at least as far as the
+  first live batch, and merges batches by their `start` index. "Load
+  earlier" prepends the page above and holds the entry being read in place;
+  the button goes once entry 0 is loaded.
+- **Follows only at the bottom.** `shouldFollowTail` in
+  `lib/subagentTranscript.ts` decides; scrolling up pauses following and
+  shows "Jump to latest".
+- **Untrusted text.** Entries render as React text, ANSI is stripped again on
+  this side, redacted thinking shows a placeholder, a `compact_boundary` line
+  is a divider row, and an entry kind the view does not know is a collapsed
+  generic row.
+- **Ends cleanly.** A transcript that is gone shows "Transcript expired" and
+  stops tailing. Archiving the task releases every view's watch and closes its
+  subagent tabs (`installSubagentPreviewArchiveWatch`).
+
 ## Task groups in the sidebar
 
 When an agent inside task A creates task B (`termic new`, or MCP `task_new`)

@@ -77,6 +77,9 @@ pub enum EntryKind {
     ToolUse,
     ToolResult,
     Error,
+    /// Claude compacted the conversation here. Everything after it continues
+    /// the same agent from a summary.
+    CompactBoundary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -453,6 +456,11 @@ fn parse_line(line: &str) -> Option<ParsedLine> {
         "system" => {
             let level = v.get("level").and_then(|l| l.as_str()).unwrap_or_default();
             let subtype = v.get("subtype").and_then(|s| s.as_str()).unwrap_or_default();
+            if subtype == "compact_boundary" {
+                let entries = vec![entry(EntryKind::CompactBoundary, "", &timestamp)];
+                return Some(ParsedLine { entries, outcome: Outcome::None });
+            }
+
             let is_error = level == "error" || subtype.contains("error");
             if !is_error {
                 return None;
@@ -1031,6 +1039,23 @@ mod tests {
         let json = serde_json::to_value(&parsed.entries[5]).unwrap();
         assert_eq!(json["kind"], "toolResult");
         assert_eq!(json["isError"], true);
+    }
+
+    #[test]
+    fn compact_boundary_is_an_entry_that_leaves_the_run_open() {
+        let boundary =
+            r#"{"type":"system","subtype":"compact_boundary","content":"Conversation compacted","compactMetadata":{"trigger":"auto","preTokens":1000}}"#
+                .to_string();
+
+        let parsed = parse_transcript(&jsonl(&[assistant_text("before"), boundary, assistant_text("after")]));
+        let kinds: Vec<EntryKind> = parsed.entries.iter().map(|e| e.kind).collect();
+        assert_eq!(kinds, [EntryKind::AssistantText, EntryKind::CompactBoundary, EntryKind::AssistantText]);
+        assert_eq!(parsed.skipped_lines, 0);
+        assert_eq!(serde_json::to_value(&parsed.entries[1]).unwrap()["kind"], "compactBoundary");
+
+        let boundary_last = r#"{"type":"system","subtype":"compact_boundary"}"#.to_string();
+        let open = parse_transcript(&jsonl(&[assistant_text("before"), boundary_last]));
+        assert_eq!(open.outcome, Outcome::None);
     }
 
     #[test]

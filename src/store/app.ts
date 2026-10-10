@@ -4,7 +4,7 @@
 import { create } from "zustand";
 import { logWorkState } from "@/lib/workStateLog";
 import { useUI } from "@/store/ui";
-import type { Project, Task, Tab, TerminalTab, DiffTab, PersistedTab, SplitTree, PaneLeaf, SplitDir, TaskSchedule } from "@/lib/types";
+import type { Project, Task, Tab, TerminalTab, DiffTab, SubagentTab, PersistedTab, SplitTree, PaneLeaf, SplitDir, TaskSchedule } from "@/lib/types";
 import { sameSchedule } from "@/lib/schedules/record";
 import {
   findLeaf, getAllLeaves, countLeaves, replaceNode, removeLeaf,
@@ -101,6 +101,27 @@ interface View {
    *  view, so it survives opening Settings over History. */
   projectId?: string;
 }
+
+
+export type PreviewTarget =
+  | {
+    type: "edit" | "diff" | "dir" | "external";
+    path: string;
+    title: string;
+    scope?: DiffTab["scope"];
+    revealAt?: { line: number; col?: number };
+    revealHeading?: string;
+    permanent?: boolean;
+  }
+  | {
+    type: "subagent";
+    title: string;
+    parentTabId: SubagentTab["parentTabId"];
+    sessionId: SubagentTab["sessionId"];
+    subagentAgentId: SubagentTab["subagentAgentId"];
+    workflowRunId?: SubagentTab["workflowRunId"];
+    permanent?: boolean;
+  };
 
 export interface AppState {
   projects: Project[];
@@ -408,8 +429,10 @@ export interface AppState {
    *  regular tab instead: an already-open preview of the same file is pinned
    *  in place, the preview slot is never recycled, and a new tab is created
    *  non-preview. For deliberate opens (cmd+click in a terminal, the file
-   *  finder), where the user asked for THAT file and expects it to stay. */
-  openPreviewTab: (taskId: string, data: { type: "edit" | "diff" | "dir" | "external"; path: string; title: string; scope?: DiffTab["scope"]; revealAt?: { line: number; col?: number }; revealHeading?: string; permanent?: boolean }) => void;
+   *  finder), where the user asked for THAT file and expects it to stay.
+   *  A subagent transcript (a sidebar subagent row) lands in the same slot,
+   *  keyed by its agent instead of a path. */
+  openPreviewTab: (taskId: string, data: PreviewTarget) => void;
   /** Clear an edit tab's `revealAt` after EditorPane has consumed it,
    *  so a re-render doesn't re-jump the cursor. */
   consumeReveal: (taskId: string, tabId: string) => void;
@@ -2698,6 +2721,38 @@ export const useApp = create<AppState>((set, get) => ({
       dirHistory: data.type === "dir" ? [data.path] : undefined,
       dirHistoryIndex: data.type === "dir" ? 0 : undefined,
     };
+    // What the slot shows: a path for a file, an agent for a subagent
+    // transcript. Each kind clears the other's fields, so a slot recycled
+    // from a transcript to a file (or back) keeps nothing of the old occupant.
+    const occupantPatch = data.type === "subagent"
+      ? {
+        path: undefined,
+        parentTabId: data.parentTabId,
+        sessionId: data.sessionId,
+        subagentAgentId: data.subagentAgentId,
+        workflowRunId: data.workflowRunId ?? null,
+      }
+      : {
+        path: data.path,
+        parentTabId: undefined,
+        sessionId: undefined,
+        subagentAgentId: undefined,
+        workflowRunId: undefined,
+      };
+    const isSameOccupant = (t: Tab) => {
+      if (t.type !== data.type) return false;
+
+      if (data.type === "subagent") {
+        const subagentTab = t as SubagentTab;
+        const sameAgent = subagentTab.subagentAgentId === data.subagentAgentId;
+        const sameParent = subagentTab.parentTabId === data.parentTabId;
+        return sameAgent && sameParent;
+      }
+
+      const samePath = (t as any).path === data.path;
+      const sameScope = t.type !== "diff" || (t as any).scope === (data.type === "diff" ? data.scope : undefined);
+      return samePath && sameScope;
+    };
     // Used instead by the "already open, same file" branches: only a field
     // the caller explicitly supplied is ever applied. Unlike the recycle
     // case, the file identity ISN'T changing here, so there's no stale
@@ -2742,8 +2797,7 @@ export const useApp = create<AppState>((set, get) => ({
       });
 
       // Already open in this pane?
-      const existing = paneTabs.find(t => t.type === data.type && (t as any).path === data.path
-        && (t.type !== "diff" || (t as any).scope === (data.type === "diff" ? data.scope : undefined)));
+      const existing = paneTabs.find(isSameOccupant);
       if (existing) {
         const next = withNewRevealOnly(existing);
         const newTree = setLeafActiveTabId(tree, activePaneLeaf.id, existing.id);
@@ -2755,7 +2809,7 @@ export const useApp = create<AppState>((set, get) => ({
       const previewTab = data.permanent ? undefined : paneTabs.find(t => t.preview);
       if (previewTab) {
         const next = list.map(t => t.id === previewTab.id ? {
-          ...t, type: data.type, path: data.path, title: data.title,
+          ...t, type: data.type, title: data.title, ...occupantPatch,
           liveTitle: undefined, customTitle: false, dirty: false, preview: true,
         // The recycled slot is now a DIFFERENT file: a syntax the user set
         // on the previous occupant (or one sniffed from its content) must
@@ -2771,7 +2825,7 @@ export const useApp = create<AppState>((set, get) => ({
       // Add new tab to split pane.
       const newTab: Tab = {
         id: crypto.randomUUID(), type: data.type, title: data.title,
-        path: data.path, preview: !data.permanent, paneId: activePaneLeaf.id,
+        ...occupantPatch, preview: !data.permanent, paneId: activePaneLeaf.id,
         ...revealPatch,
       } as any;
       const newTree = replaceNode(tree, activePaneLeaf.id, {
@@ -2788,8 +2842,7 @@ export const useApp = create<AppState>((set, get) => ({
     const setActive = (id: string): Partial<AppState> =>
       ({ activeTab: { ...s.activeTab, [taskId]: id } });
 
-    const existing = mainList.find(t => t.type === data.type && (t as any).path === data.path
-      && (t.type !== "diff" || (t as any).scope === (data.type === "diff" ? data.scope : undefined)));
+    const existing = mainList.find(isSameOccupant);
     if (existing) {
       const next = withNewRevealOnly(existing);
       return { tabs: { ...s.tabs, [taskId]: next }, ...setActive(existing.id) };
@@ -2797,7 +2850,7 @@ export const useApp = create<AppState>((set, get) => ({
 
     if (previewTab) {
       const next = list.map(t => t.id === previewTab.id ? {
-        ...t, type: data.type, path: data.path, title: data.title,
+        ...t, type: data.type, title: data.title, ...occupantPatch,
         liveTitle: undefined, customTitle: false, dirty: false, preview: true,
         // The recycled slot is now a DIFFERENT file: a syntax the user set
         // on the previous occupant (or one sniffed from its content) must
@@ -2811,7 +2864,7 @@ export const useApp = create<AppState>((set, get) => ({
 
     const newTab: Tab = {
       id: crypto.randomUUID(), type: data.type, title: data.title,
-      path: data.path, preview: !data.permanent,
+      ...occupantPatch, preview: !data.permanent,
       ...revealPatch,
     } as any;
     return { tabs: { ...s.tabs, [taskId]: [...list, newTab] }, ...setActive(newTab.id) };

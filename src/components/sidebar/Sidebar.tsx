@@ -3825,7 +3825,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                 </button>
               </span>
             </div>
-            {isClaudeTab && <SubagentRows tabId={tab.id} selectedAgentId={selectedSubagentId} />}
+            {isClaudeTab && <SubagentRows taskId={w.id} tabId={tab.id} selectedAgentId={selectedSubagentId} />}
           </Fragment>
         );
       })}

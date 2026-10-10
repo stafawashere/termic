@@ -15,7 +15,9 @@ import { create } from "zustand";
 import { Check, ChevronDown, ChevronRight, CircleDashed, CircleSlash, Clock3, X } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils";
+import { useApp } from "@/store/app";
 import { useSubagents, type SubagentState } from "@/store/subagents";
+import { openSubagentPreview } from "@/store/subagentPreview";
 import {
   buildSubagentTree, createSubagentStructureSelector, parseSubagentStructureKey, selectSubagentRecord,
 } from "./subagentTree";
@@ -80,7 +82,8 @@ function StateMark({ state }: { state: SubagentState }) {
   }
 }
 
-const SubagentRow = memo(function SubagentRow({ tabId, agentId, depth, hasChildren, folded, selected }: {
+const SubagentRow = memo(function SubagentRow({ taskId, tabId, agentId, depth, hasChildren, folded, selected }: {
+  taskId: string;
   tabId: string;
   agentId: string;
   depth: number;
@@ -100,14 +103,22 @@ const SubagentRow = memo(function SubagentRow({ tabId, agentId, depth, hasChildr
   const rowTitle = record.description ? `${record.agentType}: ${record.description}` : record.agentType;
   const foldLabel = folded ? t("subagents.expand") : t("subagents.collapse");
 
+  // Activate the task first and open second: activating restores the tab the
+  // task last had in front, which would otherwise cover the transcript.
+  const openTranscript = () => {
+    useApp.getState().setActiveTask(taskId);
+    openSubagentPreview(taskId, tabId, agentId);
+  };
+
   return (
     <div
       data-testid="subagent-row"
       data-agent-id={agentId}
       data-subagent-state={record.state}
       data-depth={depth}
+      onClick={openTranscript}
       className={cn(
-        "group/subagent flex items-center gap-1.5 rounded-md px-1.5 py-[3px] text-[12.5px] select-none transition-colors",
+        "group/subagent flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-[3px] text-[12.5px] select-none transition-colors",
         DEPTH_INDENT[depth] ?? DEPTH_INDENT[3],
         selected
           ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
@@ -147,7 +158,8 @@ const SubagentRow = memo(function SubagentRow({ tabId, agentId, depth, hasChildr
 
 /** Every subagent row of one tab, flat and keyed by agent id, so a row that
  *  moves to a new parent is the same DOM node in its new place. */
-export const SubagentRows = memo(function SubagentRows({ tabId, selectedAgentId }: {
+export const SubagentRows = memo(function SubagentRows({ taskId, tabId, selectedAgentId }: {
+  taskId: string;
   tabId: string;
   /** The agent whose tab is the active one, when that is in this task. */
   selectedAgentId: string | null;
@@ -168,6 +180,7 @@ export const SubagentRows = memo(function SubagentRows({ tabId, selectedAgentId 
       {rows.map(row => (
         <SubagentRow
           key={row.agentId}
+          taskId={taskId}
           tabId={tabId}
           agentId={row.agentId}
           depth={row.depth}

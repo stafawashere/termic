@@ -1381,7 +1381,7 @@ export type { SplitDir, SplitNode, PaneLeaf, SplitTree } from "@/lib/splitTree";
 
 // ───────────────────────────── tab model (frontend only) ─────────────────────────────
 
-export type TabType = "terminal" | "diff" | "edit" | "dir" | "scratch" | "external";
+export type TabType = "terminal" | "diff" | "edit" | "dir" | "scratch" | "external" | "subagent";
 
 export interface BaseTab {
   id: string;
@@ -1858,7 +1858,30 @@ export interface ExternalTab extends BaseTab {
   remoteImagesUnblocked?: boolean;
 }
 
-export type Tab = TerminalTab | DiffTab | EditTab | DirTab | ScratchTab | ExternalTab;
+/** A read-only, live view of one claude subagent's transcript, opened from
+ *  its sidebar row into the task's preview slot.
+ *
+ *  A distinct type for the same reason `ScratchTab` is one: it has no path, so
+ *  every place that reads `EditTab.path` is a compiler error to answer rather
+ *  than a runtime surprise. The transcript is found on the host from the task,
+ *  the session and the agent id; nothing here is a path, and nothing a hook
+ *  payload carried is trusted as one.
+ *
+ *  Never persisted: only terminal tabs are durable, and a relaunch starts
+ *  without it. */
+export interface SubagentTab extends BaseTab {
+  type: "subagent";
+  /** The claude terminal tab that spawned the subagent. */
+  parentTabId: string;
+  /** That tab's claude session, which names the transcript directory. */
+  sessionId: string;
+  /** Bare agent id, without the `agent-` file prefix. */
+  subagentAgentId: string;
+  /** Set for an agent a workflow ran; null for an Agent-tool subagent. */
+  workflowRunId?: string | null;
+}
+
+export type Tab = TerminalTab | DiffTab | EditTab | DirTab | ScratchTab | ExternalTab | SubagentTab;
 
 /** Mirror of `repo_config::RepoConfig` (src-tauri/src/repo_config.rs).
  *  Parsed from the repo-root `.termic.yaml` — committed, team-shared
@@ -2132,7 +2155,8 @@ export interface SubagentSummary extends SubagentMeta {
 }
 
 export type TranscriptEntryKind =
-  | "userText" | "assistantText" | "thinking" | "redactedThinking" | "toolUse" | "toolResult" | "error";
+  | "userText" | "assistantText" | "thinking" | "redactedThinking" | "toolUse" | "toolResult" | "error"
+  | "compactBoundary";
 
 /** Plain text with ANSI already stripped. Untrusted: render as text, never HTML. */
 export interface TranscriptEntry {

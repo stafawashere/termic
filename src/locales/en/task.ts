@@ -444,4 +444,31 @@ export default {
     contextMissingActive: "After the next reply. Restart the tab if you just installed hooks.",
     contextMissingHooks: "Needs hooks.",
   },
+
+  // The read-only subagent transcript view (SubagentPane), opened from a
+  // subagent row in the sidebar.
+  subagentView: {
+    tabTitleFallback: "Subagent",
+    ariaLabel: "Subagent transcript",
+    readOnly: "Read-only",
+    loading: "Loading transcript...",
+    empty: "No entries yet.",
+    loadEarlier: "Load earlier",
+    loadingEarlier: "Loading earlier entries...",
+    jumpToLatest: "Jump to latest",
+    expired: "Transcript expired",
+    expiredHint: "The transcript file is gone, so there is nothing more to show.",
+    unreadable: "The transcript could not be read.",
+    closed: "This task was archived, so the transcript is no longer read.",
+    compacted: "Conversation compacted",
+    thinking: "Thinking",
+    redactedThinking: "Thinking (redacted)",
+    toolResult: "Result",
+    toolError: "Tool error",
+    error: "Error",
+    truncated: "Truncated",
+    unknownEntry: "Unrecognized entry ({{kind}})",
+    showMore: "Show more",
+    showLess: "Show less",
+  },
 };

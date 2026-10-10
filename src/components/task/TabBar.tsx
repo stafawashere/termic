@@ -11,7 +11,7 @@ import { DropdownRoot, DropdownTrigger, DropdownMenu } from "@/components/ui/Dro
 import { NewTabMenuItems } from "./NewTabMenuItems";
 import { newScratchTab, openOrCreateScopedScratchTab } from "@/lib/scratchTabs";
 import { CliIcon, CLI_BRAND_COLOR, CLI_LABEL, resolveIconId } from "@/icons/cli";
-import { Plus, X, GitCompare, FileText, NotepadText, SquareSplitVertical, SquareSplitHorizontal, TerminalSquare, Bell, Megaphone, Pin, Repeat, RotateCw, Square, Play, AlertTriangle } from "lucide-react";
+import { Plus, X, GitCompare, FileText, NotepadText, Bot, SquareSplitVertical, SquareSplitHorizontal, TerminalSquare, Bell, Megaphone, Pin, Repeat, RotateCw, Square, Play, AlertTriangle } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { ptyKill } from "@/lib/ipc";
 import { usePrefs } from "@/store/prefs";
@@ -506,12 +506,13 @@ export function TabPill({ task, tab, active, paneFocused, compact, onSelect, onC
     >
       {/* Work-state badge moved to the trailing slot — see below. */}
       {/* Icon slot: Terminals get CLI brand icons, Edit/Diff tabs get dynamic Catppuccin file icons if path is available, else fallback / none */}
-      {(tab.type === "terminal" || fileIcon || tab.type === "diff" || tab.type === "scratch") && (
+      {(tab.type === "terminal" || fileIcon || tab.type === "diff" || tab.type === "scratch" || tab.type === "subagent") && (
         <span className={cn("shrink-0 flex items-center justify-center", color)}>
           {tab.type === "terminal" && <CliIcon cli={iconId} className="h-4 w-4" />}
           {(tab.type === "edit" || tab.type === "dir" || tab.type === "external") && fileIcon && <img src={fileIcon} alt="" className="h-4 w-4 shrink-0 file-icon" />}
           {tab.type === "diff" && (fileIcon ? <img src={fileIcon} alt="" className="h-4 w-4 shrink-0 file-icon" /> : <GitCompare className="h-4 w-4" />)}
           {tab.type === "scratch" && <NotepadText className="h-3.5 w-3.5" />}
+          {tab.type === "subagent" && <Bot className="h-3.5 w-3.5" />}
         </span>
       )}
       {/* Running message queue (ralph loop) — subtle accent marker. */}

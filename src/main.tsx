@@ -16,6 +16,7 @@ import { initTerminalDropHandler } from "@/lib/terminalDrop";
 import { initWindowlessMode } from "@/lib/windowlessMode";
 import { initModKeyClass } from "@/lib/modKeyClass";
 import { installRecentPlacesTracker } from "@/lib/recentPlacesTracker";
+import { installSubagentPreviewArchiveWatch } from "@/store/subagentPreview";
 import { initUserPresence } from "@/lib/userPresence";
 import { initWindowFocus } from "@/lib/windowFocus";
 
@@ -224,6 +225,9 @@ initWindowFocus();
 // rather than a hook into the setters, so every way of selecting a task or tab
 // feeds it: the sidebar, the CLI, deep links, the palette, LSP navigation.
 installRecentPlacesTracker();
+
+// An archived task's subagent views stop reading their transcripts and close.
+installSubagentPreviewArchiveWatch();
 
 // Mirror uncaught errors + unhandled promise rejections to the Rust-side
 // debug log so they show up in the dev terminal (`/var/folders/.../T/

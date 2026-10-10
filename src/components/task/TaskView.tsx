@@ -56,6 +56,7 @@ const SvgPane = lazy(() => import("./SvgPane").then(m => ({ default: m.SvgPane }
 const HtmlPane = lazy(() => import("./HtmlPane").then(m => ({ default: m.HtmlPane })));
 const PreviewPane  = lazy(() => import("./PreviewPane").then(m => ({ default: m.PreviewPane })));
 const DirListingPane = lazy(() => import("./DirListingPane").then(m => ({ default: m.DirListingPane })));
+const SubagentPane = lazy(() => import("./SubagentPane").then(m => ({ default: m.SubagentPane })));
 // Lightweight extension check so we don't import the (lazy) MarkdownPane
 // module just to ask whether a path is markdown. Shared with the markdown
 // preview's link handler (markdownPaths.ts) so both agree on what counts.
@@ -664,6 +665,7 @@ export function TaskView({ task }: { task: Task }) {
                   )}
                   {t.type === "diff"     && <Suspense fallback={null}><DiffPane task={task} tab={t} /></Suspense>}
                   {t.type === "dir"      && <Suspense fallback={null}><DirListingPane task={task} tab={t} visible={visible} ownsFind={ownsFind} /></Suspense>}
+                  {t.type === "subagent" && <Suspense fallback={null}><SubagentPane task={task} tab={t} /></Suspense>}
                 </div>
               );
             })}
