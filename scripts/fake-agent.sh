@@ -122,6 +122,14 @@ set_title "✳ ${name}"
 #               grammar is pinned in lib/delegatedWork.ts and produced by
 #               agent_hooks.rs; send the same BODY twice to replay the case
 #               where the same work is still outstanding a turn later.
+#   #subagent BODY
+#               replay claude's SubagentStart / SubagentStop hook: an OSC 777
+#               from the trusted sender whose body is `subagent BODY`, e.g.
+#               `#subagent start <sessionId> <agentId> <agentType>` or
+#               `#subagent stop <sessionId> <agentId> <agentType>`. The grammar
+#               is pinned in lib/subagentHooks.ts. Sent mid-turn or between
+#               turns, it must never badge, ring or move the work state; a
+#               malformed BODY is how a spec proves the drop.
 #   #hookdone   a plain hook turn that ENDS: 133;C then 133;D, nothing
 #               outstanding. What claude writes when its `Stop` payload has an
 #               empty `background_tasks`, and the only one of these that rings.
@@ -465,6 +473,10 @@ while IFS= read -r line; do
       echo "FAKE-AGENT delegated: ${line#\#delegated }"
       set_title "✳ ${name}"
       osc777 "termic;agent delegated: ${line#\#delegated }"
+      continue ;;
+    "#subagent "*)
+      echo "FAKE-AGENT subagent: ${line#\#subagent }"
+      osc777 "termic;subagent ${line#\#subagent }"
       continue ;;
     "#hookattn")
       spin

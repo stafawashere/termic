@@ -83,6 +83,11 @@ export const HOOK_OSC_DONE_BODY = "agent done";
  *  KEEP IN SYNC with `DELEGATED_BODY_PREFIX` in `agent_hooks.rs`. */
 export const HOOK_OSC_DELEGATED_PREFIX = "agent delegated: ";
 
+/** Prefix of claude's subagent report, `subagent start|stop <session> <agent>
+ *  <type>`. Lives with its parser in `lib/subagentHooks.ts`; re-exported here
+ *  so every trusted body prefix can be read in one place. */
+export { HOOK_OSC_SUBAGENT_PREFIX } from "@/lib/subagentHooks";
+
 /** The session id in a trusted `session <uuid>` body, or null.
  *
  *  Validated as a UUID rather than taken verbatim, and that is not politeness:
