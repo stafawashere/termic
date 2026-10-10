@@ -355,6 +355,38 @@ deferred by a `setTimeout`, not a `requestAnimationFrame`: a just-mounted
 listener has to be attached first, and rAF is frozen on an occluded window (see
 [gotchas.md](gotchas.md)).
 
+## Subagent rows in the sidebar
+
+Each subagent a claude tab starts gets a row under that tab's row
+(`SubagentRows.tsx`, logic in `subagentTree.ts`). The rows come from
+`useSubagents` (`store/subagents.ts`), which the `SubagentStart` /
+`SubagentStop` hooks feed and the transcript files on disk complete: a stop
+says nothing about how the agent ended, so the row reads `unknown` until
+`subagent_list` finds a final answer (`done`) or an error (`failed`). A
+claude process exiting with agents still running marks them `interrupted`;
+`expired` is a transcript that is gone. Each of the six states draws its own
+badge, and none of them touches the parent tab's work badge or bell.
+
+- **One flat keyed list, nested by indent.** An agent sits under the row of
+  its `parentAgentId` when that agent has a row, otherwise under the tab, and
+  the indent stops growing at depth 3 (`MAX_SUBAGENT_INDENT_DEPTH`) while
+  deeper agents keep their rows. Flat because a parent named by a late
+  `.meta.json` then MOVES the row (the same DOM node, so no frame without it)
+  instead of remounting a subtree.
+- **Two subscriptions.** The list selects a structure key (which agents,
+  under which parent) and each row selects its own record, so an agent
+  finishing re-renders that row alone. Pinned in `selectorFanout.test.ts`
+  ("subagent rows").
+- **Workflow agents get no row.** They stay in the store for the workflow
+  run node; a child whose parent is one sits under the tab.
+- **Folding is in memory only.** A row with children has a chevron that folds
+  its subtree (`useSubagentFold`); collapsing the task hides every subagent
+  row with it, and nothing about subagents is written to localStorage.
+- **The header predicate is `childRowCarriesSelection`.** An active tab of
+  type `"subagent"` whose `subagentAgentId` has a row in this task carries the
+  selection like a terminal child does, so the header drops its highlight and
+  that row draws `--color-sel`.
+
 ## Task groups in the sidebar
 
 When an agent inside task A creates task B (`termic new`, or MCP `task_new`)
