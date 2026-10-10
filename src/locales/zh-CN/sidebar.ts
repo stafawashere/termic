@@ -199,4 +199,21 @@ export default {
   scheduleTask: "设置定时…",
   editSchedule: "编辑定时任务…",
   scheduleDocker: "定时执行暂不支持 Docker",
+
+  subagents: {
+    running: "运行中",
+    runningHint: "该子智能体仍在工作。",
+    done: "已完成",
+    doneHint: "该子智能体已完成工作。",
+    failed: "失败",
+    failedHint: "该子智能体因错误而结束。",
+    interrupted: "已中断",
+    interruptedHint: "启动它的智能体在它完成前已退出。",
+    unknown: "已停止",
+    unknownHint: "该子智能体已停止，但其记录没有说明结束方式。",
+    expired: "已过期",
+    expiredHint: "其记录已不存在，没有更多内容可显示。",
+    expand: "显示它启动的子智能体",
+    collapse: "隐藏它启动的子智能体",
+  },
 };

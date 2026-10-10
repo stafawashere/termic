@@ -202,4 +202,23 @@ export default {
   scheduleTask: "Schedule…",
   editSchedule: "Edit schedule…",
   scheduleDocker: "Scheduled runs do not support Docker yet",
+
+  // Subagent rows under a claude tab: the state badge (label, then the
+  // tooltip that says what it means) and the chevron that folds a subtree.
+  subagents: {
+    running: "Running",
+    runningHint: "This subagent is still working.",
+    done: "Done",
+    doneHint: "This subagent finished its work.",
+    failed: "Failed",
+    failedHint: "This subagent ended on an error.",
+    interrupted: "Interrupted",
+    interruptedHint: "The agent that started it exited before it finished.",
+    unknown: "Stopped",
+    unknownHint: "This subagent stopped, and its transcript does not say how it ended.",
+    expired: "Expired",
+    expiredHint: "Its transcript is gone, so there is nothing more to show.",
+    expand: "Show the subagents it started",
+    collapse: "Hide the subagents it started",
+  },
 };

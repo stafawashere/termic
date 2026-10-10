@@ -36,9 +36,11 @@ SPINNER=("⣷" "⣯" "⣟" "⡿" "⢿" "⣻" "⣽" "⣾")
 
 # claude shows the task in its title; pull it from --name if the spawn passed one.
 name="fakeagent"
+session_arg=""
 prev=""
 for a in "$@"; do
   [ "$prev" = "--name" ] && name="$a"
+  case "$prev" in --session-id|--resume) session_arg="$a" ;; esac
   prev="$a"
 done
 
@@ -130,6 +132,18 @@ set_title "✳ ${name}"
 #               is pinned in lib/subagentHooks.ts. Sent mid-turn or between
 #               turns, it must never badge, ring or move the work state; a
 #               malformed BODY is how a spec proves the drop.
+#   #subagent-jsonl ID LINE
+#   #subagent-meta ID JSON
+#   #subagent-rm ID
+#               the files claude keeps per subagent, written where termic's
+#               subagent_list reads them:
+#               $CLAUDE_CONFIG_DIR/projects/<cwd slug>/<session>/subagents/.
+#               -jsonl appends LINE to agent-ID.jsonl, -meta writes JSON as
+#               agent-ID.meta.json, -rm deletes both. The session is the one
+#               this spawn was given (--session-id / --resume). Refused unless
+#               CLAUDE_CONFIG_DIR sits inside TERMIC_DATA_DIR, so a run can
+#               never write into a real claude config. Keep each line short:
+#               it arrives through a canonical-mode read.
 #   #hookdone   a plain hook turn that ENDS: 133;C then 133;D, nothing
 #               outstanding. What claude writes when its `Stop` payload has an
 #               empty `background_tasks`, and the only one of these that rings.
@@ -155,6 +169,23 @@ osc133() {
   esac
 }
 spin()   { for f in 0 1 2; do set_title "${SPINNER[$f]} ${name}"; sleep 0.15; done; }
+
+# The subagents/ dir of this spawn's session, or nothing when the directive
+# must be refused (see #subagent-jsonl above).
+subagent_dir() {
+  local config="${CLAUDE_CONFIG_DIR:-}"
+  local data="${TERMIC_DATA_DIR:-}"
+  local inside_profile=""
+  if [ -n "$config" ] && [ -n "$data" ] && [[ "$config" == "$data"/* ]]; then
+    inside_profile=1
+  fi
+  [ -n "$inside_profile" ] || return 1
+  [[ "$session_arg" =~ ^[0-9a-fA-F-]{36}$ ]] || return 1
+
+  local slug
+  slug="$(printf '%s' "$PWD" | sed 's/[^A-Za-z0-9]/-/g')"
+  printf '%s/projects/%s/%s/subagents' "$config" "$slug" "$session_arg"
+}
 
 # One "prompt" per stdin line: go busy (spinner title + streamed output), then
 # return to the idle glyph — the busy -> idle transition claude drives, which
@@ -231,6 +262,7 @@ if [ -n "$picker" ]; then
   picker_log "$(printf '%q' "$choice")"
   case "$choice" in
     "pick "*)
+      session_arg="${choice#pick }"
       osc777 "termic;agent ready for input"
       osc777 "termic;session ${choice#pick }"
       echo "FAKE-AGENT resumed ${choice#pick }" ;;
@@ -473,6 +505,28 @@ while IFS= read -r line; do
       echo "FAKE-AGENT delegated: ${line#\#delegated }"
       set_title "✳ ${name}"
       osc777 "termic;agent delegated: ${line#\#delegated }"
+      continue ;;
+    "#subagent-jsonl "*|"#subagent-meta "*|"#subagent-rm "*)
+      verb="${line%% *}"
+      rest="${line#* }"
+      agent="${rest%% *}"
+      body=""
+      [ "$rest" != "$agent" ] && body="${rest#* }"
+      if ! dir="$(subagent_dir)"; then
+        echo "FAKE-AGENT ${verb#\#} refused: no e2e claude config dir or no session"
+        continue
+      fi
+      if ! [[ "$agent" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
+        echo "FAKE-AGENT ${verb#\#} refused: bad agent id"
+        continue
+      fi
+      mkdir -p "$dir"
+      case "$verb" in
+        "#subagent-jsonl") printf '%s\n' "$body" >> "$dir/agent-${agent}.jsonl" ;;
+        "#subagent-meta") printf '%s' "$body" > "$dir/agent-${agent}.meta.json" ;;
+        "#subagent-rm") rm -f "$dir/agent-${agent}.jsonl" "$dir/agent-${agent}.meta.json" ;;
+      esac
+      echo "FAKE-AGENT ${verb#\#} ${agent}"
       continue ;;
     "#subagent "*)
       echo "FAKE-AGENT subagent: ${line#\#subagent }"

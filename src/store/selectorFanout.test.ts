@@ -42,6 +42,7 @@ vi.mock("@/lib/tabFocus", () => ({
 import { useApp, selectTaskTabs, selectActiveTabId, EMPTY_TABS } from "@/store/app";
 import { useAgentUsage, usageKey } from "@/store/agentUsage";
 import { useSubagents, selectTabSubagents } from "@/store/subagents";
+import { createSubagentStructureSelector, hasSubagentRow, selectSubagentRecord } from "@/components/sidebar/subagentTree";
 import {
   createSidebarFactsSelector, createRowTabsSelector, tabRenderEqual, tabListRenderEqual,
   createStatusFactsSelector, createBoardFilterFactsSelector, selectStatusRowBadge, selectStatusRowDelegated,
@@ -1040,5 +1041,112 @@ describe("subagents (bear traps 5, 8)", () => {
     expect(perTab.reduce((a, b) => a + b, 0)).toBe(1);
 
     unsub();
+  });
+});
+
+// -- Subagent rows -----------------------------------------------------------
+//
+// What the sidebar mounts for subagents: per claude tab one structure key
+// (SubagentRows' list), per agent one record selector (each SubagentRow), and
+// per task row one boolean for the header highlight. A subagent finishing is
+// the common write, and it must reach its own row alone.
+describe("subagent rows (bear traps 5, 8)", () => {
+  const SESSION = "11111111-2222-4333-8444-555555555555";
+  const TABS = 16;
+  const AGENTS_PER_TAB = 8;
+  const tabIds = Array.from({ length: TABS }, (_, i) => `task-${i}-a`);
+  const taskOf = (tabId: string) => tabId.slice(0, -2);
+  const agentId = (tab: number, n: number) => `a${tab}x${n}`;
+
+  type SubagentSelector = (s: ReturnType<typeof useSubagents.getState>) => unknown;
+
+  interface Mounted {
+    label: string;
+    select: SubagentSelector;
+  }
+
+  /** What a sidebar with every task expanded subscribes to the subagent
+   *  store with, labelled so a failure names the selector that moved. */
+  function mountRows(): Mounted[] {
+    const mounted: Mounted[] = [];
+    tabIds.forEach((tabId, t) => {
+      mounted.push({ label: `structure ${tabId}`, select: createSubagentStructureSelector(tabId) });
+      mounted.push({ label: `header ${tabId}`, select: s => hasSubagentRow(s.byTab, [tabId], agentId(t, 0)) });
+      for (let n = 0; n < AGENTS_PER_TAB; n++) {
+        mounted.push({ label: `row ${agentId(t, n)}`, select: selectSubagentRecord(tabId, agentId(t, n)) });
+      }
+    });
+    return mounted;
+  }
+
+  /** Run `write` with `mounted` subscribed and return the labels whose
+   *  snapshot changed identity, once per change. */
+  function changedBy(mounted: Mounted[], write: () => void): string[] {
+    const snap = mounted.map(m => m.select(useSubagents.getState()));
+    const changed: string[] = [];
+    const unsub = useSubagents.subscribe(state => {
+      mounted.forEach((m, i) => {
+        const next = m.select(state);
+        if (!Object.is(next, snap[i])) { changed.push(m.label); snap[i] = next; }
+      });
+    });
+
+    write();
+    unsub();
+    return changed;
+  }
+
+  beforeEach(() => {
+    useSubagents.setState({ byTab: {} });
+    useApp.setState({ tabs: Object.fromEntries(tabIds.map(id => [taskOf(id), [tab(id)]])) });
+    tabIds.forEach((tabId, t) => {
+      for (let n = 0; n < AGENTS_PER_TAB; n++) {
+        useSubagents.getState().start(taskOf(tabId), tabId, SESSION, agentId(t, n), "Explore");
+      }
+    });
+  });
+
+  it("an agent finishing reaches only its own row", () => {
+    const changed = changedBy(mountRows(), () =>
+      useSubagents.getState().stop(tabIds[3], agentId(3, 5), "done"));
+
+    expect(changed).toEqual([`row ${agentId(3, 5)}`]);
+    expect(useSubagents.getState().byTab[tabIds[3]].agents[agentId(3, 5)].state).toBe("done");
+  });
+
+  it("an agent finishing reaches no useApp selector, no sidebar body and no task row", () => {
+    const taskIds = tabIds.map(taskOf);
+    const subs = [
+      createSidebarFactsSelector(),
+      createStatusFactsSelector(),
+      ...taskIds.map(id => createRowTabsSelector(id)),
+      ...taskIds.map(id => selectTaskTabs(id)),
+    ];
+
+    const r = measureFanout(subs, AGENTS_PER_TAB, n =>
+      useSubagents.getState().stop(tabIds[n], agentId(n, n), "done"));
+
+    expect(r.invalidations).toBe(0);
+    expect(r.selectorRuns).toBe(0);
+  });
+
+  it("a new agent DOES reach its tab's structure key (positive control)", () => {
+    const changed = changedBy(mountRows(), () =>
+      useSubagents.getState().start(taskOf(tabIds[3]), tabIds[3], SESSION, "late1", "Explore"));
+
+    expect(changed).toEqual([`structure ${tabIds[3]}`]);
+  });
+
+  it("a parent arriving from the transcript reaches the structure key and that row", () => {
+    const parent = agentId(3, 0);
+    const child = agentId(3, 5);
+    const changed = changedBy(mountRows(), () =>
+      useSubagents.getState().applySummaries(tabIds[3], SESSION, [{
+        agentId: child, isWorkflow: false, workflowRunId: null, mtimeMs: 1, outcome: "none",
+        agentType: "Explore", description: null, model: null, toolUseId: null, spawnDepth: 2,
+        parentAgentId: parent, requestShape: null, requestNonInteractive: null, workflowPhase: null,
+      }]));
+
+    expect(changed.sort()).toEqual([`row ${child}`, `structure ${tabIds[3]}`].sort());
   });
 });

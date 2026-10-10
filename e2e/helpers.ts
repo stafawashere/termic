@@ -90,6 +90,10 @@ export interface TermicApi {
   useAgentUsage: { getState: () => any; setState: (p: any) => void };
   /** Dismissed "Usage unknown" labels (src/store/usageUnknownDismissed.ts). */
   useUsageUnknownDismissed: { getState: () => any; setState: (p: any) => void };
+  /** Subagent records per tab (src/store/subagents.ts), fed by the hooks. */
+  useSubagents: { getState: () => any; setState: (p: any) => void };
+  /** Which subagent rows are folded (src/components/sidebar/SubagentRows.tsx). */
+  useSubagentFold: { getState: () => any; setState: (p: any) => void };
   /** `termic scratchpad`'s webview handler (src/lib/scratchCli.ts). */
   padHandler: (params: any) => Promise<any>;
   /** The live i18next instance, for `rawI18nKeysOnScreen` (i18n.e2e.ts). */
