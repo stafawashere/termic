@@ -47,6 +47,7 @@ import { TerminalContextMenu } from "./TerminalContextMenu";
 import { footerChipMode, moreMarkerClass } from "./footerChipMode";
 import { activeFooterAgent, footerAgentIds, footerAgentKey } from "@/lib/footerAgents";
 import { useAgentUsage } from "@/store/agentUsage";
+import { useSubagents } from "@/store/subagents";
 import { useAgentContext } from "@/store/agentContext";
 import { imageFromClipboard, pastePathText } from "@/lib/clipboardImage";
 import { setupImeReplacementBridge } from "@/lib/ime";
@@ -2249,7 +2250,7 @@ const captureArmedRef = useRef(false);
           ?.find(t => t.id === tab.id) as TerminalTab | undefined;
         const isOwnSession = event !== null && sessionMatches(event, live?.sessionId);
         if (event && isOwnSession) {
-          deliverSubagentEvent({ taskId: task.id, tabId: tab.id }, event);
+          deliverSubagentEvent({ taskId: task.id, tabId: tab.id, tabSessionId: live?.sessionId ?? null }, event);
         } else {
           const why = event ? "foreign-session" : "unparsed";
           logWorkState("subagent-rejected", `cli=${tab.cli} why=${why} body=${JSON.stringify(body.slice(0, 160))}`);
@@ -3177,6 +3178,10 @@ const captureArmedRef = useRef(false);
         }
         const unlistenExit = await ipc.onPtyExit(ptyId, (code) => {
           ptyRef.current = null;
+          // Subagents run inside this process, so whatever was still running
+          // died with it. Every branch below needs that, including the ones
+          // that respawn.
+          useSubagents.getState().markInterrupted(tab.id);
           // Run/setup tabs (GH #54): surface a non-zero exit as "failed" on
           // the tab pill. code === null means the process was killed (Stop
           // button, app quit) rather than actually failing, so that's left

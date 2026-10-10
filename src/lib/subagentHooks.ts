@@ -21,10 +21,12 @@ export interface SubagentHookEvent {
   agentType: string;
 }
 
-/** Which tab a report arrived on. */
+/** Which tab a report arrived on, and the session that tab is running at
+ *  the moment it arrived. */
 export interface SubagentEventOrigin {
   taskId: string;
   tabId: string;
+  tabSessionId: string | null;
 }
 
 export type SubagentEventSink = (origin: SubagentEventOrigin, event: SubagentHookEvent) => void;
@@ -41,10 +43,17 @@ export function parseSubagentBody(rest: string): SubagentHookEvent | null {
   if (!match) return null;
 
   const [, phase, sessionId, rawAgentId, agentType] = match;
-  const agentId = rawAgentId.startsWith("agent-") ? rawAgentId.slice("agent-".length) : rawAgentId;
-  if (!AGENT_ID.test(agentId)) return null;
+  const agentId = normalizeAgentId(rawAgentId);
+  if (!agentId) return null;
 
   return { phase: phase as SubagentPhase, sessionId, agentId, agentType };
+}
+
+/** The bare agent id, without the `agent-` file prefix, or null when it is
+ *  outside the alphabet the hook script enforces. */
+export function normalizeAgentId(raw: string): string | null {
+  const agentId = raw.startsWith("agent-") ? raw.slice("agent-".length) : raw;
+  return AGENT_ID.test(agentId) ? agentId : null;
 }
 
 /** True only when the report belongs to the session this tab is running. A tab

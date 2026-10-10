@@ -41,6 +41,7 @@ vi.mock("@/lib/tabFocus", () => ({
 
 import { useApp, selectTaskTabs, selectActiveTabId, EMPTY_TABS } from "@/store/app";
 import { useAgentUsage, usageKey } from "@/store/agentUsage";
+import { useSubagents, selectTabSubagents } from "@/store/subagents";
 import {
   createSidebarFactsSelector, createRowTabsSelector, tabRenderEqual, tabListRenderEqual,
   createStatusFactsSelector, createBoardFilterFactsSelector, selectStatusRowBadge, selectStatusRowDelegated,
@@ -957,5 +958,87 @@ describe("sidebar filter bar with no query (bear trap 5)", () => {
     // the sidebar reuses the tab facts its body already holds
     const sidebar = readFileSync(resolve(here, "../components/sidebar/Sidebar.tsx"), "utf8");
     expect(sidebar).toMatch(/facts: tabFacts/);
+  });
+});
+
+// -- Subagents --------------------------------------------------------------
+//
+// A workflow starts and stops dozens of subagents in seconds. Their records
+// live in their own store for the same reason usage does: on useApp, each of
+// those writes would copy the whole state and re-run every tab bar's and
+// sidebar row's selector.
+describe("subagents (bear traps 5, 8)", () => {
+  const SESSION = "11111111-2222-4333-8444-555555555555";
+  const agentId = (i: number) => `a${i.toString(16).padStart(16, "0")}`;
+  const tabIds = Array.from({ length: SUBSCRIBERS }, (_, i) => `task-${i}-a`);
+
+  /** Even writes start an agent, odd writes stop the one just started, so
+   *  every write is a real change and none is swallowed by a bail. */
+  const subagentWrite = (i: number) => {
+    const tabId = tabIds[i % SUBSCRIBERS];
+    const taskId = tabId.slice(0, -2);
+    if (i % 2 === 0) useSubagents.getState().start(taskId, tabId, SESSION, agentId(i), "Explore");
+    else useSubagents.getState().stop(tabIds[(i - 1) % SUBSCRIBERS], agentId(i - 1), "unknown");
+  };
+
+  beforeEach(() => {
+    useSubagents.setState({ byTab: {} });
+    const seeded = Array.from({ length: SUBSCRIBERS }, (_, i) => `task-${i}`);
+    useApp.setState({ tabs: Object.fromEntries(seeded.map(id => [id, [tab(`${id}-a`)]])) });
+  });
+
+  it("a subagent write invalidates NO useApp selector", () => {
+    const subs = Object.keys(useApp.getState().tabs).map(id => selectTaskTabs(id));
+    let storeWakes = 0;
+    const unsub = useSubagents.subscribe(() => { storeWakes++; });
+
+    const r = measureFanout(subs, WRITES, subagentWrite);
+    unsub();
+
+    // Not vacuous: every write was a real change to the subagent store.
+    expect(storeWakes).toBe(WRITES);
+    expect(r.invalidations).toBe(0);
+    expect(r.selectorRuns).toBe(0);
+  });
+
+  it("a subagent write reaches neither the sidebar body nor any row nor the status facts", () => {
+    const taskIds = Object.keys(useApp.getState().tabs);
+    const subs = [
+      createSidebarFactsSelector(),
+      createStatusFactsSelector(),
+      ...taskIds.map(id => createRowTabsSelector(id)),
+    ];
+
+    const r = measureFanout(subs, WRITES, subagentWrite);
+
+    expect(r.invalidations).toBe(0);
+    expect(r.selectorRuns).toBe(0);
+  });
+
+  it("a write to one tab reaches only that tab's subagent list", () => {
+    let runs = 0;
+    const perTab = tabIds.map(() => 0);
+    const selectors = tabIds.map(id => selectTabSubagents(id));
+    const snap = selectors.map(sel => sel(useSubagents.getState()));
+    const unsub = useSubagents.subscribe(state => {
+      for (let i = 0; i < selectors.length; i++) {
+        runs++;
+        const next = selectors[i](state);
+        if (!Object.is(next, snap[i])) { perTab[i]++; snap[i] = next; }
+      }
+    });
+
+    const owner = 7;
+    const ownerTask = tabIds[owner].slice(0, -2);
+    useSubagents.getState().start(ownerTask, tabIds[owner], SESSION, agentId(1), "Explore");
+    expect(perTab).toEqual(tabIds.map((_, i) => (i === owner ? 1 : 0)));
+
+    // The identical write again: the bail means nobody is even woken.
+    const runsAfterFirst = runs;
+    useSubagents.getState().start(ownerTask, tabIds[owner], SESSION, agentId(1), "Explore");
+    expect(runs).toBe(runsAfterFirst);
+    expect(perTab.reduce((a, b) => a + b, 0)).toBe(1);
+
+    unsub();
   });
 });

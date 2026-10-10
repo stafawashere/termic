@@ -20,6 +20,7 @@ import { usePinnedFolders } from "@/store/pinnedFolders";
 import { useCodeIntel } from "@/store/codeIntel";
 import { useNavHistory } from "@/store/navHistory";
 import { useRecentPlaces } from "@/store/recentPlaces";
+import { useSubagents } from "@/store/subagents";
 import { takeUnattendedSpawn } from "@/lib/unattendedSpawns";
 import { failCliQueuedPromptsInTabs } from "@/lib/cliPromptReports";
 import { hydrateScheduled, scheduledOf } from "@/lib/scheduledQueue";
@@ -1509,11 +1510,13 @@ export const useApp = create<AppState>((set, get) => ({
   closePane: (taskId, paneId) => {
     let focusOnMain = false;
     let focusTabId = "";
+    let closedTabIds: string[] = [];
     set(s => {
       const tree = s.splitTree[taskId];
       if (!tree) return s;
       const leaf = findLeaf(tree, paneId);
       const tabIds = leaf?.tabIds ?? [];
+      closedTabIds = tabIds;
 
       // Kill all PTYs in the pane.
       for (const tabId of tabIds) {
@@ -1573,6 +1576,7 @@ export const useApp = create<AppState>((set, get) => ({
     else if (focusOnMain) focusMainTab(get().activeTab[taskId]);
     get().syncDurableTabs(taskId);
     get().saveSplitLayout(taskId);
+    for (const closedTabId of closedTabIds) useSubagents.getState().forget(closedTabId);
   },
 
   setActivePaneId: (taskId, paneId) => set(s => {
@@ -2154,6 +2158,7 @@ export const useApp = create<AppState>((set, get) => ({
       };
     });
     ipc.taskSetTabSessionId(taskId, tabId, uuid).catch(() => {});
+    useSubagents.getState().setSession(tabId, val ?? null);
   },
 
 
@@ -2365,7 +2370,10 @@ export const useApp = create<AppState>((set, get) => ({
    // it), while a closed MAIN tab stays durable and auto-resumes when the
    // task wakes — see the merge rule in syncDurableTabs. No-op if
    // nothing changed, and skipped entirely when nothing was closed.
-   if (closed) get().syncDurableTabs(taskId);
+   if (closed) {
+     get().syncDurableTabs(taskId);
+     useSubagents.getState().forget(tabId);
+   }
    if (focusId) {
      // Sync activePaneId to the main pane so the store agrees with where
      // focus is going. Without this, activePaneId still points to the split

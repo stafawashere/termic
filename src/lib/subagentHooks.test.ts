@@ -130,7 +130,7 @@ describe("subagent event sink", () => {
 
   it("hands accepted events to whoever registered, and to nobody before that", () => {
     const event = parseSubagentBody(`stop ${SESSION} a1 Explore`)!;
-    const origin = { taskId: "t1", tabId: "tab1" };
+    const origin = { taskId: "t1", tabId: "tab1", tabSessionId: SESSION };
     deliverSubagentEvent(origin, event);
 
     const received: Array<[SubagentEventOrigin, SubagentHookEvent]> = [];
