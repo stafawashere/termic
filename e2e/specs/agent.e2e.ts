@@ -3372,6 +3372,107 @@ describe("delegated work", () => {
   });
 });
 
+// claude's SubagentStart / SubagentStop hooks ride the same trusted OSC 777
+// channel as attention, and a trusted body that is not routed falls straight
+// through to a needs-you banner. A subagent report is information for the
+// sidebar and nothing else: it must not badge, ring, or move the work state,
+// whether it is well formed and ours, from another session, or garbage.
+describe("subagent hook reports", () => {
+  let taskId!: string;
+
+  type TabSnapshot = { sessionId: string | null; workState: string | null; unread: unknown };
+  const tabSnapshot = (id: string) => browser.execute((t) => {
+    const tab = (window.__termic!.useApp.getState().tabs[t] ?? [])[0] as never as
+      { sessionId?: string; workState?: string; unread?: unknown } | undefined;
+    return {
+      sessionId: tab?.sessionId ?? null,
+      workState: tab?.workState ?? null,
+      unread: tab?.unread ?? null,
+    };
+  }, id) as Promise<TabSnapshot>;
+
+  /** Send one `#subagent` directive and prove it changed nothing the user
+   *  can see. Waits past the 5s settle window, so a late badge or a done
+   *  armed by the report would have landed by the time this reads. */
+  async function expectSubagentReportIsSilent(body: string): Promise<void> {
+    const before = await tabSnapshot(taskId);
+    await submitToAgent(taskId, `#subagent ${body}`);
+    await waitPtyQuiet(taskId, 6_000);
+
+    const after = await tabSnapshot(taskId);
+    expect(after.unread).toBe(null);
+    expect(after.workState).toBe(before.workState);
+    const badges = await workBadges(taskId);
+    expect(badges).not.toContain("attention");
+    expect(badges).not.toContain("done");
+  }
+
+  before(async function () {
+    this.timeout(90_000);
+    await waitForAppShell();
+    await requireTermicApi();
+    await requireWorkBadges();
+    await setHooksOwnState("fakeclaude", true);
+    // Away, so any badge the report raised would stay up to be seen.
+    await setWindowPresence(false);
+    taskId = await openTask("e2e-subagent-hooks", true, "fakeclaude");
+    await waitForAgentReady(taskId);
+
+    // A submit persists the session id this spawn minted, once the spawn
+    // has outlived its survive window, and a trusted usage report proves the
+    // hooks, so no heuristic is left to move the work state on its own. The
+    // submit repeats until the id lands rather than sleeping out the window.
+    await browser.waitUntil(async () => {
+      if ((await tabSnapshot(taskId)).sessionId) return true;
+      await submitToAgent(taskId, "#usage usage 10 10 - -");
+      return !!(await tabSnapshot(taskId)).sessionId;
+    }, {
+      timeout: 20_000,
+      interval: 1_000,
+      timeoutMsg: "the fakeclaude tab never held a session id",
+    });
+    await waitPtyQuiet(taskId, 2_000);
+    await browser.execute((id) => {
+      const s = window.__termic!.useApp.getState();
+      const tabId = s.tabs[id][0].id;
+      s.setWorkState(id, tabId, "idle", "e2e: subagent spec baseline");
+      s.clearAttention(id, tabId);
+    }, taskId);
+  });
+
+  after(async () => {
+    await setHooksOwnState("fakeclaude", false);
+    await setWindowPresence(true);
+    if (taskId) await archiveTask(taskId);
+  });
+
+  it("takes a start and a stop for the tab's own session without badging, ringing or ending a turn", async function () {
+    this.timeout(60_000);
+    const { sessionId } = await tabSnapshot(taskId);
+    await expectSubagentReportIsSilent(`start ${sessionId} a1b2c3 general-purpose`);
+    await expectSubagentReportIsSilent(`stop ${sessionId} a1b2c3 general-purpose`);
+    expect((await tabSnapshot(taskId)).sessionId).toBe(sessionId);
+  });
+
+  it("drops a report from another session", async function () {
+    this.timeout(60_000);
+    const { sessionId } = await tabSnapshot(taskId);
+    const foreign = "11111111-1111-4111-8111-111111111111";
+    expect(foreign).not.toBe(sessionId);
+    await expectSubagentReportIsSilent(`start ${foreign} a1b2c3 Explore`);
+    await expectSubagentReportIsSilent(`stop ${foreign} a1b2c3 Explore`);
+    expect((await tabSnapshot(taskId)).sessionId).toBe(sessionId);
+  });
+
+  it("drops a body it cannot parse instead of announcing it", async function () {
+    this.timeout(60_000);
+    const { sessionId } = await tabSnapshot(taskId);
+    await expectSubagentReportIsSilent("bogus");
+    await expectSubagentReportIsSilent(`start ${sessionId} ../x Explore`);
+    await expectSubagentReportIsSilent(`finish ${sessionId} a1b2c3 Explore`);
+  });
+});
+
 // A message from another agent (or the message queue) must never be typed
 // into the user's unsubmitted draft: it landed mid-sentence and the Enter
 // that followed submitted both halves as one prompt. While the user has a

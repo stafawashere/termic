@@ -37,6 +37,7 @@ import { resyncViewportAfterReveal } from "@/lib/xtermViewportSync";
 import { IS_MAC, bindingMatches, isAppChordInTerminal, superIsHeld, type ShortcutId } from "@/lib/shortcuts";
 import { registerTerminalDropTarget } from "@/lib/terminalDrop";
 import { HOOK_OSC_TITLE, HOOK_OSC_READY_BODY, HOOK_OSC_SESSION_PREFIX, HOOK_OSC_WORKING_BODY, HOOK_OSC_DONE_BODY, HOOK_OSC_DELEGATED_PREFIX, hookOscSessionId, sessionHolder } from "@/lib/agentHooks";
+import { HOOK_OSC_SUBAGENT_PREFIX, parseSubagentBody, sessionMatches, deliverSubagentEvent } from "@/lib/subagentHooks";
 import { parseDelegatedBody, delegatedVerdict, isAgentOwned, delegatedChipText, DELEGATED_DETACHED_GRACE_MS, type DelegatedWork } from "@/lib/delegatedWork";
 import { lastAgentLine } from "@/lib/resumeTail";
 import { parseUsageBody } from "@/lib/agentUsage";
@@ -2234,6 +2235,25 @@ const captureArmedRef = useRef(false);
         const work = parseDelegatedBody(body.slice(HOOK_OSC_DELEGATED_PREFIX.length));
         if (work) hookDelegatedRef.current?.(work);
         else logWorkState("hook-delegated-unparsed", `cli=${tab.cli} body=${JSON.stringify(body.slice(0, 120))}`);
+        return false;
+      }
+      // A subagent started or finished. Information for the sidebar, never
+      // state for this tab: a subagent's stop is not a done for the parent,
+      // so nothing here touches work state, attention or the turn. Every such
+      // body returns here, parsed or not, because a trusted body that falls
+      // through badges the tab. Reports from another session (a nested
+      // `claude -p`, a stale pty) are dropped.
+      if (trusted && body.startsWith(HOOK_OSC_SUBAGENT_PREFIX)) {
+        const event = parseSubagentBody(body.slice(HOOK_OSC_SUBAGENT_PREFIX.length));
+        const live = useApp.getState().tabs[task.id]
+          ?.find(t => t.id === tab.id) as TerminalTab | undefined;
+        const isOwnSession = event !== null && sessionMatches(event, live?.sessionId);
+        if (event && isOwnSession) {
+          deliverSubagentEvent({ taskId: task.id, tabId: tab.id }, event);
+        } else {
+          const why = event ? "foreign-session" : "unparsed";
+          logWorkState("subagent-rejected", `cli=${tab.cli} why=${why} body=${JSON.stringify(body.slice(0, 160))}`);
+        }
         return false;
       }
       if (trusted && body === HOOK_OSC_READY_BODY) {

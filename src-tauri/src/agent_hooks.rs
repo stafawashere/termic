@@ -108,7 +108,11 @@ use std::path::{Path, PathBuf};
 // shell running spins until the 20-minute ceiling and every later turn in
 // that session is swallowed too. That is the whole bug, so an install that
 // does not re-sync does not get the fix.
-pub const SCHEMA_VERSION: u32 = 15;
+// v16 registers claude's `SubagentStart` / `SubagentStop`, reported as
+// `subagent start|stop <session> <agent> <type>` so the sidebar can list a
+// task's subagents. Stale-and-quieter: a v15 install reports every state it
+// did before and simply never mentions a subagent.
+pub const SCHEMA_VERSION: u32 = 16;
 
 /// Directory we create inside the agent's config dir. Also the prefix that
 /// identifies our entries for removal, which is why it must never be renamed
@@ -212,6 +216,11 @@ pub enum Signal {
     /// agent looks like, so the quiet heuristic says "ready" and the first
     /// message is typed into a picker whose default answer is destructive.
     Ready,
+    /// A subagent was spawned / finished, `subagent start|stop <session>
+    /// <agent> <type>`. Informational only: it never badges, rings or ends a
+    /// turn, and a subagent's stop is not a done for the task. claude only.
+    SubagentStart,
+    SubagentStop,
 }
 
 /// OSC 777 `notify` up to and including the sender field. `termic` in the title
@@ -255,6 +264,12 @@ const DONE_BODY: &str = "agent done";
 /// indistinguishable from a model mid-token. KEEP IN SYNC with
 /// `HOOK_OSC_DELEGATED_PREFIX` in `lib/agentHooks.ts`.
 const DELEGATED_BODY_PREFIX: &str = "agent delegated: ";
+
+/// Prefix of the subagent report, `subagent start|stop <session> <agent>
+/// <type>`. Must never be a prefix of another body or prefixed by one: the TS
+/// handler routes it on the prefix alone, before attention ever sees it.
+/// KEEP IN SYNC with `HOOK_OSC_SUBAGENT_PREFIX` in `lib/subagentHooks.ts`.
+const SUBAGENT_BODY_PREFIX: &str = "subagent ";
 
 /// claude's task types, in the order the label is chosen, mapped to the wire
 /// labels `lib/delegatedWork.ts` accepts. AGENT-OWNED types come first, and
@@ -632,6 +647,8 @@ impl Signal {
             Signal::Working => format!("{NOTIFY_PREFIX}{WORKING_BODY}"),
             Signal::Done => format!("{NOTIFY_PREFIX}{DONE_BODY}"),
             Signal::Ready => format!("{NOTIFY_PREFIX}{READY_BODY}"),
+            Signal::SubagentStart => format!("{NOTIFY_PREFIX}{SUBAGENT_BODY_PREFIX}start"),
+            Signal::SubagentStop => format!("{NOTIFY_PREFIX}{SUBAGENT_BODY_PREFIX}stop"),
         }
     }
     /// Filename stem for the generated script, so one agent's scripts do not
@@ -642,6 +659,8 @@ impl Signal {
             Signal::Working => "working",
             Signal::Done => "done",
             Signal::Ready => "ready",
+            Signal::SubagentStart => "subagent-start",
+            Signal::SubagentStop => "subagent-stop",
         }
     }
 
@@ -656,6 +675,8 @@ impl Signal {
             Signal::Working => "termic: reporting that this turn started",
             Signal::Done => "termic: reporting that this turn finished",
             Signal::Ready => "termic: reporting that this session is ready",
+            Signal::SubagentStart => "termic: reporting a subagent started",
+            Signal::SubagentStop => "termic: reporting a subagent finished",
         }
     }
 }
@@ -780,12 +801,18 @@ pub fn hooks_for(agent: &str) -> &'static [(&'static str, Signal)] {
         // a repo claude has never run in - a project just added to termic, or a
         // machine where claude only ever runs through termic. Also measured,
         // after the opposite was assumed and written down.
+        //
+        // `SubagentStart` / `SubagentStop` feed the sidebar's subagent rows and
+        // nothing else. claude only: codex reads a claude-shaped hooks.json and
+        // must not be handed events nobody measured it firing.
         "claude" => &[
             ("SessionStart", Signal::Ready),
             ("UserPromptSubmit", Signal::Working),
             ("PreToolUse", Signal::Working),
             ("PermissionRequest", Signal::Attention),
             ("Stop", Signal::Done),
+            ("SubagentStart", Signal::SubagentStart),
+            ("SubagentStop", Signal::SubagentStop),
         ],
         // grok is the only agent measured that reports an INTERRUPT, so it is
         // the only one whose done survives an escape. StopCancelled carries
@@ -1276,6 +1303,53 @@ pub fn script_body(agent: &str, sig: Signal) -> String {
             "  *[!0-9a-zA-Z_-]*) sid='' ;;\n",
             "esac\n",
         ),
+        // A subagent's identity, for the sidebar row termic draws for it. The
+        // ids end up in a file path on the TS side, so every field is
+        // validated here and anything that is not plainly an id drops the
+        // whole report rather than being escaped.
+        //
+        // Whitespace is NOT stripped wholesale like the other guards do: an
+        // agent id with a space in it has to be rejected, not glued together
+        // into a different id. Only line breaks go, and the space a pretty
+        // printer puts after a key's colon.
+        //
+        // `background_tasks` is cut out before matching: its entries describe
+        // OTHER work and may carry keys of their own. `last_assistant_message`
+        // cannot fake a field, because inside a JSON string every quote is
+        // escaped, so `"agent_id":"` never occurs there literally.
+        //
+        // Same entrypoint rule as the Ready script: a nested `claude -p`
+        // inherits `TERMIC_PTY` and would report its subagents into this tab.
+        ("claude", Signal::SubagentStart) | ("claude", Signal::SubagentStop) => concat!(
+            "LC_ALL=C\n",
+            "export LC_ALL\n",
+            "flat=$(cat | tr -d '\\n\\r\\t' | sed 's/\"[ ]*:[ ]*/\":/g')\n",
+            "[ \"$CLAUDE_CODE_ENTRYPOINT\" = cli ] || exit 0\n",
+            "case \"$flat\" in\n",
+            "  *'\"background_tasks\":['*)\n",
+            "    before=${flat%%'\"background_tasks\":['*}\n",
+            "    after=${flat#*'\"background_tasks\":['}\n",
+            "    after=${after#*]}\n",
+            "    flat=\"$before$after\"\n",
+            "    ;;\n",
+            "esac\n",
+            "sid=''\n",
+            "aid=''\n",
+            "atype=''\n",
+            "case \"$flat\" in *'\"session_id\":\"'*) sid=${flat#*'\"session_id\":\"'}; sid=${sid%%'\"'*} ;; esac\n",
+            "case \"$flat\" in *'\"agent_id\":\"'*) aid=${flat#*'\"agent_id\":\"'}; aid=${aid%%'\"'*} ;; esac\n",
+            "case \"$flat\" in *'\"agent_type\":\"'*) atype=${flat#*'\"agent_type\":\"'}; atype=${atype%%'\"'*} ;; esac\n",
+            "case \"$sid\" in\n",
+            "  ????????-????-????-????-????????????) ;;\n",
+            "  *) exit 0 ;;\n",
+            "esac\n",
+            "case \"$sid\" in *[!0-9a-fA-F-]*) exit 0 ;; esac\n",
+            "aid=${aid#agent-}\n",
+            "case \"$aid\" in ''|*[!A-Za-z0-9_-]*) exit 0 ;; esac\n",
+            "[ \"${#aid}\" -le 64 ] || exit 0\n",
+            "case \"$atype\" in ''|*[!A-Za-z0-9_:.-]*) exit 0 ;; esac\n",
+            "[ \"${#atype}\" -le 128 ] || exit 0\n",
+        ),
         ("claude", Signal::Attention) | ("codex", Signal::Attention) | ("devin", Signal::Attention) => concat!(
             "flat=$(cat | tr -d '[:space:]')\n",
             "tool=''\n",
@@ -1436,6 +1510,14 @@ pub fn script_body(agent: &str, sig: Signal) -> String {
                body='{ATTENTION_BODY}'\n\
              fi\n\
              emit() {{ printf '\\033]{NOTIFY_PREFIX}%s\\007' \"$body\" > \"$1\" 2>/dev/null; }}\n\
+             emit \"$TERMIC_PTY\" || emit /proc/1/fd/1 || emit /dev/tty || true"
+        )
+    } else if matches!((agent, sig), ("claude", Signal::SubagentStart) | ("claude", Signal::SubagentStop)) {
+        // `%s` for every field, never the format string, even though the guard
+        // above already rejected anything that is not an id.
+        format!(
+            "[ -n \"$TERMIC_PTY\" ] || exit 0\n\
+             emit() {{ printf '\\033]{payload} %s %s %s\\007' \"$sid\" \"$aid\" \"$atype\" > \"$1\" 2>/dev/null; }}\n\
              emit \"$TERMIC_PTY\" || emit /proc/1/fd/1 || emit /dev/tty || true"
         )
     } else if matches!((agent, sig), ("devin", Signal::Working)) {
@@ -4595,7 +4677,7 @@ fn a_v3_config_gains_the_readiness_event_without_losing_the_others() {
         // dialogs, v4 holds a tab on `working` for the rest of the session,
         // v14 says nothing at all when a done is held and spins until the
         // ceiling.
-        assert_eq!(SCHEMA_VERSION, 15, "bump me with the hook set, or installs go stale silently");
+        assert_eq!(SCHEMA_VERSION, 16, "bump me with the hook set, or installs go stale silently");
     }
 
     #[test]
@@ -6241,6 +6323,346 @@ fn a_v3_config_gains_the_readiness_event_without_losing_the_others() {
             assert_eq!(label, got_label, "driver order changed");
             assert_eq!(want, got, "event {label} wrote the wrong thing");
         }
+    }
+
+    const SUBAGENT_SID: &str = "00000000-0000-0000-0000-000000000000";
+
+    /// Run one of claude's generated subagent scripts against a payload and
+    /// return everything it wrote. The env starts as the real runtime's for a
+    /// termic tab (task id, pty, `cli` entrypoint, no grok); each entry of
+    /// `env` then sets a var, or removes it when the value is None.
+    #[cfg(unix)]
+    fn subagent_output_with_env(sig: Signal, payload: &str, env: &[(&str, Option<&str>)]) -> String {
+        use std::io::Read;
+        use std::process::{Command, Stdio};
+
+        let dir = unique_test_dir("subagent");
+        let script = dir.join("subagent.sh");
+        let pty = dir.join("pty");
+        std::fs::write(&script, script_body("claude", sig)).unwrap();
+        std::fs::write(&pty, "").unwrap();
+
+        let mut cmd = Command::new("/bin/sh");
+        cmd.arg(&script)
+            .env("TERMIC_TASK_ID", "t1")
+            .env("TERMIC_PTY", &pty)
+            .env("CLAUDE_CODE_ENTRYPOINT", "cli")
+            .env_remove("GROK_HOOK_EVENT");
+        for (key, value) in env {
+            match value {
+                Some(v) => { cmd.env(key, v); }
+                None => { cmd.env_remove(key); }
+            }
+        }
+        let mut child = cmd
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sh");
+        {
+            use std::io::Write as _;
+            child.stdin.as_mut().unwrap().write_all(payload.as_bytes()).unwrap();
+        }
+        assert!(child.wait().unwrap().success(), "a hook must never exit non-zero");
+
+        let mut out = String::new();
+        std::fs::File::open(&pty).unwrap().read_to_string(&mut out).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        out
+    }
+
+    #[cfg(unix)]
+    fn subagent_output(sig: Signal, payload: &str) -> String {
+        subagent_output_with_env(sig, payload, &[])
+    }
+
+    /// claude's `SubagentStart` payload, synthetic, in the field order the
+    /// brief lists: session first, then the agent's id and type.
+    fn subagent_start_payload(sid: &str, agent_id: &str, agent_type: &str) -> String {
+        format!(
+            r#"{{"session_id":"{sid}",
+               "transcript_path":"/Users/u/.claude/projects/-Users-u-proj/{sid}.jsonl",
+               "cwd":"/Users/u/proj","hook_event_name":"SubagentStart",
+               "agent_id":"{agent_id}","agent_type":"{agent_type}"}}"#
+        )
+    }
+
+    fn subagent_start_expected(agent_id: &str, agent_type: &str) -> String {
+        format!("\x1b]777;notify;termic;subagent start {SUBAGENT_SID} {agent_id} {agent_type}\x07")
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn claude_subagent_start_reports_session_agent_and_type() {
+        let out = subagent_output(
+            Signal::SubagentStart,
+            &subagent_start_payload(SUBAGENT_SID, "a1b2c3", "general-purpose"),
+        );
+        assert_eq!(out, subagent_start_expected("a1b2c3", "general-purpose"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn claude_subagent_ids_lose_their_agent_prefix() {
+        let out = subagent_output(
+            Signal::SubagentStart,
+            &subagent_start_payload(SUBAGENT_SID, "agent-a1b2c3", "Explore"),
+        );
+        assert_eq!(out, subagent_start_expected("a1b2c3", "Explore"));
+    }
+
+    /// Workflow agents are reported like any other: the store records them
+    /// and decides what to draw.
+    #[test]
+    #[cfg(unix)]
+    fn claude_subagent_reports_workflow_agents_verbatim() {
+        let start = subagent_output(
+            Signal::SubagentStart,
+            &subagent_start_payload(SUBAGENT_SID, "w1", "workflow-subagent"),
+        );
+        assert_eq!(start, subagent_start_expected("w1", "workflow-subagent"));
+
+        let stop = subagent_output(
+            Signal::SubagentStop,
+            &subagent_start_payload(SUBAGENT_SID, "w1", "workflow-subagent")
+                .replace("SubagentStart", "SubagentStop"),
+        );
+        assert_eq!(
+            stop,
+            format!("\x1b]777;notify;termic;subagent stop {SUBAGENT_SID} w1 workflow-subagent\x07"),
+        );
+    }
+
+    /// The stop payload carries the subagent's last message and the parent's
+    /// background tasks, either of which can hold text that LOOKS like the
+    /// fields. Neither may decide the report, whichever side of `agent_id`
+    /// they are serialised on.
+    #[test]
+    #[cfg(unix)]
+    fn claude_subagent_stop_reads_its_fields_wherever_they_sit() {
+        let decoy_message = r#""last_assistant_message":"done. {\"agent_id\":\"evil\",\"agent_type\":\"evil\"}""#;
+        let decoy_tasks = r#""background_tasks":[{"id":"b1","type":"subagent","agent_id":"other","agent_type":"Plan"}]"#;
+        let fields = format!(r#""session_id":"{SUBAGENT_SID}","agent_id":"agent-s1","agent_type":"general-purpose""#);
+        let want = format!("\x1b]777;notify;termic;subagent stop {SUBAGENT_SID} s1 general-purpose\x07");
+
+        for payload in [
+            format!(r#"{{{decoy_message},{decoy_tasks},{fields},"hook_event_name":"SubagentStop"}}"#),
+            format!(r#"{{{fields},{decoy_message},{decoy_tasks},"hook_event_name":"SubagentStop"}}"#),
+            format!(r#"{{{decoy_tasks},{fields},{decoy_message}}}"#),
+            format!(r#"{{"session_id": "{SUBAGENT_SID}",
+                "agent_id": "agent-s1",
+                {decoy_tasks},
+                "agent_type": "general-purpose"}}"#),
+        ] {
+            assert_eq!(subagent_output(Signal::SubagentStop, &payload), want, "{payload}");
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn claude_subagent_is_silent_outside_a_termic_task() {
+        let payload = subagent_start_payload(SUBAGENT_SID, "a1", "Explore");
+        let out = subagent_output_with_env(Signal::SubagentStart, &payload, &[("TERMIC_TASK_ID", None)]);
+        assert_eq!(out, "");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn claude_subagent_is_silent_when_grok_runs_it() {
+        let payload = subagent_start_payload(SUBAGENT_SID, "a1", "Explore");
+        let out = subagent_output_with_env(Signal::SubagentStart, &payload, &[("GROK_HOOK_EVENT", Some("SubagentStart"))]);
+        assert_eq!(out, "");
+    }
+
+    /// A `claude -p` started inside the agent inherits `TERMIC_PTY`, and its
+    /// entrypoint is `sdk-cli`. Its subagents are not this tab's.
+    #[test]
+    #[cfg(unix)]
+    fn claude_subagent_is_silent_for_a_nested_print_session() {
+        let payload = subagent_start_payload(SUBAGENT_SID, "a1", "Explore");
+        for entrypoint in [Some("sdk-cli"), Some("sdk-ts"), None] {
+            let out = subagent_output_with_env(
+                Signal::SubagentStart,
+                &payload,
+                &[("CLAUDE_CODE_ENTRYPOINT", entrypoint)],
+            );
+            assert_eq!(out, "", "entrypoint {entrypoint:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn claude_subagent_rejects_a_session_id_that_is_not_a_uuid() {
+        for sid in ["", "not-a-uuid", "0000000g-0000-0000-0000-000000000000", "00000000-0000-0000-0000-0000000000000"] {
+            let out = subagent_output(Signal::SubagentStart, &subagent_start_payload(sid, "a1", "Explore"));
+            assert_eq!(out, "", "session {sid:?}");
+        }
+        let no_session = r#"{"agent_id":"a1","agent_type":"Explore"}"#;
+        assert_eq!(subagent_output(Signal::SubagentStart, no_session), "");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn claude_subagent_rejects_an_agent_id_outside_its_alphabet() {
+        for agent_id in ["../x", "a/b", "a b", "a;b", "agent-", "", "a$b"] {
+            let out = subagent_output(Signal::SubagentStart, &subagent_start_payload(SUBAGENT_SID, agent_id, "Explore"));
+            assert_eq!(out, "", "agent id {agent_id:?}");
+        }
+        let no_agent = format!(r#"{{"session_id":"{SUBAGENT_SID}","agent_type":"Explore"}}"#);
+        assert_eq!(subagent_output(Signal::SubagentStart, &no_agent), "");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn claude_subagent_rejects_an_overlong_agent_id() {
+        let longest = "a".repeat(64);
+        let out = subagent_output(Signal::SubagentStart, &subagent_start_payload(SUBAGENT_SID, &longest, "Explore"));
+        assert_eq!(out, subagent_start_expected(&longest, "Explore"), "64 is the limit, not past it");
+
+        let overlong = "a".repeat(65);
+        let out = subagent_output(Signal::SubagentStart, &subagent_start_payload(SUBAGENT_SID, &overlong, "Explore"));
+        assert_eq!(out, "");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn claude_subagent_rejects_an_agent_type_outside_its_alphabet() {
+        for agent_type in ["a b", "a/b", "a;b", "x%sy", ""] {
+            let out = subagent_output(Signal::SubagentStart, &subagent_start_payload(SUBAGENT_SID, "a1", agent_type));
+            assert_eq!(out, "", "agent type {agent_type:?}");
+        }
+        let plugin_type = "my-plugin:code.reviewer_2";
+        let out = subagent_output(Signal::SubagentStart, &subagent_start_payload(SUBAGENT_SID, "a1", plugin_type));
+        assert_eq!(out, subagent_start_expected("a1", plugin_type));
+
+        let longest = "t".repeat(128);
+        let out = subagent_output(Signal::SubagentStart, &subagent_start_payload(SUBAGENT_SID, "a1", &longest));
+        assert_eq!(out, subagent_start_expected("a1", &longest));
+        let overlong = "t".repeat(129);
+        let out = subagent_output(Signal::SubagentStart, &subagent_start_payload(SUBAGENT_SID, "a1", &overlong));
+        assert_eq!(out, "");
+    }
+
+    /// Every write goes through `bound_emits`, so a dead tab's pty cannot
+    /// wedge the hook, and on Windows the pipe branch is generated from it.
+    #[test]
+    fn claude_subagent_scripts_bound_every_terminal_write() {
+        let chain = r#"emit "$TERMIC_PTY" || emit /proc/1/fd/1 || emit /dev/tty || true"#;
+        for sig in [Signal::SubagentStart, Signal::SubagentStop] {
+            let body = script_body("claude", sig);
+            assert!(body.contains("termic_w=$!"), "{sig:?} has no watchdog:\n{body}");
+            assert!(body.contains(r#"emit /proc/1/fd/1"#), "{sig:?} lost the Docker target:\n{body}");
+            assert!(
+                !body.lines().any(|line| line.trim() == chain),
+                "{sig:?} still has an unbounded emit chain:\n{body}"
+            );
+        }
+    }
+
+    #[test]
+    fn subagent_events_are_claudes_alone() {
+        let claude = hooks_for("claude");
+        assert!(claude.contains(&("SubagentStart", Signal::SubagentStart)), "{claude:?}");
+        assert!(claude.contains(&("SubagentStop", Signal::SubagentStop)), "{claude:?}");
+        for agent in SUPPORTED.iter().filter(|a| **a != "claude") {
+            let gained = hooks_for(agent)
+                .iter()
+                .any(|(_, s)| matches!(s, Signal::SubagentStart | Signal::SubagentStop));
+            assert!(!gained, "{agent} gained a subagent event nobody measured it firing");
+        }
+
+        let stems = [Signal::SubagentStart, Signal::SubagentStop].map(|s| s.stem());
+        assert_ne!(stems[0], stems[1]);
+        let messages = [Signal::SubagentStart, Signal::SubagentStop].map(|s| s.status_message());
+        assert_ne!(messages[0], messages[1]);
+        for message in messages {
+            assert!(!message.contains("needed"), "a subagent never needs the user: {message}");
+        }
+    }
+
+    /// The subagent body shares OSC 777 and the trusted title with every other
+    /// body, and the TS side routes it on the prefix alone.
+    #[test]
+    fn subagent_body_is_not_confusable_with_any_other() {
+        assert_eq!(SUBAGENT_BODY_PREFIX, "subagent ");
+        for other in [ATTENTION_BODY, READY_BODY, WORKING_BODY, DONE_BODY, DELEGATED_BODY_PREFIX,
+                      SESSION_BODY_PREFIX, USAGE_BODY_PREFIX, CONTEXT_BODY_PREFIX] {
+            assert!(
+                !SUBAGENT_BODY_PREFIX.starts_with(other) && !other.starts_with(SUBAGENT_BODY_PREFIX),
+                "{SUBAGENT_BODY_PREFIX:?} vs {other:?} are confusable"
+            );
+        }
+    }
+
+    fn claude_hook_commands(settings: &Value, event: &str) -> Vec<String> {
+        settings["hooks"][event]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|group| group["hooks"].as_array())
+            .flatten()
+            .filter_map(|entry| entry["command"].as_str().map(str::to_string))
+            .collect()
+    }
+
+    /// A sandboxed claude reports subagents too: the Docker install registers
+    /// both events and writes their scripts into the termic-owned dir that is
+    /// mounted into the container, never into the user's own config.
+    #[test]
+    fn a_docker_claude_install_registers_the_subagent_events() {
+        crate::test_support::with_scratch_data_dir(|scratch| {
+            let target = Target::Docker("claude".into());
+            install(&target).expect("docker install");
+
+            let dir = script_dir(&target).unwrap();
+            assert!(dir.starts_with(scratch), "{} is not termic-owned", dir.display());
+            let prefix = command_prefix(&target).unwrap();
+            let settings: Value =
+                serde_json::from_str(&std::fs::read_to_string(settings_path(&target).unwrap()).unwrap()).unwrap();
+            for (event, sig) in [("SubagentStart", Signal::SubagentStart), ("SubagentStop", Signal::SubagentStop)] {
+                let script = script_for(&dir, sig);
+                assert!(script.is_file(), "{event}: {} was not written", script.display());
+                let commands = claude_hook_commands(&settings, event);
+                assert_eq!(commands, vec![format!("{prefix}{}.sh", sig.stem())], "{event}");
+            }
+            assert!(status(&target).installed);
+        });
+    }
+
+    /// The upgrade that delivers subagent reporting to everyone who already
+    /// has hooks. A v15 install has no subagent events; it must read as stale
+    /// so `agent_hooks_sync` reinstalls it, and the reinstall must add both.
+    #[test]
+    fn a_v15_claude_install_is_stale_and_upgrades_to_the_subagent_events() {
+        crate::test_support::with_scratch_data_dir(|_| {
+            let target = Target::Docker("claude".into());
+            install(&target).expect("first install");
+
+            let settings_file = settings_path(&target).unwrap();
+            let mut settings: Value =
+                serde_json::from_str(&std::fs::read_to_string(&settings_file).unwrap()).unwrap();
+            let hooks = settings["hooks"].as_object_mut().unwrap();
+            hooks.remove("SubagentStart");
+            hooks.remove("SubagentStop");
+            std::fs::write(&settings_file, serde_json::to_vec_pretty(&settings).unwrap()).unwrap();
+            let manifest = script_dir(&target).unwrap().join(MANIFEST_NAME);
+            std::fs::write(&manifest, r#"{"schema_version":15,"command":"x","installed_at":"t"}"#).unwrap();
+
+            let old = status(&target);
+            assert!(old.ours_present, "a v15 install is still ours: {old:?}");
+            assert!(old.stale, "a v15 install must read as stale or sync skips it: {old:?}");
+            assert!(!old.installed, "a v15 install lacks the subagent events: {old:?}");
+
+            install(&target).expect("upgrade");
+            let new = status(&target);
+            assert!(new.installed && !new.stale, "{new:?}");
+            let merged: Value =
+                serde_json::from_str(&std::fs::read_to_string(&settings_file).unwrap()).unwrap();
+            for event in ["SubagentStart", "SubagentStop"] {
+                assert_eq!(claude_hook_commands(&merged, event).len(), 1, "{event} after the upgrade");
+            }
+        });
     }
 }
 
