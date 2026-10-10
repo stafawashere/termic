@@ -13,6 +13,7 @@ import type {
   ForgeCliStatus, ForgeProvider, PrLookup, MemberPrLookup, PrComment, IssueLookup, IssueScope, AgentHookStatus, HookPlan,
   ProfileView, ProfilesView, ProfileDeletePreview, AgentAccountsView, ExternalAppInfo,
   SyncStatus, SyncConnectInfo, SyncChange, SyncPrefsSnapshot, SyncRunResult,
+  SubagentSummary, TranscriptPage,
 } from "./types";
 import type { CustomThemeFile } from "./customTheme";
 import {
@@ -385,6 +386,23 @@ export const agentUsageOmp = (agentId: string, docker: boolean, account: string 
 export const agentContextDevin = (agentId: string, account: string | null, sessionId: string) =>
   invoke<{ usedTokens: number; windowTokens: number } | null>(
     "agent_context_devin", { agentId, account, sessionId });
+
+/** Every subagent of one claude session, newest first. Paths are derived on
+ *  the host from the task and the tab's session id; none is passed in. */
+export const subagentList = (taskId: string, sessionId: string, limit?: number) =>
+  invoke<SubagentSummary[]>("subagent_list", { taskId, sessionId, limit: limit ?? null });
+
+/** One page (up to 500 entries) of a subagent's transcript. Pass the previous
+ *  page's `start` as `before` to load the entries above it. */
+export const subagentTranscriptRead = (
+  taskId: string,
+  sessionId: string,
+  agentId: string,
+  workflowRunId: string | null,
+  before?: number,
+) =>
+  invoke<TranscriptPage>(
+    "subagent_transcript_read", { taskId, sessionId, agentId, workflowRunId, before: before ?? null });
 
 /** Per-task deny counters surfaced in the TerminalPane footer
  *  chip. Currently only `network` (the proxy bumps it on every CONNECT
