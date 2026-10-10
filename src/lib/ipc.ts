@@ -13,7 +13,7 @@ import type {
   ForgeCliStatus, ForgeProvider, PrLookup, MemberPrLookup, PrComment, IssueLookup, IssueScope, AgentHookStatus, HookPlan,
   ProfileView, ProfilesView, ProfileDeletePreview, AgentAccountsView, ExternalAppInfo,
   SyncStatus, SyncConnectInfo, SyncChange, SyncPrefsSnapshot, SyncRunResult,
-  SubagentSummary, TranscriptPage,
+  SubagentSummary, TranscriptPage, SubagentTailEvent, SubagentWatchOpened,
 } from "./types";
 import type { CustomThemeFile } from "./customTheme";
 import {
@@ -403,6 +403,33 @@ export const subagentTranscriptRead = (
 ) =>
   invoke<TranscriptPage>(
     "subagent_transcript_read", { taskId, sessionId, agentId, workflowRunId, before: before ?? null });
+
+/** Start tailing one subagent's transcript for this window. Prefer
+ *  `subagentWatchOpen` in `lib/subagentWatch.ts`, which pairs this with its
+ *  listener and close. */
+export const subagentWatchOpen = (
+  taskId: string,
+  tabId: string,
+  sessionId: string,
+  agentId: string,
+  workflowRunId: string | null,
+) =>
+  invoke<SubagentWatchOpened>("subagent_watch_open", { taskId, tabId, sessionId, agentId, workflowRunId });
+
+export const subagentWatchClose = (taskId: string, tabId: string, sessionId: string, agentId: string) =>
+  invoke<void>("subagent_watch_close", { taskId, tabId, sessionId, agentId });
+
+/** Read a watched transcript to EOF now. A no-op when no view holds it. */
+export const subagentWatchPoke = (sessionId: string, agentId: string) =>
+  invoke<void>("subagent_watch_poke", { sessionId, agentId });
+
+export function onSubagentWatch(
+  sessionId: string,
+  agentId: string,
+  cb: (event: SubagentTailEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<SubagentTailEvent>(`subagent-watch://${sessionId}/${agentId}`, ev => cb(ev.payload));
+}
 
 /** Per-task deny counters surfaced in the TerminalPane footer
  *  chip. Currently only `network` (the proxy bumps it on every CONNECT

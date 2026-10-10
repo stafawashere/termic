@@ -206,15 +206,41 @@ Constraints every phase keeps:
   `scripts/fake-agent.sh` directive that writes a synthetic subagent
   transcript and the matching OSC bodies.
 
+## Docker and file events
+
+Measured 2026-10-10 on macOS with Docker Desktop 4.89.0 (engine 29.7.2,
+linuxkit kernel 7.0.12). The bind mount is VirtioFS: `mount` inside the
+container reports `virtiofs2 on /root/.claude/projects type virtiofs`.
+
+Method: a host directory bind-mounted at `/root/.claude/projects` with a
+plain `-v host:container`, the way `docker::build_spec` mounts the
+projects dir. On the host, a notify 8 `RecommendedWatcher` (FSEvents)
+watched that directory non-recursively. Inside an `alpine:3` container,
+three `echo >>` appends to an existing `agent-*.jsonl` one second apart,
+then a new file, then an `rm`.
+
+Result: yes. Every append reached the host as an event batch
+(`Create(File)`, `Modify(Metadata(Extended))`, `Modify(Data(Content))`
+for the file), within the same wall-clock second as the write (the
+container's busybox `date` has one-second resolution, so the latency is
+under a second and not measured more finely). The new file and the
+`rm` arrived the same way, the `rm` as `Remove(File)`.
+
+So Docker tasks open their watches live, the same as host tasks. FSEvents
+reports every append as a `Create`, which is harmless because the tail
+reads to EOF on any event rather than interpreting its kind. The hook
+poke still ships: it is the final flush on SubagentStop, and it is what
+keeps a view moving on a host whose watch could not be added.
+
+Not measured: gRPC-FUSE and osxfs (Docker Desktop's older file-sharing
+modes), OrbStack and colima. Linux bind mounts share the host kernel, so
+inotify sees container writes there by construction, but that was not
+run either.
+
 ## Unmeasured
 
-These are open. Nothing above depends on either answer.
+This is open. Nothing above depends on the answer.
 
 - Whether a fork's JSONL holds a copy of the parent's history before
   the fork's own entries. The view renders from the tail either way, so
   this changes only how much scrollback a fork's view has.
-- Whether the macOS host receives FSEvents for writes made inside a
-  Docker container to the mounted projects dir. If it does not, the
-  hook-triggered incremental read (SubagentStart, PreToolUse with an
-  `agent_id`, SubagentStop) is the fallback that keeps a Docker view
-  moving.

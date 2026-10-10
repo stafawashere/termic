@@ -34,6 +34,7 @@ use uuid::Uuid;
 pub mod agent_hooks;
 pub mod agent_usage;
 pub mod subagent_transcripts;
+pub mod subagent_watch;
 pub mod codex_trust;
 mod sandbox;
 mod proxy;
@@ -10303,6 +10304,15 @@ fn build_profile_window(app: &AppHandle, id: &ProfileId) -> tauri::Result<tauri:
         });
     }
 
+    // Transcript watches are held per window, and a destroyed window never
+    // runs its views' cleanup.
+    let label_for_watches = label.clone();
+    win.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            subagent_watch::release_window(&label_for_watches);
+        }
+    });
+
     #[cfg(target_os = "macos")]
     round_window_corners_for_tahoe(&win);
     set_open_at_quit(id, true);
@@ -10922,6 +10932,7 @@ fn task_archive_sync(id: String, delete_branch: bool, skip_scripts: bool) -> Res
     // Stop spotlight for this task before tearing down — otherwise the
     // polling thread will keep trying to sync a worktree that no longer exists.
     spotlight_stop_for_ws(&id);
+    subagent_watch::release_task(&id);
 
     let mut list = load_tasks_all();
     let w = list.iter_mut().find(|w| w.id == id).ok_or("task not found")?;
@@ -11136,6 +11147,7 @@ async fn task_delete(state: State<'_, PtyManager>, id: String) -> Result<(), Str
     let id2 = id.clone();
     tauri::async_runtime::spawn_blocking(move || {
         stop_every_task_pty(&ptys, &id2);
+        subagent_watch::release_task(&id2);
         // An archived task whose worktree is already gone (every row the
         // History page empties) has nothing left to tear down. Archiving it
         // again ran its archive script a second time and walked git's
@@ -25675,6 +25687,9 @@ pub fn run() {
             agent_usage::agent_context_devin,
             subagent_transcripts::subagent_list,
             subagent_transcripts::subagent_transcript_read,
+            subagent_watch::subagent_watch_open,
+            subagent_watch::subagent_watch_close,
+            subagent_watch::subagent_watch_poke,
             perf_boot_elapsed_ms,
             deep_link_take_pending,
             agent_accounts, account_add, account_remove, account_set_default, account_set_auto_switch,

@@ -645,7 +645,7 @@ pub(crate) fn list_subagents(subagents_dir: &Path, limit: usize) -> Vec<Subagent
 /// The tab is found by its session id, which also names the agent entry it
 /// runs (a clone carries its own `CLAUDE_CONFIG_DIR`). The task's own agent
 /// is the fallback for a session minted before tabs were persisted.
-fn subagents_dir_for(task_id: &str, session_id: &str) -> Result<PathBuf, String> {
+pub(crate) fn subagents_dir_for(task_id: &str, session_id: &str) -> Result<PathBuf, String> {
     validate_session_id(session_id).map_err(|e| e.to_string())?;
     let task = crate::load_tasks_all()
         .into_iter()

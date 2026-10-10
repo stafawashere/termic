@@ -48,6 +48,7 @@ import { footerChipMode, moreMarkerClass } from "./footerChipMode";
 import { activeFooterAgent, footerAgentIds, footerAgentKey } from "@/lib/footerAgents";
 import { useAgentUsage } from "@/store/agentUsage";
 import { useSubagents } from "@/store/subagents";
+import { subagentWatchPoke } from "@/lib/subagentWatch";
 import { useAgentContext } from "@/store/agentContext";
 import { imageFromClipboard, pastePathText } from "@/lib/clipboardImage";
 import { setupImeReplacementBridge } from "@/lib/ime";
@@ -2251,6 +2252,8 @@ const captureArmedRef = useRef(false);
         const isOwnSession = event !== null && sessionMatches(event, live?.sessionId);
         if (event && isOwnSession) {
           deliverSubagentEvent({ taskId: task.id, tabId: tab.id, tabSessionId: live?.sessionId ?? null }, event);
+          // Flushes an open transcript view where file events never arrive.
+          subagentWatchPoke(event.sessionId, event.agentId).catch(() => {});
         } else {
           const why = event ? "foreign-session" : "unparsed";
           logWorkState("subagent-rejected", `cli=${tab.cli} why=${why} body=${JSON.stringify(body.slice(0, 160))}`);

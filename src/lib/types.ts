@@ -2145,6 +2145,28 @@ export interface TranscriptEntry {
   timestamp: string | null;
 }
 
+/** What a live transcript watch sends on `subagent-watch://<sessionId>/<agentId>`.
+ *  `entries` carries new entries starting at index `start`; `reset` means the
+ *  file was rewritten and the entries that follow restart at 0; `expired`
+ *  means the file is gone and the watch has been released. */
+export type SubagentTailKind = "entries" | "reset" | "expired";
+
+export interface SubagentTailEvent {
+  kind: SubagentTailKind;
+  sessionId: string;
+  agentId: string;
+  start: number;
+  entries: TranscriptEntry[];
+}
+
+export interface SubagentWatchOpened {
+  /** False when the file is read only on hook pokes. */
+  live: boolean;
+  /** Entries in the transcript when the tail started; the first batch
+   *  starts here. */
+  total: number;
+}
+
 export interface TranscriptPage {
   agentId: string;
   entries: TranscriptEntry[];
