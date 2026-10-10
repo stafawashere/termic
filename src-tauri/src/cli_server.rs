@@ -2335,7 +2335,7 @@ fn handle_logs(
 /// Claude Code's transcript-directory name for a cwd: every character
 /// that is not ASCII alphanumeric becomes '-'. Verified against the
 /// live layout ("/Users/x/.config/dotfiles" -> "-Users-x--config-dotfiles").
-fn claude_project_dir_name(cwd: &str) -> String {
+pub(crate) fn claude_project_dir_name(cwd: &str) -> String {
     cwd.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
 }
 

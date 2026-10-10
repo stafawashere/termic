@@ -33,6 +33,7 @@ use uuid::Uuid;
 
 pub mod agent_hooks;
 pub mod agent_usage;
+pub mod subagent_transcripts;
 pub mod codex_trust;
 mod sandbox;
 mod proxy;
@@ -25672,6 +25673,8 @@ pub fn run() {
             agent_usage::agent_usage_copilot,
             agent_usage::agent_usage_omp,
             agent_usage::agent_context_devin,
+            subagent_transcripts::subagent_list,
+            subagent_transcripts::subagent_transcript_read,
             perf_boot_elapsed_ms,
             deep_link_take_pending,
             agent_accounts, account_add, account_remove, account_set_default, account_set_auto_switch,

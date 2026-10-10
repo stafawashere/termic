@@ -2103,3 +2103,55 @@ export interface SyncStatus {
   /** Repo profiles deleted on this machine, which a sync will not recreate. */
   ignored: SyncFolder[];
 }
+
+/** How a subagent's transcript ends. `none` leaves running vs interrupted to
+ *  the caller; `expired` means the transcript file is gone. */
+export type SubagentOutcome = "done" | "failed" | "none" | "expired";
+
+/** A subagent's `.meta.json` sidecar. Undocumented upstream and every key is
+ *  optional, so older sidecars carry only `agentType` and `spawnDepth`. */
+export interface SubagentMeta {
+  agentType: string | null;
+  description: string | null;
+  model: string | null;
+  toolUseId: string | null;
+  spawnDepth: number | null;
+  parentAgentId: string | null;
+  requestShape: string | null;
+  requestNonInteractive: boolean | null;
+  workflowPhase: string | null;
+}
+
+export interface SubagentSummary extends SubagentMeta {
+  /** Bare id, without the `agent-` file prefix. */
+  agentId: string;
+  isWorkflow: boolean;
+  workflowRunId: string | null;
+  mtimeMs: number;
+  outcome: SubagentOutcome;
+}
+
+export type TranscriptEntryKind =
+  | "userText" | "assistantText" | "thinking" | "redactedThinking" | "toolUse" | "toolResult" | "error";
+
+/** Plain text with ANSI already stripped. Untrusted: render as text, never HTML. */
+export interface TranscriptEntry {
+  kind: TranscriptEntryKind;
+  text: string;
+  truncated: boolean;
+  /** Tool name, on `toolUse` entries only. */
+  name: string | null;
+  isError: boolean;
+  timestamp: string | null;
+}
+
+export interface TranscriptPage {
+  agentId: string;
+  entries: TranscriptEntry[];
+  /** Entries in the whole transcript; `start` is the index of `entries[0]`. */
+  total: number;
+  start: number;
+  skippedLines: number;
+  outcome: SubagentOutcome;
+  meta: SubagentMeta;
+}
