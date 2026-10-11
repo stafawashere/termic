@@ -165,6 +165,7 @@ export default {
     worktree: "工作树",
   },
   themePicker: {
+    label: "主题",
     system: "跟随系统",
     light: "浅色",
     autoBadge: "自动",

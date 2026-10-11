@@ -165,6 +165,7 @@ export default {
     worktree: "worktree",
   },
   themePicker: {
+    label: "Theme",
     system: "System",
     light: "Light",
     autoBadge: "auto",

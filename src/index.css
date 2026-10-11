@@ -1407,3 +1407,21 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   letter-spacing: 0.8px;
   color: var(--sidebar-eyebrow);
 }
+.sidebar-footer {
+  background-image: linear-gradient(180deg, var(--sidebar-footer-top), var(--sidebar-footer-bottom));
+}
+.sidebar-footer-btn {
+  display: flex;
+  flex-shrink: 0;
+  height: 30px;
+  width: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--sidebar-footer-icon);
+  transition: color 120ms, background-color 120ms;
+}
+.sidebar-footer-btn:hover {
+  background-color: var(--sidebar-row-hover);
+  color: var(--sidebar-btn-hover-ink);
+}

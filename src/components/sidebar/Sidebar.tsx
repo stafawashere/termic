@@ -12,7 +12,7 @@ import { usePrefs, scheduledNavVisible, taskLocationIconShown } from "@/store/pr
 import { Button } from "@/components/ui/Button";
 import { Tip } from "@/components/ui/Tooltip";
 import { Spinner } from "@/components/ui/Spinner";
-import { LayoutGrid, History, Columns3, CalendarClock, FolderPlus, Settings, Plus, Archive, Layers, Moon, Cog, MoreVertical, GitBranch, GitBranchPlus, FolderGit2, ChevronRight, ChevronDown, Bug, Mail, Zap, X, Pencil, Copy, Check, AudioWaveform, Radio, SquareChevronRight, CircleStop, Trash2, Folder, FolderMinus, FolderOpen, Megaphone, Keyboard, Activity, Waypoints, Square, Play, GitPullRequest } from "lucide-react";
+import { LayoutGrid, History, Columns3, CalendarClock, FolderPlus, Settings, Plus, Archive, Layers, Moon, Cog, MoreVertical, GitBranch, GitBranchPlus, FolderGit2, ChevronRight, ChevronDown, Mail, Zap, X, Pencil, Copy, Check, AudioWaveform, Radio, SquareChevronRight, CircleStop, Trash2, Folder, FolderMinus, FolderOpen, Megaphone, Activity, Waypoints, Square, Play, GitPullRequest } from "lucide-react";
 import { DropdownRoot, DropdownTrigger, DropdownMenu, DropdownItem, DropdownSeparator, DropdownLabel, DropdownSub, DropdownSubTrigger, DropdownSubContent } from "@/components/ui/Dropdown";
 import { ContextMenuRoot, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuLabel, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent } from "@/components/ui/ContextMenu";
 import { ProjectActionsMenuItems } from "./ProjectActionsMenuItems";
@@ -56,7 +56,7 @@ import { SubagentGroupToggle, SubagentRows, useSubagentFold, useSubagentHasRow }
 import { childRowCarriesSelection, subagentIdOfTab } from "./subagentTree";
 import { StatusChips } from "./StatusChips";
 import { AgentActivityReadout } from "./AgentActivityReadout";
-import { ChecklistGlyph, CritterGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, DotsVerticalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
+import { BugGlyph, ChecklistGlyph, GearGlyph, KeyboardGlyph, MailGlyph, PulseGlyph, CritterGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
 import { STATUS_BUCKETS } from "@/lib/sidebarStatus";
 import { StatusSection, StatusViewCount } from "./StatusSection";
 import { RollupMarks } from "./RollupMarks";
@@ -2608,10 +2608,10 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
 
         {/* Footer */}
         <div className={cn(
-          "flex border-t border-[var(--color-border-soft)] gap-1",
+          "sidebar-footer flex shrink-0 gap-[4px] border-t border-[var(--sidebar-divider)]",
           // --bottom-bar-h (expanded) is the shared height for every bottom
           // bar. Compact mode stays a vertical icon stack with its own padding.
-          compact ? "flex-col items-center p-2" : "items-center h-[var(--bottom-bar-h)] px-2",
+          compact ? "flex-col items-center p-2" : "h-[var(--bottom-bar-h)] items-center px-[10px]",
         )}>
           {/* Left cluster (full mode): support — bug + contact. The bug
               button opens a prefilled GitHub issue (public tracker, better
@@ -2625,37 +2625,38 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
               where the other set-once affordances already live. */}
           <ThemePicker />
           <Tip content={t("reportBug")}>
-            <Button size="icon" variant="icon" onClick={() =>
+            <button type="button" aria-label={t("reportBug")} className="sidebar-footer-btn" onClick={() =>
               openIssue(t("bugIssueTitle"), t("bugIssueBody"))
             }>
-              <Bug className={iconSize(compact)} />
-            </Button>
+              <BugGlyph size={footerGlyph(compact)} />
+            </button>
           </Tip>
           <Tip content={t("contact")}>
-            <Button size="icon" variant="icon" onClick={() =>
+            <button type="button" aria-label={t("contact")} className="sidebar-footer-btn" onClick={() =>
               openMailto("contact@termic.dev", t("contactSubject"), "")
             }>
-              <Mail className={iconSize(compact)} />
-            </Button>
+              <MailGlyph size={footerGlyph(compact)} />
+            </button>
           </Tip>
           <Tip content={t("shortcuts")}>
-            <Button size="icon" variant="icon" onClick={() => useUI.getState().openShortcutsHelp()}>
-              <Keyboard className={iconSize(compact)} />
-            </Button>
+            <button type="button" aria-label={t("shortcuts")} className="sidebar-footer-btn" onClick={() => useUI.getState().openShortcutsHelp()}>
+              <KeyboardGlyph size={footerGlyph(compact)} />
+            </button>
           </Tip>
           {/* Activity monitor: per-agent CPU / memory. Opens a SEPARATE
               window (not a dialog) so it keeps updating while you drive the
               agent it is measuring. Sampling starts with that window and
               stops when it closes. */}
           <Tip content={t("activityTip")}>
-            <Button
-              size="icon"
-              variant="icon"
+            <button
+              type="button"
+              aria-label={t("activityTip")}
+              className="sidebar-footer-btn"
               data-testid="open-activity"
               onClick={() => { void procmonOpenWindow().catch(() => {}); }}
             >
-              <Activity className={iconSize(compact)} />
-            </Button>
+              <PulseGlyph size={footerGlyph(compact)} />
+            </button>
           </Tip>
           {/* Settings, rightmost, at the absolute edge: the gear is exactly
               where users reflexively reach for it (same position as macOS
@@ -2667,10 +2668,14 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
               in the PROJECTS header, which is where the action belongs, next
               to the list it acts on. */}
           <Tip content={t("settingsTip", { combo: kbd("⌘,") })}>
-            <Button size="icon" variant="icon" className={compact ? undefined : "ml-auto"}
-                    onClick={() => openSettings()}>
-              <Settings className={iconSize(compact)} />
-            </Button>
+            <button
+              type="button"
+              aria-label={t("settingsTip", { combo: kbd("⌘,") })}
+              className={cn("sidebar-footer-btn", !compact && "ml-auto")}
+              onClick={() => openSettings()}
+            >
+              <GearGlyph size={footerGlyph(compact)} />
+            </button>
           </Tip>
         </div>
       </div>
@@ -2712,6 +2717,11 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
 function projectMonogram(name: string): string {
   const cleaned = name.trim();
   return cleaned ? cleaned.slice(0, 2).toUpperCase() : "?";
+}
+
+/** The footer's glyphs: the design's 17px, larger on the icon rail. */
+function footerGlyph(compact: boolean): number {
+  return compact ? 22 : 17;
 }
 
 function iconSize(compact: boolean) {
@@ -3458,10 +3468,12 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                 onClick={(e) => e.stopPropagation()}
                 aria-label={t("taskMenu")}
                 className={cn(
-                  "absolute inset-0 flex items-center justify-center rounded-[4px] border transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-tray-hover)]",
+                  // The project row's hover tray, holding one button: the same
+                  // box, border, glyph and hover, so the two menus read alike.
+                  "absolute inset-0 flex items-center justify-center rounded-[5px] border bg-[var(--sidebar-tray-bg)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-tray-hover)] hover:text-[var(--sidebar-btn-hover-ink)] data-[state=open]:bg-[var(--sidebar-tray-hover)]",
                   isSelectedRow
                     ? "border-[var(--sidebar-sel-menu-border)] text-[var(--sidebar-sel-meta)]"
-                    : "border-[var(--sidebar-tray-border)] text-[var(--sidebar-meta)]",
+                    : "border-[var(--sidebar-tray-border)] text-[var(--sidebar-icon)]",
                   // The selected row keeps its menu in view, as the design draws it.
                   menuOpen || isSelectedRow
                     ? "opacity-100"
@@ -3469,7 +3481,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                   taskRenaming !== null && "pointer-events-none",
                 )}
               >
-                <DotsVerticalGlyph />
+                <DotsHorizontalGlyph />
               </button>
             </DropdownTrigger>
             </Tip>
@@ -3997,7 +4009,9 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                   aria-label={t("closeTab")}
                   onClick={(e) => { e.stopPropagation(); requestCloseTab(w.id, tab.id); }}
                   className={cn(
-                    "absolute right-0 top-0 flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-[var(--sidebar-meta)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-tray-hover)] hover:text-[var(--sidebar-ink)]",
+                    // A bare glyph tinted toward the error colour, since closing ends the
+                    // session; no box around it.
+                    "absolute right-0 top-0 flex h-[20px] w-[20px] items-center justify-center text-[color-mix(in_srgb,var(--color-err)_70%,var(--sidebar-icon))] transition-[color] duration-[120ms] hover:text-[var(--color-err)]",
                     (showBell || showDone || showWorking || showDelegated)
                       // Badge visible: X only on badge-slot hover
                       ? "opacity-0 group-hover/badge:opacity-100 pointer-events-none group-hover/badge:pointer-events-auto"
