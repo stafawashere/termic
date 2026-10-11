@@ -28,7 +28,8 @@ import {
   createRetentionExpirySelector, createSubagentStructureSelector, hasSubagentRow, selectSubagentRecord,
   subagentGroupStartsCollapsed, subagentRowIndent, subagentRowsOfKey, type SubagentPhaseRow, type SubagentRowRules,
 } from "./subagentTree";
-import { FoldChevron, indentClass, StateMark } from "./subagentRowParts";
+import { FoldChevron, indentClass, RowIcon, StateMark } from "./subagentRowParts";
+import { subagentAgentIconName } from "./subagentRowIcon";
 import { WorkflowRunRow } from "./WorkflowRunRow";
 
 const EMPTY_FOLD: readonly string[] = Object.freeze([]);
@@ -227,6 +228,7 @@ const SubagentRow = memo(function SubagentRow({ taskId, tabId, agentId, depth, h
       ) : (
         <span aria-hidden className="h-4 w-4 shrink-0" />
       )}
+      <RowIcon name={subagentAgentIconName(record.agentType)} />
       <span className="min-w-0 flex-1 truncate" title={rowTitle}>{label}</span>
       <span
         data-testid="subagent-badge"
@@ -272,6 +274,7 @@ const PhaseRow = memo(function PhaseRow({ tabId, phaseKey, title, indent, folded
       )}
     >
       <FoldChevron testId="workflow-phase-fold" folded={folded} label={foldLabel} onToggle={toggle} />
+      <RowIcon name="layers" light />
       <span className="min-w-0 flex-1 truncate" title={label}>{label}</span>
     </div>
   );

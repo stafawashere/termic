@@ -389,6 +389,18 @@ badge, and none of them touches the parent tab's work badge or bell.
   with its `workflowRunId` on the tab so the view reads under
   `subagents/workflows/<run>/`. A child whose parent is a workflow agent
   sits under the tab.
+- **Every row leads with an icon for its kind.** One 14px lucide icon
+  (`RowIcon` in `subagentRowParts.tsx`) sits right of the fold chevron: a
+  run draws `Workflow`, a phase a thinner `Layers`, and an agent the icon
+  `subagentAgentIconName` (`subagentRowIcon.ts`) picks from its type:
+  Explore `Search`, Plan `ListTodo`, claude-code-guide `BookOpen`, and
+  `Bot` for general-purpose, workflow and custom agents. The icon is
+  `--color-fg-faint` with a 1.75 stroke (1.5 for a phase), so the tab row's
+  orange brand mark stays the heavier mark and the state badge on the right
+  stays the only colour. It is `aria-hidden` and static, so it selects
+  nothing. A row with no chevron keeps a 16px spacer in its place, which is
+  what keeps icons and labels in one column per depth; the e2e specs
+  measure that, and that every kind is the tab row's height.
 - **Folding is in memory only.** A row with children has a chevron that folds
   its subtree (`useSubagentFold`); collapsing the task hides every subagent
   row with it, and nothing about subagents is written to localStorage.

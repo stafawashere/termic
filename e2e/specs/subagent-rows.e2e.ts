@@ -108,6 +108,33 @@ describe("subagent rows", () => {
     );
   }
 
+  /** Where each subagent row draws its leading icon and its label, and the
+   *  claude tab row's brand mark and height to hold them against. */
+  async function rowGeometry() {
+    return browser.execute((task, sel) => {
+      const scope = document.querySelector(`[data-sidebar-task-row="${task}"]`)!;
+      const tabRow = scope.querySelector<HTMLElement>("div.ml-8")!;
+      const brandMark = tabRow.querySelector("svg")!.getBoundingClientRect();
+      const rows = [...scope.querySelectorAll<HTMLElement>(sel)].map(row => {
+        const icon = row.querySelector<HTMLElement>('[data-testid="subagent-row-icon"]');
+        const iconBox = icon?.getBoundingClientRect();
+        const rowBox = row.getBoundingClientRect();
+        return {
+          id: row.getAttribute("data-agent-id") ?? "",
+          depth: row.getAttribute("data-depth") ?? "",
+          icon: icon?.getAttribute("data-icon") ?? null,
+          iconHidden: icon?.getAttribute("aria-hidden") ?? null,
+          rowLeft: rowBox.left,
+          height: rowBox.height,
+          iconLeft: iconBox?.left ?? -1,
+          iconWidth: iconBox?.width ?? -1,
+          labelLeft: row.querySelector("span.truncate")!.getBoundingClientRect().left,
+        };
+      });
+      return { tabRowHeight: tabRow.getBoundingClientRect().height, brandMarkWidth: brandMark.width, rows };
+    }, taskId, ROW);
+  }
+
   async function storeHasAgent(agentId: string): Promise<boolean> {
     return browser.execute(
       (task, id) => {
@@ -290,6 +317,41 @@ describe("subagent rows", () => {
     await waitRowState(agentId, "unknown");
   });
 
+  it("leads each row with an icon for its agent type, in one column with the labels aligned", async function () {
+    this.timeout(60_000);
+    const byType: Array<[string, string, string]> = [
+      ["e2eexplore", "Explore", "search"],
+      ["e2eplan", "Plan", "list-todo"],
+      ["e2egeneral", "general-purpose", "bot"],
+      ["e2eguide", "claude-code-guide", "book-open"],
+      ["e2ecustom", "acme-reviewer", "bot"],
+    ];
+    const ids = byType.map(([agentId]) => agentId);
+    for (const [agentId, agentType] of byType) await start(agentId, agentType);
+
+    await browser.waitUntil(async () => {
+      const drawn = (await rows()).filter(row => ids.includes(row.id));
+      return drawn.length === ids.length;
+    }, { timeout: 10_000, interval: 100, timeoutMsg: `the typed agents never drew: ${JSON.stringify(await rows())}` });
+
+    const geometry = await rowGeometry();
+    const typed = geometry.rows.filter(row => ids.includes(row.id));
+    expect(typed.map(row => [row.id, row.icon])).toEqual(byType.map(([agentId, , icon]) => [agentId, icon]));
+    expect(typed.every(row => row.iconHidden === "true")).toBe(true);
+
+    const first = typed[0];
+    for (const row of typed) {
+      expect(row.iconLeft).toBe(first.iconLeft);
+      expect(row.labelLeft).toBe(first.labelLeft);
+      expect(row.iconWidth).toBe(geometry.brandMarkWidth);
+      expect(row.height).toBe(geometry.tabRowHeight);
+    }
+    await snap("subagent-rows-type-icons.png");
+
+    for (const [agentId, agentType] of byType) await stop(agentId, agentType);
+    for (const agentId of ids) await waitRowState(agentId, "unknown");
+  });
+
   it("nests agents under their parent and clamps the indent at depth 3", async function () {
     this.timeout(60_000);
     const chain = ["e2ed1", "e2ed2", "e2ed3", "e2ed4", "e2ed5"];
@@ -307,6 +369,24 @@ describe("subagent rows", () => {
 
     const drawn = (await rows()).filter(row => chain.includes(row.id));
     expect(drawn.map(row => row.id)).toEqual(chain);
+
+    const geometry = await rowGeometry();
+    const nested = chain.map(agentId => geometry.rows.find(row => row.id === agentId)!);
+    const [depth1, depth2, depth3, ...clamped] = nested;
+    expect(nested.every(row => row.icon === "bot")).toBe(true);
+    // A row with no chevron reserves its width, so the icon sits the same
+    // distance into every row and the ladder steps by the indent alone.
+    const iconInset = depth1.iconLeft - depth1.rowLeft;
+    expect(nested.every(row => row.iconLeft - row.rowLeft === iconInset)).toBe(true);
+    const step = depth2.iconLeft - depth1.iconLeft;
+    expect(step).toBeGreaterThan(0);
+    expect(depth3.iconLeft - depth2.iconLeft).toBe(step);
+    expect(depth3.labelLeft - depth2.labelLeft).toBe(step);
+    for (const row of clamped) {
+      expect(row.iconLeft).toBe(depth3.iconLeft);
+      expect(row.labelLeft).toBe(depth3.labelLeft);
+      expect(row.height).toBe(geometry.tabRowHeight);
+    }
     await snap("subagent-rows-nested-depth-3.png");
   });
 
