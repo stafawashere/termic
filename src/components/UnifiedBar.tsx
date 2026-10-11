@@ -1,31 +1,23 @@
-// Single horizontal chrome strip spanning the whole window. Mirrors
-// Termic's design: traffic-light reservation on the left, sidebar toggle,
-// project/task breadcrumbs in the middle, action icons on the right.
-// The whole strip is a drag region so the user can move the window from any
-// empty space, with `no-drag` opted-in on every interactive child.
+// The title bar ("Focus title", docs/ui.md "Title bar contents"): icon
+// buttons and the session strip on the left, the task title on the window's
+// centre, the action wells on the right. The whole strip is a drag region so
+// the window moves from any empty space, with `no-drag` opted in on every
+// interactive child.
 
-import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useApp, useActiveTask } from "@/store/app";
 import { useProfiles } from "@/store/profiles";
 import { profileWashCss } from "@/lib/accents";
 import { ProfileChip } from "@/components/ProfileChip";
-import { Button } from "@/components/ui/Button";
 import { Tip } from "@/components/ui/Tooltip";
-import * as HoverCard from "@radix-ui/react-hover-card";
-import { Check } from "lucide-react";
-import {
-  PanelRight, Archive,
-  Sun, Moon, Monitor, ArrowUpToLine, Sunrise, Droplet, Binary, Code2, Flower2,
-  MessageSquareText, Library, Palette,
-} from "lucide-react";
+import { Library } from "lucide-react";
 import { effectiveSandboxMode } from "@/lib/types";
 import { taskLabel } from "@/lib/taskLabel";
 import { SandboxIcon, DockerSandboxIcon } from "@/components/SandboxIcon";
 import { UpdaterBanner } from "@/components/UpdaterBanner";
 import { WaitingAgentsPill } from "@/components/WaitingAgentsPill";
-import { themesDir, taskSendDiffToMain } from "@/lib/ipc";
+import { taskSendDiffToMain } from "@/lib/ipc";
 import { OpenWithButton } from "@/components/OpenWithButton";
 import { confirmAndArchive } from "@/lib/archiveTask";
 import {
@@ -33,15 +25,16 @@ import {
 } from "@/components/ui/Dropdown";
 import { usePromptLibrary, promptTitle } from "@/store/prompts";
 import { useUI } from "@/store/ui";
-import { usePrefs, resolveTheme } from "@/store/prefs";
-import { bindingGlyphs, bindingText } from "@/lib/shortcuts";
+import { usePrefs } from "@/store/prefs";
+import { bindingText } from "@/lib/shortcuts";
 import { useIsFullscreen } from "@/hooks/useIsFullscreen";
 import { RunControls } from "@/components/task/RunControls";
 import { CommandPaletteButton } from "@/components/CommandPaletteButton";
-import { cn } from "@/lib/utils";
 import { IS_MAC, DRAWS_WINDOW_CONTROLS, appRegionStyle } from "@/lib/platform";
 import { WindowControls } from "@/components/WindowControls";
-import { SidebarLeftGlyph } from "@/components/titlebar/titlebarIcons";
+import {
+  ArchiveGlyph, PromptsGlyph, SendUpGlyph, SidebarLeftGlyph, SidebarRightGlyph, TerminalGlyph,
+} from "@/components/titlebar/titlebarIcons";
 import { SessionStrip } from "@/components/titlebar/SessionStrip";
 import { FocusTitle } from "@/components/titlebar/FocusTitle";
 
@@ -76,16 +69,14 @@ export function UnifiedBar() {
   // "use branch as task name" pref is on (GH #260).
   const useBranchAsTaskName = usePrefs(s => s.useBranchAsTaskName);
   const taskCrumb = task ? taskLabel(task, useBranchAsTaskName) : "";
-  const themeMode = usePrefs(s => s.themeMode);
-  const setThemeMode = usePrefs(s => s.setThemeMode);
-  // When the user picked an explicit theme, show that theme's icon.
-  // When "auto" is selected, show the icon for whatever the OS resolved
-  // to (Sun / Moon) — that's the theme they're actually looking at — and
-  // overlay a small "A" badge so the auto distinction is visible.
-  // The old Monitor/computer icon felt too generic ("display settings")
-  // and didn't communicate the resolved theme at a glance.
   const isFullscreen = useIsFullscreen();
   const windowFocused = useUI(s => s.windowFocused);
+  const terminalPanelOpen = useApp(s => {
+    const taskId = s.activeTaskId;
+    if (!taskId) return false;
+
+    return !!s.terminalSplit[taskId] && !s.terminalSplitCollapsed[taskId];
+  });
   // Tooltips that name a shortcut read it from the LIVE bindings, never a
   // hard-coded "⌥⌘P": every one of these is rebindable in settings, and a
   // tooltip naming a key that no longer does anything is worse than a
@@ -95,9 +86,6 @@ export function UnifiedBar() {
     const g = binds[id] ? bindingText(binds[id]) : "";
     return g ? `${text} (${g})` : text;
   };
-  const isAuto = themeMode === "auto";
-  const resolved = resolveTheme(themeMode);
-  const ThemeIcon = (themeMode === "light" || (isAuto && resolved === "light")) ? Sun : Moon;
 
   return (
     <header
@@ -201,154 +189,174 @@ export function UnifiedBar() {
       <FocusTitle task={task} project={proj} />
 
       <div className="titlebar-side" data-side="right" style={{ paddingRight: DRAWS_WINDOW_CONTROLS ? 0 : 12 }}>
-      {/* Right-aligned actions */}
       <div
         data-tauri-drag-region="false"
-        className="flex items-center gap-0.5"
+        className="flex items-center gap-[8px]"
         style={appRegionStyle("no-drag")}
       >
-        {/* Command palette. First in the cluster and outside the task guard:
-            it is the only control here that is never task-scoped, and the
-            palette's global commands (new task, project picker, settings)
-            work with nothing selected. */}
-        <CommandPaletteButton />
         {task && proj && (
           <>
-            <div className="mx-1 h-4 w-px bg-[var(--color-border-soft)]" />
-            {/* Popped-out run controls (GH #54): Setup + Run/Stop live up
-                here, next to Prompts, while runs open as terminal tabs. */}
-            <RunControls task={task} />
-            <DropdownRoot>
-              {/* The dropdown is the mouse path; ⌥⌘P opens the searchable
-                  palette over the same list. Naming the binding here is the
-                  only place the two surfaces meet. Glyphs come from the live
-                  binding, so a rebind can't leave the tooltip lying. */}
-              <Tip content={tipWithKey(t("unifiedBar.prompts"), "prompt-palette")} side="bottom">
-                <DropdownTrigger asChild>
-                  <Button size="sm" variant="ghost" className="gap-1.5" data-no-drag data-testid="prompts-menu">
-                    <MessageSquareText className="h-4 w-4" />
-                    <span>{t("unifiedBar.prompts")}</span>
-                  </Button>
-                </DropdownTrigger>
-              </Tip>
-              {/* preventDefault on close keeps focus from snapping back to the
-                  trigger, which would re-fire its focus-triggered tooltip and
-                  leave it stuck open after picking a prompt. */}
-              <DropdownMenu align="end" className="min-w-[200px]" onCloseAutoFocus={(e) => e.preventDefault()}>
-                {enabledPrompts.length === 0 && (
-                  <div className="px-2 py-1.5 text-[13px] text-[var(--color-fg-faint)]">{t("unifiedBar.promptsEmpty")}</div>
-                )}
-                {enabledPrompts.map(p => (
-                  <DropdownItem key={p.id} onSelect={() => openPromptFire(p)}>
-                    <span className="min-w-0 flex-1 truncate">{promptTitle(p, t)}</span>
+            {/* Do: run and prompts. */}
+            <div role="group" aria-label={t("unifiedBar.doGroup")} className="titlebar-well titlebar-action-well">
+              {/* Popped-out run controls (GH #54): runs open as terminal tabs. */}
+              <RunControls task={task} />
+              <DropdownRoot>
+                {/* The dropdown is the mouse path; the prompt palette shortcut
+                    opens the searchable palette over the same list. The
+                    tooltip names its live binding. */}
+                <Tip content={tipWithKey(t("unifiedBar.prompts"), "prompt-palette")} side="bottom">
+                  <DropdownTrigger asChild>
+                    <button type="button" className="titlebar-seg" data-no-drag data-testid="prompts-menu" aria-label={t("unifiedBar.prompts")}>
+                      <PromptsGlyph className="titlebar-ink" />
+                    </button>
+                  </DropdownTrigger>
+                </Tip>
+                {/* preventDefault on close keeps focus from snapping back to the
+                    trigger, which would re-fire its focus-triggered tooltip and
+                    leave it stuck open after picking a prompt. */}
+                <DropdownMenu align="end" sideOffset={6} className="titlebar-menu w-[250px]" onCloseAutoFocus={(e) => e.preventDefault()}>
+                  {enabledPrompts.length === 0 && (
+                    <div className="titlebar-menu-note">{t("unifiedBar.promptsEmpty")}</div>
+                  )}
+                  {enabledPrompts.map(p => (
+                    <DropdownItem key={p.id} onSelect={() => openPromptFire(p)}>
+                      <span className="min-w-0 flex-1 truncate">{promptTitle(p, t)}</span>
+                    </DropdownItem>
+                  ))}
+                  <DropdownSeparator />
+                  <DropdownItem onSelect={() => openSettings("prompts")}>
+                    <Library className="h-4 w-4" />
+                    <span>{t("unifiedBar.managePrompts")}</span>
                   </DropdownItem>
-                ))}
-                <DropdownSeparator />
-                <DropdownItem onSelect={() => openSettings("prompts")}>
-                  <Library className="h-4 w-4" />
-                  <span>{t("unifiedBar.managePrompts")}</span>
-                </DropdownItem>
-              </DropdownMenu>
-            </DropdownRoot>
+                </DropdownMenu>
+              </DropdownRoot>
+            </div>
 
-            {/* Send-to-main: only shown on actual worktrees, not the
-                repo-root pseudo-task (which IS the main checkout —
-                nothing to send). Hard-blocks on a dirty main checkout
-                rather than risk mixing change sets; the error bubbles
-                up via the alert below. */}
-            {!task.is_main_checkout && (
-              <Tip content={t("unifiedBar.sendToMainTip")} side="bottom">
-                <Button size="sm" variant="ghost" className="gap-1.5"
-                  onClick={async () => {
-                    const ok = await useUI.getState().askConfirm({
-                      title: t("unifiedBar.sendToMainTitle", { name: taskCrumb }),
-                      message: t("unifiedBar.sendToMainMessage", { path: proj.root_path }),
-                      confirmLabel: t("unifiedBar.sendToMain"),
-                    });
-                    if (!ok) return;
-                    try {
-                      const r = await taskSendDiffToMain(task.id);
-                      // Build a compact, human-readable summary. Quietly
-                      // omit the zero halves so it reads as a result, not
-                      // a checklist of nothings-happened.
-                      const parts: string[] = [];
-                      if (r.tracked_files)   parts.push(t(r.tracked_files === 1 ? "unifiedBar.trackedOne" : "unifiedBar.trackedMany", { count: r.tracked_files }));
-                      if (r.untracked_files) parts.push(t(r.untracked_files === 1 ? "unifiedBar.untrackedOne" : "unifiedBar.untrackedMany", { count: r.untracked_files }));
-                      const summary = parts.length ? parts.join(", ") : t("unifiedBar.noChanges");
-                      useUI.getState().pushToast(t("unifiedBar.sentToast", { summary }), "success");
-                    } catch (e) {
-                      await useUI.getState().askConfirm({
-                        title: t("unifiedBar.sendToMainFailed"),
-                        message: String(e),
-                        confirmLabel: t("ok", { ns: "common" }),
-                        cancelLabel: "",
-                        destructive: true,
-                      });
-                    }
-                  }}>
-                  <ArrowUpToLine className="h-4 w-4" />
-                  <span>{t("unifiedBar.sendToMain")}</span>
-                </Button>
+            {/* Manage: the bottom terminal, send to main, sandbox, archive,
+                open folder. */}
+            <div role="group" aria-label={t("unifiedBar.manageGroup")} className="titlebar-well titlebar-action-well">
+              <Tip content={tipWithKey(t("unifiedBar.terminalPanel"), "toggle-terminal")} side="bottom">
+                <button
+                  type="button"
+                  className="titlebar-seg"
+                  data-no-drag
+                  data-testid="toggle-terminal-panel"
+                  data-active={terminalPanelOpen ? "" : undefined}
+                  aria-label={t("unifiedBar.terminalPanel")}
+                  aria-pressed={terminalPanelOpen}
+                  onClick={() => {
+                    const app = useApp.getState();
+                    if (terminalPanelOpen) app.toggleTerminalSplitCollapsed(task.id);
+                    else app.toggleBottomTerminal(task.id);
+                  }}
+                >
+                  <TerminalGlyph className="titlebar-ink" />
+                </button>
               </Tip>
-            )}
-            {(() => {
-              if (task.docker_sandbox_enabled) {
+              {/* Send-to-main: only on actual worktrees, not the repo-root
+                  pseudo-task, which IS the main checkout. Hard-blocks on a
+                  dirty main checkout rather than mix change sets; the error
+                  comes back through the confirm below. */}
+              {!task.is_main_checkout && (
+                <Tip content={t("unifiedBar.sendToMainTip")} side="bottom">
+                  <button type="button" className="titlebar-seg" data-no-drag data-testid="send-to-main" aria-label={t("unifiedBar.sendToMain")}
+                    onClick={async () => {
+                      const ok = await useUI.getState().askConfirm({
+                        title: t("unifiedBar.sendToMainTitle", { name: taskCrumb }),
+                        message: t("unifiedBar.sendToMainMessage", { path: proj.root_path }),
+                        confirmLabel: t("unifiedBar.sendToMain"),
+                      });
+                      if (!ok) return;
+                      try {
+                        const r = await taskSendDiffToMain(task.id);
+                        // A compact summary that quietly omits the zero
+                        // halves, so it reads as a result.
+                        const parts: string[] = [];
+                        if (r.tracked_files)   parts.push(t(r.tracked_files === 1 ? "unifiedBar.trackedOne" : "unifiedBar.trackedMany", { count: r.tracked_files }));
+                        if (r.untracked_files) parts.push(t(r.untracked_files === 1 ? "unifiedBar.untrackedOne" : "unifiedBar.untrackedMany", { count: r.untracked_files }));
+                        const summary = parts.length ? parts.join(", ") : t("unifiedBar.noChanges");
+                        useUI.getState().pushToast(t("unifiedBar.sentToast", { summary }), "success");
+                      } catch (e) {
+                        await useUI.getState().askConfirm({
+                          title: t("unifiedBar.sendToMainFailed"),
+                          message: String(e),
+                          confirmLabel: t("ok", { ns: "common" }),
+                          cancelLabel: "",
+                          destructive: true,
+                        });
+                      }
+                    }}>
+                    <SendUpGlyph className="titlebar-ink" />
+                  </button>
+                </Tip>
+              )}
+              {(() => {
+                if (task.docker_sandbox_enabled) {
+                  return (
+                    <Tip content={t("unifiedBar.sbDockerTip")} side="bottom">
+                      <button type="button" className="titlebar-seg" data-no-drag data-testid="sandbox-button" data-active=""
+                        aria-label={t("unifiedBar.sbDockerTip")}
+                        onClick={() => useUI.getState().openSandbox(task.id)}
+                      >
+                        <DockerSandboxIcon className="titlebar-ink h-[16px] w-[16px]" />
+                      </button>
+                    </Tip>
+                  );
+                }
+                const sbMode = effectiveSandboxMode(task);
+                const tip = sbMode === "enforce" ? t("unifiedBar.sbEnforce")
+                  : sbMode === "enforce-fs" ? t("unifiedBar.sbEnforceFs")
+                  : sbMode === "monitor" ? t("unifiedBar.sbMonitor")
+                  : t("unifiedBar.sbOff");
+                const sandboxOn = sbMode !== "off";
                 return (
-                  <Tip content={t("unifiedBar.sbDockerTip")} side="bottom">
-                    <Button size="icon" variant="icon"
+                  <Tip content={tip} side="bottom">
+                    <button type="button" className="titlebar-seg" data-no-drag data-testid="sandbox-button"
+                      data-active={sandboxOn ? "" : undefined}
+                      aria-label={tip}
                       onClick={() => useUI.getState().openSandbox(task.id)}
                     >
-                      <DockerSandboxIcon className="h-4 w-4" />
-                    </Button>
+                      {/* Glyph, color and fill ALL come from SANDBOX_VISUALS,
+                          so this agrees with the sidebar row, the footer chip
+                          and the mode picker about what each mode looks like. */}
+                      <SandboxIcon mode={sbMode} className="titlebar-ink h-[16px] w-[16px]" />
+                    </button>
                   </Tip>
                 );
-              }
-              const sbMode = effectiveSandboxMode(task);
-              const tip = sbMode === "enforce" ? t("unifiedBar.sbEnforce")
-                : sbMode === "enforce-fs" ? t("unifiedBar.sbEnforceFs")
-                : sbMode === "monitor" ? t("unifiedBar.sbMonitor")
-                : t("unifiedBar.sbOff");
-              return (
-                <Tip content={tip} side="bottom">
-                  <Button size="icon" variant="icon"
-                    onClick={() => useUI.getState().openSandbox(task.id)}
-                  >
-                    {/* Glyph, color and fill ALL come from SANDBOX_VISUALS.
-                        This used to swap in an Eye for monitoring, which made
-                        the one surface a user reads at a glance the only one
-                        disagreeing with the sidebar row, the footer chip and
-                        the mode picker about what monitoring looks like. */}
-                    <SandboxIcon mode={sbMode} className="h-4 w-4" />
-                  </Button>
-                </Tip>
-              );
-            })()}
-            <Tip content={t("unifiedBar.archiveTask")} side="bottom">
-              {/* Copy, delete-branch checkbox and the "Show this every time"
-                  opt-out all live in confirmAndArchive - this button used to
-                  inline its own near-copy of the prompt, which then drifted
-                  from the sidebar's. */}
-              <Button size="icon" variant="icon"
-                onClick={() => { void confirmAndArchive(task); }}
-                data-testid="archive-task"
-              ><Archive className="h-4 w-4" /></Button>
-            </Tip>
-            <OpenWithButton task={task} />
-            <div className="mx-1 h-4 w-px bg-[var(--color-border-soft)]" />
-            <Tip content={tipWithKey(t("unifiedBar.toggleRightPanel"), "toggle-right-sidebar")} side="bottom">
-              <Button size="icon" variant="icon" onClick={toggleRP} data-testid="toggle-right-panel">
-                <PanelRight className="h-4 w-4" />
-              </Button>
-            </Tip>
+              })()}
+              <Tip content={t("unifiedBar.archiveTask")} side="bottom">
+                {/* Copy, delete-branch checkbox and the "Show this every time"
+                    opt-out all live in confirmAndArchive, shared with the
+                    sidebar so the two prompts cannot drift. */}
+                <button type="button" className="titlebar-seg" data-no-drag
+                  aria-label={t("unifiedBar.archiveTask")}
+                  onClick={() => { void confirmAndArchive(task); }}
+                  data-testid="archive-task"
+                ><ArchiveGlyph className="titlebar-ink" /></button>
+              </Tip>
+              <OpenWithButton task={task} />
+            </div>
           </>
+        )}
+        {/* The command palette is never task-scoped: its global commands
+            (new task, project picker, settings) work with nothing selected. */}
+        <CommandPaletteButton />
+        {task && proj && (
+          <Tip content={tipWithKey(t("unifiedBar.toggleRightPanel"), "toggle-right-sidebar")} side="bottom">
+            <button type="button" className="titlebar-icon-btn" onClick={toggleRP} data-testid="toggle-right-panel" aria-label={t("unifiedBar.toggleRightPanel")}>
+              <SidebarRightGlyph className="titlebar-ink" />
+            </button>
+          </Tip>
         )}
       </div>
       {/* Windows and Linux: minimize / maximize / close, flush with the
           window's top-right corner. Nothing on macOS, where the system draws
           the traffic lights. */}
-      <div className="ml-1 flex self-stretch">
-        <WindowControls />
-      </div>
+      {DRAWS_WINDOW_CONTROLS && (
+        <div className="flex self-stretch">
+          <WindowControls />
+        </div>
+      )}
       </div>
     </header>
   );

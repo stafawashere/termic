@@ -45,6 +45,9 @@ export default {
     archiveTask: "归档任务",
     toggleRightPanel: "切换右侧面板",
     switchTask: "切换任务",
+    doGroup: "运行与提示词",
+    manageGroup: "任务操作",
+    terminalPanel: "终端面板",
   },
   commandPalette: {
     label: "命令面板",

@@ -112,6 +112,7 @@ export default {
     runAll: "全部运行",
     stop: "停止",
     stopAll: "全部停止",
+    runMenu: "运行选项",
     stopTip: "停止正在运行的脚本",
     stopAllTip: "停止所有正在运行的脚本",
     runTip: "运行（打开运行终端标签页）",

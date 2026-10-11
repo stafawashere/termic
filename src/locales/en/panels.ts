@@ -113,6 +113,7 @@ export default {
     runAll: "Run all",
     stop: "Stop",
     stopAll: "Stop all",
+    runMenu: "Run options",
     stopTip: "Stop the running scripts",
     stopAllTip: "Stop all running scripts",
     runTip: "Run (opens the run terminal tabs)",

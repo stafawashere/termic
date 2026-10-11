@@ -1833,3 +1833,151 @@ button.titlebar-title[aria-expanded="true"] {
 .titlebar-title[aria-expanded="true"] .titlebar-title-chevron {
   transform: rotate(180deg);
 }
+/* Action wells on the right: recessed groups of 26px segments. A flat
+   segment lifts to the hover ink; data-active turns it into the raised chip
+   (a panel that is open, a sandbox that is on). */
+.titlebar-action-well {
+  height: 32px;
+  gap: 2px;
+  padding: 3px;
+}
+.titlebar-seg {
+  display: flex;
+  height: 26px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  padding: 0 9px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--sidebar-icon);
+  transition: background-color 120ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 120ms cubic-bezier(0.2, 0.7, 0.2, 1), color 120ms;
+}
+.titlebar-seg:hover,
+.titlebar-seg[aria-expanded="true"] {
+  background-color: var(--sidebar-seg-hover);
+  color: var(--sidebar-ink);
+}
+.titlebar-seg:active {
+  background-color: var(--titlebar-pressed-bg);
+  box-shadow: var(--titlebar-pressed-shadow);
+}
+.titlebar-seg[data-active],
+.titlebar-chip {
+  background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+  box-shadow: var(--sidebar-chip-shadow);
+  color: var(--sidebar-icon-active);
+}
+.titlebar-seg[data-active]:hover,
+.titlebar-chip:hover {
+  background-image: linear-gradient(180deg, var(--titlebar-chip-hover-top), var(--titlebar-chip-hover-bottom));
+}
+.titlebar-seg[data-active]:active,
+.titlebar-chip:has(> button:active) {
+  background-image: linear-gradient(180deg, var(--sidebar-chip-bottom), var(--sidebar-chip-top));
+  box-shadow: var(--titlebar-pressed-shadow);
+}
+/* The Run split: two buttons sharing one raised chip. */
+.titlebar-chip {
+  display: flex;
+  height: 26px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+}
+.titlebar-chip > button {
+  display: flex;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+}
+.titlebar-chip-main {
+  padding: 0 2px 0 9px;
+}
+.titlebar-chip-menu {
+  width: 21px;
+  padding-right: 5px;
+  color: var(--sidebar-icon);
+}
+/* A split segment in a well (Open folder): launch half and chevron half. */
+.titlebar-split {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+.titlebar-split > .titlebar-seg:first-child {
+  border-radius: 6px 0 0 6px;
+  padding: 0 3px 0 8px;
+}
+.titlebar-split > .titlebar-seg:last-child {
+  border-radius: 0 6px 6px 0;
+  padding: 0 6px 0 4px;
+}
+.titlebar-split:hover > .titlebar-seg {
+  background-color: var(--sidebar-seg-hover);
+  color: var(--sidebar-ink);
+}
+
+/* The title bar's menus: the sidebar's popover material with the design's
+   gradient, 30px rows, and a fade-and-rise on open. */
+.titlebar-menu {
+  --focus-ring: var(--sidebar-focus-ring);
+  border-color: var(--sidebar-popover-border);
+  border-radius: 10px;
+  background-color: var(--titlebar-menu-bottom);
+  background-image: linear-gradient(180deg, var(--titlebar-menu-top), var(--titlebar-menu-bottom));
+  box-shadow: var(--titlebar-menu-shadow);
+  padding: 6px;
+  animation: titlebar-menu-in 120ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.titlebar-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]) {
+  min-height: 30px;
+  align-items: center;
+  gap: 10px;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  color: var(--sidebar-ink);
+}
+.titlebar-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]) > svg {
+  margin-top: 0;
+  height: 15px;
+  width: 15px;
+  flex-shrink: 0;
+  color: var(--sidebar-icon);
+}
+.titlebar-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-highlighted] {
+  background-color: var(--sidebar-menu-hover);
+  color: var(--sidebar-ink-strong);
+}
+.titlebar-menu [role="separator"] {
+  margin: 5px 2px;
+  height: 1px;
+  background-color: var(--sidebar-menu-divider);
+}
+.titlebar-menu [data-menu-label] {
+  display: flex;
+  height: 22px;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--sidebar-meta);
+}
+.titlebar-menu-note {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--sidebar-meta);
+}
+@keyframes titlebar-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .titlebar-menu { animation-name: titlebar-fade-in; }
+}

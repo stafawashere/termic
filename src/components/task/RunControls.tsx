@@ -15,7 +15,6 @@ import { useApp } from "@/store/app";
 import { useUI } from "@/store/ui";
 import { useShallow } from "zustand/react/shallow";
 import type { Task, TerminalTab } from "@/lib/types";
-import { Button } from "@/components/ui/Button";
 import { Tip } from "@/components/ui/Tooltip";
 import {
   DropdownRoot, DropdownTrigger, DropdownMenu, DropdownItem,
@@ -25,7 +24,8 @@ import { ptyKill } from "@/lib/ipc";
 import { openWebUrlForProject } from "@/lib/previewBrowser";
 import { launchRunTabs, launchSetupTab, launchCustomRun, customRunMember, isCustomRunMember, resolveRunTargets, runsAtRepoRoot, type RunTarget } from "@/lib/runTabs";
 import { resolveCustomCommands, runCommandLabel, type ResolvedCommand } from "@/lib/runCommands";
-import { Play, Square, ChevronDown, Wrench, Globe, Settings, SlidersHorizontal } from "lucide-react";
+import { Play, Square, Wrench, Globe, Settings, SlidersHorizontal } from "lucide-react";
+import { ChevronDownGlyph, PlayGlyph } from "@/components/titlebar/titlebarIcons";
 
 export function RunControls({ task }: { task: Task }) {
   const { t } = useTranslation("panels");
@@ -94,51 +94,45 @@ export function RunControls({ task }: { task: Task }) {
 
   return (
     <>
-      {/* Icon-only shortcut to open the preview in the browser. Shown only
-          while running (the dev server is up) and a preview URL is set. The
-          full URL still lives (with text) in the chevron dropdown below. */}
-      {running && previewUrl && (
-        <Tip content={t("runControls.openPreviewTip", { url: previewUrl })} side="bottom">
-          <Button
-            size="sm" variant="ghost" className="px-1.5" data-no-drag
-            aria-label={t("runControls.openPreviewAria")}
-            onClick={() => { void openWebUrlForProject(previewUrl, previewBrowser, project); }}
-          >
-            <Globe className="h-3.5 w-3.5" />
-          </Button>
-        </Tip>
-      )}
-      {running ? (
-        <Tip content={stopTip} side="bottom">
-          <Button
-            size="sm" variant="ghost" className="gap-1.5" data-no-drag
-            onClick={() => { for (const t of primaryRunTabs) if (t.ptyId) ptyKill(t.ptyId).catch(() => {}); }}
-          >
-            {/* Only the icon is red — a red label read as a constant alarm. */}
-            <Square className="h-3 w-3 text-[var(--color-err)]" fill="currentColor" />
-            <span>{stopLabel}</span>
-          </Button>
-        </Tip>
-      ) : (
-        <Tip
-          content={runTip}
-          side="bottom"
-        >
-          <Button
-            size="sm" variant="ghost" className="gap-1.5" data-no-drag
-            onClick={() => { void launchRunTabs(task.id); }}
-          >
-            <Play className="h-3.5 w-3.5" />
-            <span>{runLabel}</span>
-          </Button>
-        </Tip>
-      )}
+      {/* The Run split: run (or stop) on the left, the run menu on the
+          chevron, two buttons on one raised chip. */}
+      <div className="titlebar-chip" data-testid="run-split" data-running={running || undefined}>
+        {running ? (
+          <Tip content={stopTip} side="bottom">
+            <button
+              type="button"
+              className="titlebar-chip-main"
+              data-no-drag
+              data-testid="run-stop"
+              aria-label={stopLabel}
+              onClick={() => { for (const t of primaryRunTabs) if (t.ptyId) ptyKill(t.ptyId).catch(() => {}); }}
+            >
+              {/* Only the icon is red; a red label read as a constant alarm. */}
+              <Square className="titlebar-ink h-3 w-3 text-[var(--color-err)]" fill="currentColor" />
+            </button>
+          </Tip>
+        ) : (
+          <Tip content={runTip} side="bottom">
+            <button
+              type="button"
+              className="titlebar-chip-main"
+              data-no-drag
+              data-testid="run-start"
+              aria-label={runLabel}
+              onClick={() => { void launchRunTabs(task.id); }}
+            >
+              <PlayGlyph size={14} className="titlebar-ink" />
+            </button>
+          </Tip>
+        )}
       <DropdownRoot onOpenChange={(open) => { if (open) refreshCustomCmds(); }}>
-        <DropdownTrigger asChild>
-          <Button size="sm" variant="ghost" className="px-1" data-no-drag>
-            <ChevronDown className="h-3.5 w-3.5" />
-          </Button>
-        </DropdownTrigger>
+        <Tip content={t("runControls.runMenu")} side="bottom">
+          <DropdownTrigger asChild>
+            <button type="button" className="titlebar-chip-menu" data-no-drag data-testid="run-menu" aria-label={t("runControls.runMenu")}>
+              <ChevronDownGlyph size={11} className="titlebar-ink" />
+            </button>
+          </DropdownTrigger>
+        </Tip>
         {/* All items here are single-line, so vertically center the leading
             icon against the label (the shared DropdownItem top-aligns for the
             two-line items other menus use, which leaves single-line icons
@@ -146,7 +140,7 @@ export function RunControls({ task }: { task: Task }) {
             lowercase-heavy labels (file names, command labels), whose visual
             mass sits below the font box center. Scoped here so only the Run
             dropdown changes. */}
-        <DropdownMenu align="end" className="[&_[role=menuitem]]:items-center [&_[role=menuitem]>svg]:mt-0 [&_[role=menuitem]>svg]:translate-y-[1px]">
+        <DropdownMenu align="end" sideOffset={6} className="titlebar-menu w-[250px]" onCloseAutoFocus={(e) => e.preventDefault()}>
           {isMultiRepo && targets.length > 0 && (
             <>
               <DropdownLabel>{t("runControls.runScripts")}</DropdownLabel>
@@ -226,8 +220,23 @@ export function RunControls({ task }: { task: Task }) {
           </DropdownItem>
         </DropdownMenu>
       </DropdownRoot>
-      {/* Separator between the run section and the rest of the cluster. */}
-      <div className="mx-1 h-4 w-px shrink-0 bg-[var(--color-border-soft)]" />
+      </div>
+      {/* Open the preview in the browser: only while running (the dev
+          server is up) and a preview URL is set. The full URL still lives,
+          with text, in the run menu. */}
+      {running && previewUrl && (
+        <Tip content={t("runControls.openPreviewTip", { url: previewUrl })} side="bottom">
+          <button
+            type="button"
+            className="titlebar-seg"
+            data-no-drag
+            aria-label={t("runControls.openPreviewAria")}
+            onClick={() => { void openWebUrlForProject(previewUrl, previewBrowser, project); }}
+          >
+            <Globe className="titlebar-ink h-[16px] w-[16px]" />
+          </button>
+        </Tip>
+      )}
     </>
   );
 }

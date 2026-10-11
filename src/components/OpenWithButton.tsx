@@ -19,8 +19,7 @@
 
 import { Fragment, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown } from "lucide-react";
-import { Button } from "@/components/ui/Button";
+import { ChevronDownGlyph, FolderOpenGlyph } from "@/components/titlebar/titlebarIcons";
 import { Tip } from "@/components/ui/Tooltip";
 import {
   DropdownRoot, DropdownTrigger, DropdownMenu, DropdownItem, DropdownSeparator,
@@ -62,38 +61,40 @@ export function OpenWithButton({ task }: { task: Task }) {
     // control. `data-no-drag` on both halves: the bar has three independent
     // drag mechanisms (docs/ui.md "Window chrome / drag") and the group's
     // wrapper only opts out of two of them.
-    <div className="flex items-center overflow-hidden rounded-md">
+    <div className="titlebar-split">
       <Tip content={t("openWith.openIn", { label })} side="bottom">
-        <Button
-          size="icon" variant="icon"
-          className="w-6 rounded-r-none"
+        <button
+          type="button"
+          className="titlebar-seg"
           onClick={() => launch(pick.key, label)}
           data-no-drag
           data-testid="open-with-launch"
           data-app={pick.key}
         >
-          <Icon className="h-4 w-4" />
-        </Button>
+          {pick.kind === "file-manager"
+            ? <FolderOpenGlyph className="titlebar-ink" />
+            : <Icon className="titlebar-ink h-[16px] w-[16px]" />}
+        </button>
       </Tip>
       <DropdownRoot onOpenChange={loadApps}>
         <Tip content={t("openWith.openWith")} side="bottom">
           <DropdownTrigger asChild>
-            <Button
-              size="icon" variant="icon"
-              className="w-3.5 rounded-l-none"
+            <button
+              type="button"
+              className="titlebar-seg"
               data-no-drag
               data-testid="open-with-menu"
             >
-              <ChevronDown className="h-3 w-3" />
-            </Button>
+              <ChevronDownGlyph size={11} className="titlebar-ink" />
+            </button>
           </DropdownTrigger>
         </Tip>
         {/* preventDefault on close keeps focus off the trigger, which would
             otherwise re-fire its focus-triggered tooltip and leave it stuck
             open after a pick (the same fix as the Prompts menu). */}
-        <DropdownMenu align="end" className="min-w-[180px]" onCloseAutoFocus={(e) => e.preventDefault()}>
+        <DropdownMenu align="end" sideOffset={6} className="titlebar-menu w-[260px]" onCloseAutoFocus={(e) => e.preventDefault()}>
           {apps === null && (
-            <div className="px-2 py-1.5 text-[13px] text-[var(--color-fg-faint)]">{t("openWith.looking")}</div>
+            <div className="titlebar-menu-note">{t("openWith.looking")}</div>
           )}
           {apps !== null && groupApps(apps).map((group, i) => (
             // Fragment, not a div: Radix finds menu items through its own
@@ -120,7 +121,7 @@ export function OpenWithButton({ task }: { task: Task }) {
           {/* Windows, and any Mac with no editor installed. Saying so beats a
               menu that looks like it failed to load. */}
           {apps !== null && apps.length <= 1 && (
-            <div className="px-2 py-1.5 text-[12px] text-[var(--color-fg-faint)]">
+            <div className="titlebar-menu-note">
               {t("openWith.noOtherApps")}
             </div>
           )}

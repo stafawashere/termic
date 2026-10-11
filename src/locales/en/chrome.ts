@@ -45,6 +45,9 @@ export default {
     archiveTask: "Archive task",
     toggleRightPanel: "Toggle right panel",
     switchTask: "Switch task",
+    doGroup: "Run and prompts",
+    manageGroup: "Task actions",
+    terminalPanel: "Terminal panel",
   },
   commandPalette: {
     label: "Command palette",

@@ -10,9 +10,8 @@
 
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { SquareChevronRight } from "lucide-react";
 import { Tip } from "@/components/ui/Tooltip";
-import { Button } from "@/components/ui/Button";
+import { PaletteGlyph } from "@/components/titlebar/titlebarIcons";
 import { useUI } from "@/store/ui";
 import { usePrefs } from "@/store/prefs";
 import { bindingGlyphs, bindingText } from "@/lib/shortcuts";
@@ -43,9 +42,9 @@ export function CommandPaletteButton() {
 
   return (
     <Tip content={label} side="bottom">
-      <Button
-        size="icon"
-        variant="icon"
+      <button
+        type="button"
+        className="titlebar-icon-btn"
         data-no-drag
         data-testid="command-palette-button"
         aria-label={label}
@@ -55,8 +54,8 @@ export function CommandPaletteButton() {
           toggle();
         }}
       >
-        <SquareChevronRight className="h-4 w-4" />
-      </Button>
+        <PaletteGlyph className="titlebar-ink" />
+      </button>
     </Tip>
   );
 }
