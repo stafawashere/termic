@@ -155,7 +155,7 @@ export function ReviewCommentsBar({ taskId, compact = false, className }: {
               {list.map(c => (
                 <div
                   key={c.id}
-                  className="group flex items-start gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1.5"
+                  className="group flex items-start gap-2 rounded-[7px] bg-[var(--sidebar-well-bg)] px-2 py-1.5 shadow-[var(--sidebar-well-shadow)]"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="font-mono text-[10.5px] text-[var(--color-fg-faint)]">
@@ -174,7 +174,7 @@ export function ReviewCommentsBar({ taskId, compact = false, className }: {
                   <button
                     onClick={() => remove(taskId, c.id)}
                     title={t("reviewBar.removeComment")}
-                    className="mt-0.5 shrink-0 rounded p-0.5 text-[var(--color-fg-faint)] opacity-0 transition-opacity hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)] group-hover:opacity-100"
+                    className="sidebar-tray-btn mt-0.5 opacity-0 transition-opacity group-hover:opacity-100"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -186,19 +186,15 @@ export function ReviewCommentsBar({ taskId, compact = false, className }: {
 
         {/* Agent picker — only when there's a choice to make. */}
         {targets.length > 1 && (
-          <div className="flex flex-wrap gap-1 border-t border-[var(--color-border-soft)] pt-2">
+          <div className="ui-well flex-wrap">
             {targets.map(t => {
               const on = t.id === target?.id;
               return (
                 <button
                   key={t.id}
                   onClick={() => setSelectedTabId(t.id)}
-                  className={cn(
-                    "flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] transition-colors",
-                    on
-                      ? "border-[var(--color-accent)] bg-[var(--color-bg-2)] text-[var(--color-fg)]"
-                      : "border-[var(--color-border)] text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)]",
-                  )}
+                  data-active={on ? "true" : "false"}
+                  className="ui-seg min-w-0 gap-1.5 px-2 text-[12px]"
                 >
                   <span className={cn("shrink-0", CLI_BRAND_COLOR[resolveIconId(t.cli, agents)] || "text-[var(--color-fg-dim)]")}>
                     <CliIcon cli={resolveIconId(t.cli, agents)} className="h-3.5 w-3.5" />

@@ -53,6 +53,7 @@ import { useUI } from "@/store/ui";
 import { useTranslation } from "react-i18next";
 import { i18n } from "@/lib/i18n";
 import { TerminalExitedBanner } from "./TerminalExitedBanner";
+import { MagnifierGlyph } from "./panelIcons";
 
 // Monotonic id source for mermaid render targets. Math.random/Date.now are
 // avoided elsewhere in this codebase; a plain counter is deterministic enough.
@@ -1312,35 +1313,37 @@ function FindBar({
   onClose: () => void;
 }) {
   const { t } = useTranslation("panels");
-  const navBtn = "flex h-6 w-6 items-center justify-center rounded text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--color-fg-dim)]";
   return (
-    <div className="absolute right-4 top-3 z-10 flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-1)] py-1 pl-2.5 pr-1 shadow-lg">
-      <input
-        ref={inputRef}
-        value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") { e.preventDefault(); e.shiftKey ? onPrev() : onNext(); }
-          else if (e.key === "Escape") { e.preventDefault(); onClose(); }
-        }}
-        placeholder={t("mdPreview.findPlaceholder")}
-        spellCheck={false}
-        autoCorrect="off"
-        autoCapitalize="off"
-        autoComplete="off"
-        className="w-44 bg-transparent text-[13px] text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-faint)]"
-      />
-      {/* Fixed width so stepping 9/10 → 10/10 doesn't shift the buttons. */}
-      <span className="min-w-[3.25rem] shrink-0 text-right text-[11.5px] tabular-nums text-[var(--color-fg-faint)]">
-        {query ? `${count ? index + 1 : 0}/${count}` : ""}
-      </span>
-      <button onClick={onPrev} disabled={!count} title={t("mdPreview.prevMatch")} className={navBtn}>
+    <div className="ui-popover absolute right-4 top-3 z-10 flex items-center gap-[2px] p-[4px]">
+      <label className="ui-field mr-[2px] w-56" data-size="sm">
+        <MagnifierGlyph size={12} className="shrink-0" />
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); e.shiftKey ? onPrev() : onNext(); }
+            else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+          }}
+          placeholder={t("mdPreview.findPlaceholder")}
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          autoComplete="off"
+          className="w-full"
+        />
+        {/* Fixed width so stepping 9/10 to 10/10 doesn't shift the buttons. */}
+        <span className="min-w-[3.25rem] shrink-0 text-right text-[11px] tabular-nums text-[var(--sidebar-faint)]">
+          {query ? `${count ? index + 1 : 0}/${count}` : ""}
+        </span>
+      </label>
+      <button onClick={onPrev} disabled={!count} title={t("mdPreview.prevMatch")} className="ui-icon-btn" data-size="sm">
         <ChevronUp className="h-3.5 w-3.5" />
       </button>
-      <button onClick={onNext} disabled={!count} title={t("mdPreview.nextMatch")} className={navBtn}>
+      <button onClick={onNext} disabled={!count} title={t("mdPreview.nextMatch")} className="ui-icon-btn" data-size="sm">
         <ChevronDown className="h-3.5 w-3.5" />
       </button>
-      <button onClick={onClose} title={t("mdPreview.closeFind")} className={navBtn}>
+      <button onClick={onClose} title={t("mdPreview.closeFind")} className="ui-icon-btn" data-size="sm">
         <X className="h-3.5 w-3.5" />
       </button>
     </div>

@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, X } from "lucide-react";
 import type { Terminal } from "@xterm/xterm";
 import type { SearchAddon } from "@xterm/addon-search";
 import { findCountLabel, terminalFindDecorations } from "@/lib/terminalFind";
+import { MagnifierGlyph } from "./panelIcons";
 
 /** The addon's default cap on highlighted matches. Past it the addon stops
  *  decorating and reports index -1; the label says "1000+ matches". */
@@ -66,13 +67,14 @@ export function TerminalFindBar({ open, onClose, termRef, addonRef }: {
   }, [open]);
 
   if (!open) return null;
-  const btn = "rounded p-0.5 text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]";
   return (
     <div
       data-testid="terminal-find"
-      className="absolute right-2 top-2 z-20 flex items-center gap-0.5 rounded border border-[var(--color-border)] bg-[var(--color-bg-2)] px-2 py-1 shadow-lg"
+      className="ui-popover absolute right-2 top-2 z-20 flex items-center gap-[2px] p-[4px]"
     >
-      <input
+      <label className="ui-field mr-[2px] w-52" data-size="sm">
+        <MagnifierGlyph size={12} className="shrink-0" />
+        <input
         ref={inputRef}
         type="text"
         value={query}
@@ -89,16 +91,17 @@ export function TerminalFindBar({ open, onClose, termRef, addonRef }: {
           if (e.key === "Escape") { e.preventDefault(); onClose(); }
           else if (e.key === "Enter") { e.preventDefault(); find(query, e.shiftKey ? "prev" : "next", false); }
         }}
-        className="w-44 bg-transparent text-[12px] text-[var(--color-fg)] placeholder:text-[var(--color-fg-faint)] focus:outline-none"
-      />
-      {query && count && (
-        <span data-testid="terminal-find-count" className="mx-1 shrink-0 whitespace-nowrap text-[11px] tabular-nums text-[var(--color-fg-dim)]">
-          {findCountLabel(count.index, count.total, FIND_HIGHLIGHT_LIMIT)}
-        </span>
-      )}
-      <button type="button" title={t("find.prevTip")} onClick={() => find(query, "prev", false)} className={btn}><ChevronUp className="h-3.5 w-3.5" /></button>
-      <button type="button" title={t("find.nextTip")} onClick={() => find(query, "next", false)} className={btn}><ChevronDown className="h-3.5 w-3.5" /></button>
-      <button type="button" title={t("find.closeTip")} onClick={onClose} className={`ml-0.5 ${btn}`}><X className="h-3.5 w-3.5" /></button>
+          className="w-full"
+        />
+        {query && count && (
+          <span data-testid="terminal-find-count" className="ui-count shrink-0 whitespace-nowrap">
+            {findCountLabel(count.index, count.total, FIND_HIGHLIGHT_LIMIT)}
+          </span>
+        )}
+      </label>
+      <button type="button" title={t("find.prevTip")} onClick={() => find(query, "prev", false)} className="ui-icon-btn" data-size="sm"><ChevronUp className="h-3.5 w-3.5" /></button>
+      <button type="button" title={t("find.nextTip")} onClick={() => find(query, "next", false)} className="ui-icon-btn" data-size="sm"><ChevronDown className="h-3.5 w-3.5" /></button>
+      <button type="button" title={t("find.closeTip")} onClick={onClose} className="ui-icon-btn" data-size="sm"><X className="h-3.5 w-3.5" /></button>
     </div>
   );
 }

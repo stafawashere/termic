@@ -44,14 +44,14 @@ export function TerminalExitedBanner({ label, actionLabel, onAction, icon: Icon 
       className={cn(
         // Warn-tinted for dead agents; muted for managed Run/Setup tabs.
         // In-flow + shrink-0 so it pushes the terminal down.
-        "flex shrink-0 items-center gap-3 px-3 py-1.5",
+        "flex min-h-[38px] shrink-0 items-center gap-3 border-b border-[var(--sidebar-divider)] px-3 py-[6px]",
         center ? "justify-center" : "justify-between",
         className,
       )}
     >
       <span className={cn(
         "flex min-w-0 items-center gap-1.5 text-[12.5px] font-medium",
-        muted ? "text-[var(--color-fg-dim)]" : "text-[var(--color-warn)]",
+        muted ? "text-[var(--sidebar-muted)]" : "text-[var(--color-warn)]",
       )}>
         {!muted && <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
         <span className="truncate">{label}</span>
@@ -60,12 +60,8 @@ export function TerminalExitedBanner({ label, actionLabel, onAction, icon: Icon 
         <button
           type="button"
           onClick={onAction}
-          className={cn(
-            "flex shrink-0 items-center gap-1.5 rounded-md border bg-[var(--color-bg-2)] px-2.5 py-1 text-[12px] font-medium text-[var(--color-fg)]",
-            muted
-              ? "border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-hover)]"
-              : "border-[var(--color-warn)]/50 hover:border-[var(--color-warn)] hover:bg-[var(--color-warn)]/10",
-          )}
+          className="ui-raised"
+          data-size="sm"
         >
           <Icon className="h-3.5 w-3.5" /> {actionLabel}
         </button>
@@ -74,7 +70,8 @@ export function TerminalExitedBanner({ label, actionLabel, onAction, icon: Icon 
             type="button"
             onClick={secondary.onAction}
             title={secondary.title}
-            className="flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-2)] px-2.5 py-1 text-[12px] font-medium text-[var(--color-fg-dim)] hover:border-[var(--color-accent)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+            className="ui-raised text-[var(--sidebar-muted)]"
+            data-size="sm"
           >
             {SecondaryIcon && <SecondaryIcon className="h-3.5 w-3.5" />} {secondary.label}
           </button>
