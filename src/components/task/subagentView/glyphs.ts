@@ -11,13 +11,23 @@ export const GLYPH = {
   middot: "\u00B7",
   down: "\u2193",
   up: "\u2191",
-  boxDone: "\u2612",
-  boxOpen: "\u2610",
+  therefore: "\u2234",
+  todoDone: "\u2714",
+  todoActive: "\u25FC",
+  todoPending: "\u25FB",
   collapsed: "\u25B8",
   expanded: "\u25BE",
 } as const;
 
-/** The working glyph's frames, out and back, one line each in the strip. */
-export const SPINNER_FRAMES = [
-  "\u00B7", "\u2722", "\u2733", "\u2736", "\u273B", "\u273D", "\u273B", "\u2736", "\u2733", "\u2722",
-] as const;
+/** Claude draws its message and tool bullet as U+23FA on macOS and U+25CF
+ *  everywhere else; termic's claude runs on this same machine. */
+const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform || navigator.userAgent);
+export const MESSAGE_BULLET = IS_MAC ? GLYPH.entry : GLYPH.bullet;
+
+/** The result connector: two spaces, the hook, a space and a no-break
+ *  space, so the result's text starts at cell 5. */
+export const RESULT_CONNECTOR = "  \u23BF \u00A0";
+
+/** The spinner glyph's frames, one line each in the strip. The cosine in
+ *  index.css plays them out and back. */
+export const SPINNER_FRAMES = ["\u00B7", "\u2722", "\u2733", "\u2736", "\u273B", "\u273D"] as const;

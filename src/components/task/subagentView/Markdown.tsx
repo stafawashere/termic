@@ -29,8 +29,17 @@ function Block({ block }: { block: MarkdownBlock }) {
     case "paragraph":
       return <div><Spans spans={block.spans} /></div>;
 
-    case "heading":
-      return <div className="font-bold"><Spans spans={block.spans} /></div>;
+    case "heading": {
+      const isTitle = block.level === 1;
+      return (
+        <div data-heading-level={block.level} className={cn("font-bold", isTitle && "italic underline")}>
+          <Spans spans={block.spans} />
+        </div>
+      );
+    }
+
+    case "table":
+      return <div data-testid="subagent-table" className="whitespace-pre">{block.lines.join("\n")}</div>;
 
     case "bullet":
       return (
@@ -55,12 +64,14 @@ function Block({ block }: { block: MarkdownBlock }) {
         </div>
       );
 
-    case "code":
+    case "code": {
+      const hasLanguage = block.language !== "";
       return (
-        <div className="whitespace-pre-wrap pl-[calc(var(--cell)*2)] text-[var(--cc-dim)]">
+        <div data-code-language={block.language} className={cn("whitespace-pre-wrap", !hasLanguage && "text-[var(--cc-permission)]")}>
           {block.lines.length > 0 ? block.lines.join("\n") : "\u00A0"}
         </div>
       );
+    }
   }
 }
 

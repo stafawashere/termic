@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { parseInline, parseMarkdown } from "@/lib/subagentMarkdown";
+import { parseInline, parseMarkdown, renderTable } from "@/lib/subagentMarkdown";
 import { Markdown } from "@/components/task/subagentView/Markdown";
 
 describe("parseInline", () => {
@@ -36,11 +36,33 @@ describe("parseMarkdown", () => {
     ]);
     expect(blocks[3]).toMatchObject({ depth: 1 });
     expect(blocks[4]).toMatchObject({ marker: "2." });
-    expect(blocks[6]).toEqual({ kind: "code", lines: ["const a = 1"] });
+    expect(blocks[0]).toMatchObject({ level: 1 });
+    expect(blocks[6]).toEqual({ kind: "code", language: "ts", lines: ["const a = 1"] });
   });
 
   it("keeps an unclosed fence as code to the end", () => {
-    expect(parseMarkdown("```\nstill code")).toEqual([{ kind: "code", lines: ["still code"] }]);
+    expect(parseMarkdown("```\nstill code")).toEqual([{ kind: "code", language: "", lines: ["still code"] }]);
+  });
+
+  it("draws a table in box characters with a rule after every row", () => {
+    const blocks = parseMarkdown("| Name | Port |\n|---|--:|\n| web | 4000 |\n| db | 5432 |\nafter");
+
+    expect(blocks.map(block => block.kind)).toEqual(["table", "paragraph"]);
+    expect(blocks[0]).toEqual({ kind: "table", lines: [
+      "\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u252C\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
+      "\u2502 Name \u2502 Port \u2502",
+      "\u251C\u2500\u2500\u2500\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2500\u2500\u2500\u2524",
+      "\u2502 web  \u2502 4000 \u2502",
+      "\u251C\u2500\u2500\u2500\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2500\u2500\u2500\u2524",
+      "\u2502 db   \u2502 5432 \u2502",
+      "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+    ] });
+  });
+
+  it("centres header cells, right-aligns by the rule, and keeps a column at least 3 wide", () => {
+    const lines = renderTable(["a", "Total"], ["---", "--:"], [["x", "7"]]);
+    expect(lines[1]).toBe("\u2502  a  \u2502 Total \u2502");
+    expect(lines[3]).toBe("\u2502 x   \u2502     7 \u2502");
   });
 });
 

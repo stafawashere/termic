@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ansiKey, asClaudeTheme, dimColor, CLAUDE_ROLES, CLAUDE_THEMES, paletteStyle, resolveClaudePalette } from "@/lib/claudePalette";
+import { ansiKey, asClaudeTheme, CLAUDE_ROLES, CLAUDE_THEMES, paletteStyle, resolveClaudePalette } from "@/lib/claudePalette";
 
 const TERMINAL: Record<string, string> = {
   background: "rgb(1,1,1)",
@@ -22,6 +22,7 @@ describe("claude palettes", () => {
     const dark = resolveClaudePalette("dark", TERMINAL);
     expect(dark).toMatchObject({
       claude: "rgb(215,119,87)",
+      claudeShimmer: "rgb(235,159,127)",
       text: "rgb(255,255,255)",
       inactive: "rgb(153,153,153)",
       permission: "rgb(177,185,249)",
@@ -43,6 +44,7 @@ describe("claude palettes", () => {
   it("resolves the ansi themes against the terminal's own palette", () => {
     const darkAnsi = resolveClaudePalette("dark-ansi", TERMINAL);
     expect(darkAnsi.claude).toBe(TERMINAL.brightRed);
+    expect(darkAnsi.claudeShimmer).toBe(TERMINAL.brightYellow);
     expect(darkAnsi.text).toBe(TERMINAL.brightWhite);
     expect(darkAnsi.userMessageBackground).toBe(TERMINAL.brightBlack);
 
@@ -66,12 +68,6 @@ describe("claude palettes", () => {
     expect(asClaudeTheme("light-daltonized")).toBe("light-daltonized");
     expect(asClaudeTheme("neon")).toBe("dark");
     expect(asClaudeTheme(null)).toBe("dark");
-  });
-
-  it("dims a colour the way xterm draws faint text, at half alpha", () => {
-    expect(dimColor("rgb(255,255,255)")).toBe("rgba(255, 255, 255, 0.5)");
-    expect(dimColor("#1a2B3c")).toBe("rgba(26, 43, 60, 0.5)");
-    expect(dimColor("hsl(0 0% 50%)")).toBe("color-mix(in srgb, hsl(0 0% 50%) 50%, transparent)");
   });
 
   it("names each role as a custom property", () => {

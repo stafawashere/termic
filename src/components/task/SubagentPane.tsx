@@ -24,8 +24,8 @@ import {
   EMPTY_WINDOW, groupToolRuns, pairToolCalls, positionOfEntry, rowOffsets, rowsForView, shouldFollowTail, visibleRange,
   type DisplayRow,
 } from "@/lib/subagentTranscript";
-import { toolDisplay, transcriptStats } from "@/lib/subagentCliView";
-import { dimColor, paletteStyle, resolveClaudePalette } from "@/lib/claudePalette";
+import { spinnerMessage, toolDisplay, transcriptStats } from "@/lib/subagentCliView";
+import { isAnsiTheme, paletteStyle, resolveClaudePalette, STALL_RED } from "@/lib/claudePalette";
 import { TERMINAL_FONT_WEIGHT } from "@/lib/terminalCell";
 import { useClaudeTheme } from "@/store/claudeTheme";
 import { openTranscriptSession, type TranscriptSession, type TranscriptSnapshot } from "@/store/subagentPreview";
@@ -82,7 +82,8 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
     const palette = resolveClaudePalette(claudeTheme, terminal);
     return {
       ...paletteStyle(palette),
-      "--cc-dim": dimColor(palette.text),
+      "--cc-dim": palette.inactive,
+      "--cc-stall": isAnsiTheme(claudeTheme) ? palette.error : STALL_RED,
       "--cell": `${cell.width}px`,
       "--row": `${cell.height}px`,
       fontFamily,
@@ -154,8 +155,9 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
       showToolOutput: showToolOutputs,
       maxOutputLines,
       worktreePath: task.path,
+      verbose,
     }),
-    [showToolInputs, showToolOutputs, maxOutputLines, task.path],
+    [showToolInputs, showToolOutputs, maxOutputLines, task.path, verbose],
   );
 
   useEffect(() => {
@@ -321,6 +323,9 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
     ? pendingDisplay.args ? `${pendingDisplay.label}(${pendingDisplay.args})` : pendingDisplay.label
     : null;
   const activity = isRunning ? pendingActivity ?? agentDescription : null;
+  const spinnerMessageText = useMemo(() => spinnerMessage(heldRows), [heldRows]);
+  const newestKind = heldRows[heldRows.length - 1]?.kind;
+  const newestIsThinking = newestKind === "thinking" || newestKind === "redactedThinking";
   const hasFooter = agentState !== null && FOOTER_STATES.has(agentState);
   const footerState = hasFooter ? (agentState as FooterState) : null;
 
@@ -440,6 +445,11 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
           state={footerState}
           agentType={agentType ?? tab.title}
           activity={activity}
+          message={spinnerMessageText}
+          toolRunning={pendingCall !== null}
+          thinking={newestIsThinking}
+          lastAtMs={stats.lastAtMs}
+          stallStepped={isAnsiTheme(claudeTheme)}
           startedAt={startedAt}
           durationMs={durationMs}
           toolUses={stats.toolUses}

@@ -9,10 +9,11 @@ import type { TFunction } from "i18next";
 import { cn } from "@/lib/utils";
 import { type ToolCallState, type TranscriptRow } from "@/lib/subagentTranscript";
 import {
-  countGroup, formatElapsed, groupSummaryParts, toolDisplay, toolSummary, type DiffLine, type TodoItem, type ToolSummary,
+  countGroup, groupSummaryParts, toolDisplay, toolSummary, wordSpans, type DiffLine, type TodoItem, type ToolSummary,
+  type WordSpan,
 } from "@/lib/subagentCliView";
 import type { ViewRow } from "@/lib/subagentTranscript";
-import { GLYPH } from "./glyphs";
+import { GLYPH, MESSAGE_BULLET, RESULT_CONNECTOR } from "./glyphs";
 import { Markdown } from "./Markdown";
 
 const OUTPUT_FOLD_LINES = 3;
@@ -28,6 +29,8 @@ export interface EntryRowOptions {
   /** Tool output past this many lines is cut; 0 never cuts. */
   maxOutputLines: number;
   worktreePath: string | null;
+  /** ctrl+o: every fold in the pane is open. */
+  verbose: boolean;
 }
 
 function Gutter({ children, className }: { children?: ReactNode; className?: string }) {
@@ -36,8 +39,14 @@ function Gutter({ children, className }: { children?: ReactNode; className?: str
 
 function HookBlock({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div data-testid="subagent-tool-result" className={cn("flex pl-[calc(var(--cell)*2)]", className)}>
-      <span aria-hidden className="w-[calc(var(--cell)*3)] shrink-0 select-none text-[var(--cc-dim)]">{GLYPH.hook}</span>
+    <div data-testid="subagent-tool-result" className={cn("flex", className)}>
+      <span
+        aria-hidden
+        data-testid="subagent-result-connector"
+        className="w-[calc(var(--cell)*5)] shrink-0 select-none whitespace-pre text-[var(--cc-dim)]"
+      >
+        {RESULT_CONNECTOR}
+      </span>
       <div className="min-w-0 flex-1 whitespace-pre-wrap break-words">{children}</div>
     </div>
   );
@@ -51,7 +60,7 @@ function MoreLinesToggle({ count, onToggle, t }: { count: number; onToggle: () =
       onClick={onToggle}
       className="block text-left text-[var(--cc-dim)] hover:text-[var(--cc-dim)]"
     >
-      {GLYPH.ellipsis} {t("subagentView.moreLines", { count })}
+      {GLYPH.ellipsis} {t("subagentView.moreLines", { count })} {t("subagentView.expandHint")}
     </button>
   );
 }
@@ -89,30 +98,45 @@ function FoldedLines({ lines, foldAt, expanded, onToggle, maxOutputLines, t, ren
   );
 }
 
-function DiffRow({ line, numberWidth }: { line: DiffLine; numberWidth: number }) {
+function WordMarked({ text, word, className }: { text: string; word: WordSpan | null; className: string }) {
+  if (!word) return <>{text || "\u00A0"}</>;
+
+  return (
+    <>
+      {text.slice(0, word.start)}
+      <span data-testid="subagent-diff-word" className={className}>{text.slice(word.start, word.end)}</span>
+      {text.slice(word.end)}
+    </>
+  );
+}
+
+/** One diff row as claude draws it: the line number right-aligned in one
+ *  more cell than the widest number, a space, the sign, then the code, the
+ *  whole row on the diff colour. */
+function DiffRow({ line, numberWidth, word }: { line: DiffLine; numberWidth: number; word: WordSpan | null }) {
   const isAdd = line.kind === "add";
   const isRemove = line.kind === "remove";
   const isContext = line.kind === "context";
   const sign = isAdd ? "+" : isRemove ? "-" : " ";
+  const gutter = numberWidth > 0 ? `${String(line.lineNumber ?? "").padStart(numberWidth)} ${sign}` : sign;
+  const wordClass = isAdd ? "bg-[var(--cc-diffAddedWord)]" : "bg-[var(--cc-diffRemovedWord)]";
 
   return (
     <div
       data-testid="subagent-diff-line"
       data-diff={line.kind}
       className={cn(
-        "flex",
+        "flex whitespace-pre-wrap",
         isAdd && "bg-[var(--cc-diffAdded)]",
         isRemove && "bg-[var(--cc-diffRemoved)]",
-        isContext && "text-[var(--cc-dim)]",
       )}
     >
-      {numberWidth > 0 && (
-        <span className="shrink-0 whitespace-nowrap text-right text-[var(--cc-dim)]" style={{ width: `calc(var(--cell) * ${numberWidth})` }}>
-          {line.lineNumber ?? ""}
-        </span>
-      )}
-      <span aria-hidden className="w-[calc(var(--cell)*3)] shrink-0 text-center">{sign}</span>
-      <span className="min-w-0 flex-1">{line.text || "\u00A0"}</span>
+      <span data-testid="subagent-diff-gutter" className={cn("shrink-0 whitespace-pre", isContext && "text-[var(--cc-dim)]")}>
+        {gutter}
+      </span>
+      <span className="min-w-0 flex-1 break-words">
+        <WordMarked text={line.text} word={word} className={wordClass} />
+      </span>
     </div>
   );
 }
@@ -128,13 +152,18 @@ function Todo({ todo }: { todo: TodoItem }) {
       data-todo-status={todo.status}
       className={cn(
         "flex",
-        isDone && "text-[var(--cc-dim)]",
-        isActive && "font-bold text-[var(--cc-text)]",
         isPending && "text-[var(--cc-text)]",
       )}
     >
-      <span aria-hidden className="w-[calc(var(--cell)*2)] shrink-0">{isDone ? GLYPH.boxDone : GLYPH.boxOpen}</span>
-      <span className={cn("min-w-0 flex-1", isDone && "line-through")}>{todo.content}</span>
+      <span
+        aria-hidden
+        className={cn("w-[calc(var(--cell)*2)] shrink-0", isDone && "text-[var(--cc-success)]", isActive && "text-[var(--cc-claude)]")}
+      >
+        {isDone ? GLYPH.todoDone : isActive ? GLYPH.todoActive : GLYPH.todoPending}
+      </span>
+      <span className={cn("min-w-0 flex-1", isDone && "text-[var(--cc-dim)] line-through", isActive && "font-bold")}>
+        {todo.content}
+      </span>
     </div>
   );
 }
@@ -221,13 +250,14 @@ function SummaryBody({ summary, expanded, onToggle, maxOutputLines, t }: {
 
     case "updated": {
       const highestNumber = summary.diff.reduce((highest, line) => Math.max(highest, line.lineNumber ?? 0), 0);
-      const numberWidth = highestNumber > 0 ? String(highestNumber).length : 0;
+      const numberWidth = highestNumber > 0 ? String(highestNumber).length + 1 : 0;
+      const words = wordSpans(summary.diff);
       const keyed = summary.diff.map((_, position) => String(position));
       return (
         <div>
           <div className="text-[var(--cc-dim)]">{updatedHeadline(summary, t)}</div>
           {fold(keyed, DIFF_FOLD_LINES, (_, position) => (
-            <DiffRow line={summary.diff[position]} numberWidth={numberWidth} />
+            <DiffRow line={summary.diff[position]} numberWidth={numberWidth} word={words[position]} />
           ))}
         </div>
       );
@@ -260,7 +290,7 @@ function ToolCall({ row, result, state, expanded, onToggle, options, t }: {
       <div className="flex">
         <Gutter>
           <span data-testid="subagent-tool-state" data-tool-state={state} className={cn("inline-block", TOOL_DOT_CLASS[state])}>
-            {GLYPH.entry}
+            {MESSAGE_BULLET}
           </span>
         </Gutter>
         <div className="min-w-0 flex-1 break-words">
@@ -275,7 +305,7 @@ function ToolCall({ row, result, state, expanded, onToggle, options, t }: {
         <HookBlock>
           <SummaryBody
             summary={summary}
-            expanded={expanded}
+            expanded={expanded || options.verbose}
             onToggle={onToggle}
             maxOutputLines={options.maxOutputLines}
             t={t}
@@ -284,11 +314,6 @@ function ToolCall({ row, result, state, expanded, onToggle, options, t }: {
       )}
     </div>
   );
-}
-
-function thinkingLabel(row: TranscriptRow, t: Translate): string {
-  if (row.durationMs === null) return `${t("subagentView.thinking")}${GLYPH.ellipsis}`;
-  return t("subagentView.thoughtFor", { duration: formatElapsed(row.durationMs) });
 }
 
 function textLines(text: string): string[] {
@@ -327,35 +352,26 @@ export const EntryRow = memo(function EntryRow({ row, result, toolState, expande
     case "assistantText":
       return (
         <div className="flex text-[var(--cc-text)]">
-          <Gutter>{GLYPH.bullet}</Gutter>
+          <Gutter>{MESSAGE_BULLET}</Gutter>
           <Markdown text={row.text} />
         </div>
       );
 
-    case "thinking":
+    case "thinking": {
+      const body = options.verbose ? row.text.replace(/\s+$/, "") : row.text.replace(/\s+/g, " ").trim();
       return (
-        <div className="italic text-[var(--cc-dim)]">
-          <button
-            type="button"
-            data-testid="subagent-thinking-toggle"
-            aria-expanded={expanded}
-            onClick={toggle}
-            className="flex text-left italic hover:text-[var(--cc-text)]"
-          >
-            <Gutter>{GLYPH.star}</Gutter>
-            <span>{thinkingLabel(row, t)}</span>
-          </button>
-          {expanded && (
-            <div className="whitespace-pre-wrap break-words pl-[calc(var(--cell)*2)]">{row.text}</div>
-          )}
+        <div data-testid="subagent-thinking" className="flex italic text-[var(--cc-dim)]">
+          <Gutter>{GLYPH.therefore}</Gutter>
+          <div className="min-w-0 flex-1 whitespace-pre-wrap break-words">{body}</div>
         </div>
       );
+    }
 
     case "redactedThinking":
       return (
         <div data-testid="subagent-redacted-thinking" className="flex italic text-[var(--cc-dim)]">
           <Gutter>{GLYPH.star}</Gutter>
-          <span>{t("subagentView.redactedThinking")}</span>
+          <span>{t("subagentView.thinking")}{GLYPH.ellipsis}</span>
         </div>
       );
 
@@ -390,7 +406,7 @@ export const EntryRow = memo(function EntryRow({ row, result, toolState, expande
     case "error":
       return (
         <div className="flex text-[var(--cc-error)]">
-          <Gutter>{GLYPH.entry}</Gutter>
+          <Gutter>{MESSAGE_BULLET}</Gutter>
           <div className="min-w-0 flex-1 whitespace-pre-wrap break-words">
             <FoldedLines
               lines={textLines(row.text)}
@@ -469,10 +485,12 @@ export const GroupRow = memo(function GroupRow({ index, members, unfolded, activ
         data-group-unfolded={unfolded}
         aria-expanded={unfolded}
         onClick={() => onToggleGroup(index)}
-        className="flex w-full text-left text-[var(--cc-dim)] hover:text-[var(--cc-inactive)]"
+        className={cn("flex w-full text-left", active ? "text-[var(--cc-text)]" : "text-[var(--cc-dim)]")}
       >
-        <Gutter />
-        <span className="min-w-0 flex-1">
+        <Gutter>
+          {active && <span className="termic-cli-blink inline-block text-[var(--cc-dim)]">{MESSAGE_BULLET}</span>}
+        </Gutter>
+        <span data-testid="subagent-group-summary" className="min-w-0 flex-1">
           {parts.map((part, position) => (
             <span key={position}>
               {position > 0 && ", "}
@@ -483,6 +501,7 @@ export const GroupRow = memo(function GroupRow({ index, members, unfolded, activ
             </span>
           ))}
           {active && GLYPH.ellipsis}
+          {!unfolded && <span className="text-[var(--cc-dim)]"> {t("subagentView.expandHint")}</span>}
         </span>
       </button>
       {unfolded && members.map(member => (

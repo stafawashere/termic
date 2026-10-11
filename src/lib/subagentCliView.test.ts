@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
-  countGroup, displayPath, formatElapsed, formatTokens, groupSummaryParts, lineDiff, toolDisplay, toolSummary, transcriptStats,
+  cosineFrameStops, countGroup, displayPath, formatElapsed, formatTokens, groupSummaryParts, lineDiff, spinnerMessage, spinnerSuffix, toolDisplay, toolSummary, transcriptStats, wordSpans,
 } from "@/lib/subagentCliView";
 import { toTranscriptRows } from "@/lib/subagentTranscript";
 
@@ -159,14 +161,20 @@ describe("formatElapsed and formatTokens", () => {
   it("prints times the way Claude Code does", () => {
     expect(formatElapsed(42_400)).toBe("42s");
     expect(formatElapsed(63_000)).toBe("1m 3s");
-    expect(formatElapsed(2 * 3600_000 + 5 * 60_000)).toBe("2h 5m");
+    expect(formatElapsed(2 * 3600_000 + 5 * 60_000)).toBe("2h 5m 0s");
+    expect(formatElapsed(59_999)).toBe("59s");
+    expect(formatElapsed(119_600)).toBe("2m 0s");
+    expect(formatElapsed(3 * 86_400_000 + 4 * 3600_000 + 7 * 60_000)).toBe("3d 4h 7m");
     expect(formatElapsed(-5)).toBe("0s");
   });
 
   it("prints token counts short", () => {
     expect(formatTokens(950)).toBe("950");
     expect(formatTokens(3_100)).toBe("3.1k");
-    expect(formatTokens(34_000)).toBe("34k");
+    expect(formatTokens(1_000)).toBe("1.0k");
+    expect(formatTokens(34_000)).toBe("34.0k");
+    expect(formatTokens(233_840)).toBe("233.8k");
+    expect(formatTokens(999_960)).toBe("1.0m");
     expect(formatTokens(1_200_000)).toBe("1.2m");
   });
 });
@@ -224,5 +232,63 @@ describe("countGroup and groupSummaryParts", () => {
 
   it("names a single MCP call without a count", () => {
     expect(sentence([call("mcp__acme__find")])).toBe("Called acme");
+  });
+});
+
+describe("the spinner row", () => {
+  it("steps six frames out and back on a cosine, dwelling at the ends", () => {
+    expect(cosineFrameStops(6)).toEqual([
+      { percent: 0, frame: 0 },
+      { percent: 10.24, frame: 1 },
+      { percent: 18.45, frame: 2 },
+      { percent: 25, frame: 3 },
+      { percent: 31.55, frame: 4 },
+      { percent: 39.76, frame: 5 },
+      { percent: 60.24, frame: 4 },
+      { percent: 68.45, frame: 3 },
+      { percent: 75, frame: 2 },
+      { percent: 81.55, frame: 1 },
+      { percent: 89.76, frame: 0 },
+    ]);
+  });
+
+  it("is the cosine index.css plays", () => {
+    const css = readFileSync(path.join(__dirname, "../index.css"), "utf8");
+    const block = /@keyframes termic-cli-spinner \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    const stops = [...block.matchAll(/([\d.]+)% \{ transform: translateY\(calc\(var\(--row\) \* -?(\d)\)\); \}/g)]
+      .map(([, percent, frame]) => ({ percent: Number(percent), frame: Number(frame) }));
+    expect(stops).toEqual(cosineFrameStops(6));
+  });
+
+  it("shows the suffix once there are tokens, past 16 seconds, or while thinking", () => {
+    expect(spinnerSuffix(5_000, 0, false)).toBeNull();
+    expect(spinnerSuffix(16_001, 0, false)).toBe("(16s)");
+    expect(spinnerSuffix(42_000, 1_100, false)).toBe("(42s \u00B7 \u2193 1.1k tokens)");
+    expect(spinnerSuffix(3_000, 0, true)).toBe("(3s \u00B7 thinking)");
+  });
+
+  it("reads the in-progress todo's activeForm from the newest TodoWrite, else Working", () => {
+    const todo = (todos: unknown[]) => ({ kind: "toolUse" as const, toolName: "TodoWrite", text: JSON.stringify({ todos }) });
+    const older = todo([{ content: "a", status: "in_progress", activeForm: "Reading config" }]);
+    const newer = todo([{ content: "b", status: "in_progress", activeForm: "Changing the port" }]);
+
+    expect(spinnerMessage([])).toBe("Working\u2026");
+    expect(spinnerMessage([older, newer])).toBe("Changing the port\u2026");
+    expect(spinnerMessage([newer, todo([{ content: "c", status: "completed", activeForm: "Done" }])])).toBe("Working\u2026");
+    expect(spinnerMessage([todo([{ content: "d", status: "in_progress", activeForm: "Waiting..." }])])).toBe("Waiting...");
+  });
+});
+
+describe("wordSpans", () => {
+  it("marks the changed middle of a removed and added pair when little of it changed", () => {
+    const diff = lineDiff("const port = 3000\nkeep", "const port = 4000\nkeep");
+    expect(wordSpans(diff)).toEqual([{ start: 13, end: 14 }, { start: 13, end: 14 }, null]);
+  });
+
+  it("leaves a pair alone when more than 40% of it changed, and an unpaired line too", () => {
+    expect(wordSpans(lineDiff("abc", "xyz"))).toEqual([null, null]);
+    expect(wordSpans(lineDiff("abcdef", "abcxyz"))).toEqual([null, null]);
+    expect(wordSpans(lineDiff("port = 1\nport = 2", "port = 3"))).toEqual([{ start: 7, end: 8 }, null, { start: 7, end: 8 }]);
+    expect(wordSpans(lineDiff("a\nb", "a\nb\nextra line"))).toEqual([null, null, null]);
   });
 });

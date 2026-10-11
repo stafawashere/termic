@@ -15,7 +15,7 @@ export const CLAUDE_THEMES = [
 export type ClaudeTheme = (typeof CLAUDE_THEMES)[number];
 
 export const CLAUDE_ROLES = [
-  "claude", "text", "inactive", "subtle", "permission", "suggestion", "success", "error", "warning",
+  "claude", "claudeShimmer", "text", "inactive", "subtle", "permission", "suggestion", "success", "error", "warning",
   "diffAdded", "diffRemoved", "diffAddedWord", "diffRemovedWord", "userMessageBackground",
 ] as const;
 
@@ -25,6 +25,7 @@ type Palette = Record<ClaudeRole, string>;
 
 const DARK: Palette = {
   claude: "rgb(215,119,87)",
+  claudeShimmer: "rgb(235,159,127)",
   text: "rgb(255,255,255)",
   inactive: "rgb(153,153,153)",
   subtle: "rgb(80,80,80)",
@@ -44,6 +45,7 @@ const PALETTES: Record<ClaudeTheme, Palette> = {
   dark: DARK,
   light: {
     claude: "rgb(215,119,87)",
+    claudeShimmer: "rgb(245,149,117)",
     text: "rgb(0,0,0)",
     inactive: "rgb(102,102,102)",
     subtle: "rgb(175,175,175)",
@@ -60,6 +62,7 @@ const PALETTES: Record<ClaudeTheme, Palette> = {
   },
   "dark-daltonized": {
     claude: "rgb(255,153,51)",
+    claudeShimmer: "rgb(255,183,101)",
     text: "rgb(255,255,255)",
     inactive: "rgb(153,153,153)",
     subtle: "rgb(80,80,80)",
@@ -76,6 +79,7 @@ const PALETTES: Record<ClaudeTheme, Palette> = {
   },
   "light-daltonized": {
     claude: "rgb(255,153,51)",
+    claudeShimmer: "rgb(255,183,101)",
     text: "rgb(0,0,0)",
     inactive: "rgb(102,102,102)",
     subtle: "rgb(175,175,175)",
@@ -92,6 +96,7 @@ const PALETTES: Record<ClaudeTheme, Palette> = {
   },
   "dark-ansi": {
     claude: "ansi:redBright",
+    claudeShimmer: "ansi:yellowBright",
     text: "ansi:whiteBright",
     inactive: "ansi:white",
     subtle: "ansi:white",
@@ -108,6 +113,7 @@ const PALETTES: Record<ClaudeTheme, Palette> = {
   },
   "light-ansi": {
     claude: "ansi:redBright",
+    claudeShimmer: "ansi:yellowBright",
     text: "ansi:black",
     inactive: "ansi:blackBright",
     subtle: "ansi:blackBright",
@@ -123,6 +129,15 @@ const PALETTES: Record<ClaudeTheme, Palette> = {
     userMessageBackground: "ansi:white",
   },
 };
+
+/** Where claude's spinner drifts when nothing new has arrived for a while.
+ *  A constant in claude, not a theme role; an ansi theme uses its `error`
+ *  instead, since the blend needs rgb on both ends. */
+export const STALL_RED = "rgb(171,43,63)";
+
+export function isAnsiTheme(theme: ClaudeTheme): boolean {
+  return theme.endsWith("-ansi");
+}
 
 export function asClaudeTheme(value: string | null | undefined): ClaudeTheme {
   const known = (CLAUDE_THEMES as readonly string[]).includes(value ?? "");
@@ -149,18 +164,6 @@ export function resolveClaudePalette(theme: ClaudeTheme, terminal: Record<string
     resolved[role] = isAnsi ? terminal[ansiKey(value.slice(5))] ?? DARK[role] : value;
   }
   return resolved;
-}
-
-/** A colour as a terminal draws it under SGR 2 (claude's `dimColor`):
- *  xterm halves its alpha. Anything not rgb() or #rrggbb is mixed. */
-export function dimColor(color: string): string {
-  const rgb = /^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/.exec(color);
-  if (rgb) return `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, 0.5)`;
-
-  const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
-  if (hex) return `rgba(${hex.slice(1).map(pair => parseInt(pair, 16)).join(", ")}, 0.5)`;
-
-  return `color-mix(in srgb, ${color} 50%, transparent)`;
 }
 
 /** The palette as custom properties for the view's root, `--cc-<role>`. */

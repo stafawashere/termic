@@ -153,8 +153,9 @@ root. They are `rgb()` data in that table rather than `@theme` tokens
 because no termic theme should be able to change them. The two ansi
 themes name terminal colours instead, which resolve against the active
 terminal theme's ANSI palette, so they follow a custom theme's
-`terminal` keys exactly as the claude tab does. When claude changes its
-palette, update the table and its test together.
+`terminal` keys exactly as the claude tab does. The spinner's stall red, rgb(171,43,63), is a constant in claude rather
+than a role, and lives beside the table as `STALL_RED`. When claude
+changes its palette, update the table and its test together.
 
 ## Error handling
 

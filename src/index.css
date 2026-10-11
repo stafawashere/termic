@@ -937,23 +937,74 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 
 /* The subagent view's pending tool call: its dot blinks on and off the way
    Claude Code's does, in two hard steps rather than a fade. */
+/* The subagent view's pending tool bullet: shown 600ms, blank 600ms. */
 @keyframes termic-cli-blink {
   50% { opacity: 0; }
 }
 .termic-cli-blink {
-  animation: termic-cli-blink 1s step-end infinite;
+  animation: termic-cli-blink 1.2s step-end infinite;
 }
 
-/* The subagent view's working glyph: a one-line window over a vertical strip
-   of frames, stepped one line per frame. The strip is ten lines tall, so
-   -100% of it is ten lines and steps(10) lands on each frame once. */
+/* The spinner glyph: a one-row window over a strip of six frames. Claude
+   picks frame round(p * 5) with p = (1 - cos(2 pi t / 2000)) / 2; these
+   stops are where each frame starts (cosineFrameStops in
+   lib/subagentCliView.ts, which a test keeps in step with this block). */
 @keyframes termic-cli-spinner {
-  to { transform: translateY(-100%); }
+  0% { transform: translateY(calc(var(--row) * 0)); }
+  10.24% { transform: translateY(calc(var(--row) * -1)); }
+  18.45% { transform: translateY(calc(var(--row) * -2)); }
+  25% { transform: translateY(calc(var(--row) * -3)); }
+  31.55% { transform: translateY(calc(var(--row) * -4)); }
+  39.76% { transform: translateY(calc(var(--row) * -5)); }
+  60.24% { transform: translateY(calc(var(--row) * -4)); }
+  68.45% { transform: translateY(calc(var(--row) * -3)); }
+  75% { transform: translateY(calc(var(--row) * -2)); }
+  81.55% { transform: translateY(calc(var(--row) * -1)); }
+  89.76% { transform: translateY(calc(var(--row) * 0)); }
 }
 .termic-cli-spinner {
-  animation: termic-cli-spinner 1.2s steps(10) infinite;
+  animation: termic-cli-spinner 2s step-end infinite;
 }
+
+/* The shimmer on the spinner's message: a three-cell window holding a copy
+   of the message in the shimmer colour, stepped one cell at a time from ten
+   cells past the right edge to ten past the left. The window moves one way
+   and the copy inside it the other, so the copy's letters stay over the
+   message's. The step count and duration come from the message width. */
+@keyframes termic-cli-shimmer-window {
+  from { transform: translateX(calc(var(--cell) * (var(--shimmer-width) + 9))); }
+  to { transform: translateX(calc(var(--cell) * -11)); }
+}
+@keyframes termic-cli-shimmer-text {
+  from { transform: translateX(calc(var(--cell) * (var(--shimmer-width) + 9) * -1)); }
+  to { transform: translateX(calc(var(--cell) * 11)); }
+}
+/* While a tool runs the whole message pulses instead, on a 2s sine. */
+@keyframes termic-cli-pulse {
+  50% { color: var(--cc-claudeShimmer); }
+}
+.termic-cli-pulse {
+  animation: termic-cli-pulse 2s ease-in-out infinite;
+}
+/* Past 10s with nothing new the glyph and message shift to red by 20s, in
+   eighths. The delay is set from the newest entry's time. */
+@keyframes termic-cli-stall {
+  from { color: var(--cc-claude); }
+  to { color: var(--cc-stall); }
+}
+@keyframes termic-cli-park {
+  to { visibility: hidden; }
+}
+.termic-cli-reduced-motion { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
-  .termic-cli-blink,
-  .termic-cli-spinner { animation: none; }
+  .termic-cli-blink {
+    animation: none;
+    color: var(--cc-text);
+  }
+  .termic-cli-spinner-strip,
+  .termic-cli-shimmer { display: none; }
+  .termic-cli-reduced-motion { display: inline; }
+  .termic-cli-pulse,
+  .termic-cli-stalls { animation: none !important; }
 }

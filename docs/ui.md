@@ -488,44 +488,69 @@ terminal tabs are durable.
   docs/themes.md "The subagent view paints with claude's palette"). The
   theme is the claude config's own `theme` key, read by
   `subagent_claude_theme` once per session and again on window focus
-  (`store/claudeTheme.ts`). `--cc-dim` is the text colour at half
-  strength, which is how a terminal draws claude's `dimColor`.
+  (`store/claudeTheme.ts`). `--cc-dim` is the theme's `inactive`
+  colour, because claude's Ink maps `dimColor` to that role rather than
+  to terminal faint.
 - **Tool runs collapse to one line.** `groupToolRuns`
   (`lib/subagentTranscript.ts`) folds each run of tool calls and thinking
   into one group row, and `countGroup` plus `groupSummaryParts`
   (`lib/subagentCliView.ts`) write it the way claude does, a dim line two
-  cells in: "Thought for 2s, read 2 files, called 1 tool", numbers bold,
-  an edit's `+A -R` in the diff word colours, the group still running in
-  the "-ing" form with an ellipsis. Clicking the line unfolds that group,
-  and ctrl+o while the pane has focus flips every group, as claude's
-  verbose toggle does. The phrases stay English in every locale, like the
-  tool labels.
+  cells in: "Thought for 2s, read 2 files, called 1 tool (ctrl+o to
+  expand)", numbers bold, an edit's `+A -R` in the diff word colours. The
+  group still running is not dim, takes the blinking tool bullet and the
+  "-ing" forms with an ellipsis. Clicking the line unfolds that group, and
+  ctrl+o while the pane has focus flips every group and opens every
+  folded output, as claude's verbose toggle does. Unfolded, a thought
+  shows at once under U+2234 (dim italic), so "Thought for" is written
+  only on the summary line. The phrases stay English in every locale,
+  like the tool labels.
 - **A tool result draws under its call.** In an unfolded group
   `pairToolCalls` matches results to calls by `toolUseId`, so the result is
-  not a row of its own. The call's dot blinks dim while pending (a CSS
-  `steps()` animation), then turns success or error. A result whose call is
+  not a row of its own. The call's bullet blinks dim while pending, 600ms
+  on and 600ms off (a CSS `steps()` animation, steady in the text colour
+  under reduced motion), then turns success or error. The result hangs
+  from claude's connector, two spaces, U+23BF, a space and a no-break
+  space, so its text starts at cell 5, and a fold reads "... +N lines
+  (ctrl+o to expand)". A result whose call is
   on a page not loaded yet joins the group alone. `lib/subagentCliView.ts`
   heads a call the way Claude prints it (`Read(path)`, `Update(path)`,
   `Search(pattern: "x")`, `Update Todos`, `server - tool (MCP)`, paths
   inside the worktree relative) and summarises the result: lines read,
-  files found, an Edit's line diff on claude's diff rows, the TodoWrite
-  checklist, an error, or the first three output lines with a dim "+N
-  lines" that unfolds on click.
-- **Text and prompts.** Assistant text is a U+25CF bullet in the text
-  colour with the text two cells in, through the markdown subset in
-  `lib/subagentMarkdown.ts` (bold, italic, inline code in the permission
-  colour, headings, lists, quotes, fences) as React elements. There is no
+  files found, an Edit's line diff, the TodoWrite checklist (U+2714,
+  U+25FC, U+25FB), an error, or the first three output lines. A diff row
+  is the line number right-aligned in one more cell than the widest
+  number, a space, the sign and the code, on claude's diff colour across
+  the row; a removed and added pair with at most 40% of its characters
+  changed gets the changed middle on the word colour (`wordSpans`).
+- **Text and prompts.** Assistant text is claude's bullet (U+23FA on
+  macOS, U+25CF elsewhere, `MESSAGE_BULLET`) in the text colour with the
+  text two cells in, through the markdown subset in
+  `lib/subagentMarkdown.ts` as React elements: bold, italic, inline code
+  and language-less fences in the permission colour, H1 bold italic
+  underlined, lists, quotes, and tables drawn in box characters with a
+  rule after every row (`renderTable`). There is no
   HTML path, and a unit test renders `<script>` and raw tags and checks
   they come out escaped. The prompt the agent was given is a U+276F
   pointer on claude's `userMessageBackground` across the row.
 - **Top row and footer.** No box: one dim row at the top names the
   description (else agent type), model, workflow phase and read-only.
-  Under the scroller, while the agent runs, a dim glyph cycling through a
-  strip of frames on a CSS `steps()` animation and "Working...", then a
+  Under the scroller, while the agent runs, claude's spinner row in the
+  claude colour: six frames played out and back on claude's 2s cosine
+  (the stops are `cosineFrameStops`, and a unit test keeps index.css in
+  step with it), the in-progress todo's activeForm or "Working..." with a
+  three-cell shimmer stepping right to left one cell per 200ms, or a 2s
+  pulse while a tool runs, and the dim "(elapsed, tokens)" suffix once
+  there are tokens or 16s have passed. With no new entry for 10s, and no
+  tool running, the glyph and message ramp to claude's stall red by 20s
+  in eighths and the shimmer parks. All of it is CSS: the stall delay is
+  measured from when the animation was first applied, so a new entry
+  moves it without restarting anything, and a `display: none` pane runs
+  none of it. Reduced motion shows a still U+25CF and no shimmer. Then a
   blank row and the agent's row: U+25CB, the agent type and the call in
   flight on the left, elapsed time and output tokens on the right, where
   only the seconds tick, from a 1 s interval that exists only while the
-  agent runs and the pane is mounted. Once stopped the ring becomes a
+  agent runs and the pane is on screen (an IntersectionObserver turns it
+  off for a hidden pane). Once stopped the ring becomes a
   green or red U+25CF and the left reads "Done (N tool uses)", "Failed" or
   "Interrupted". Counts and tokens come from the entries the view holds,
   so before every earlier page is loaded they cover the newest part only;

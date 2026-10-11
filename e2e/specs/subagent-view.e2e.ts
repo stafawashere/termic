@@ -215,7 +215,7 @@ describe("subagent transcript view", () => {
     // As in Claude Code, the thinking and the tool call fold into one
     // summary line until it is clicked.
     expect(facts.kinds).toEqual(["userText", "group", "assistantText"]);
-    expect(facts.texts[1]).toMatch(/^Thought for \d+s, read 1 file$/);
+    expect(facts.texts[1]).toMatch(/^Thought for \d+s, read 1 file \(ctrl\+o to expand\)$/);
 
     await clickWhenVisible(`${paneSelector(agentId)} [data-testid="subagent-group"]`);
     const members = () => browser.execute((sel) =>
@@ -440,13 +440,19 @@ describe("subagent transcript view", () => {
         .map(el => el.getAttribute("data-tool-state")), pane);
     const groups = () => browser.execute((sel) =>
       [...document.querySelectorAll<HTMLElement>(`${sel} [data-testid="subagent-group"]`)]
-        .map(el => ({ text: el.textContent ?? "", unfolded: el.getAttribute("data-group-unfolded") === "true" })), pane);
+        .map(el => ({
+          text: el.querySelector('[data-testid="subagent-group-summary"]')?.textContent ?? "",
+          unfolded: el.getAttribute("data-group-unfolded") === "true",
+          blinking: !!el.querySelector(".termic-cli-blink"),
+        })), pane);
     const facts = (await paneFacts(agentId))!;
     expect(facts.kinds).toEqual(["userText", "group", "assistantText", "group"]);
     expect(await toolStates()).toEqual([]);
-    expect((await groups()).map(group => group.text)).toEqual([
-      "Thought for 4s",
-      "Reading 1 file, calling 1 tool\u2026",
+    // A finished group is dim with no bullet; the running one keeps a
+    // blinking bullet and its -ing words, as claude draws them.
+    expect(await groups()).toEqual([
+      { text: "Thought for 4s (ctrl+o to expand)", unfolded: false, blinking: false },
+      { text: "Reading 1 file, calling 1 tool\u2026 (ctrl+o to expand)", unfolded: false, blinking: true },
     ]);
 
     const footer = `${pane} [data-testid="subagent-footer"]`;
@@ -455,6 +461,29 @@ describe("subagent transcript view", () => {
     const footerText = (await textOf(footer)).replace(/\s+/g, " ");
     expect(footerText).toContain("Working\u2026");
     expect(footerText).toContain("general-purpose Bash(npm run build)");
+    expect(await textOf(`${pane} [data-testid="subagent-spinner-suffix"]`)).toMatch(/^\(\d+s \u00B7 \u2193 1\.1k tokens\)$/);
+
+    // The spinner row is claude-coloured, its glyph runs the cosine strip,
+    // and while a tool runs the message pulses instead of shimmering.
+    const spinner = () => browser.execute((sel) => {
+      const root = document.querySelector<HTMLElement>(sel)!;
+      const row = root.querySelector<HTMLElement>('[data-testid="subagent-working"]')!;
+      const message = root.querySelector<HTMLElement>('[data-testid="subagent-spinner-message"]')!;
+      const shimmer = root.querySelector<HTMLElement>('[data-testid="subagent-shimmer"]');
+      return {
+        rowColor: getComputedStyle(row).color,
+        glyphAnimation: getComputedStyle(root.querySelector<HTMLElement>('[data-testid="subagent-spinner-glyph"]')!).animationName,
+        messageAnimation: getComputedStyle(message).animationName,
+        messageColor: getComputedStyle(message).color,
+        shimmerAnimation: shimmer ? getComputedStyle(shimmer).animationName : null,
+        shimmerVisibility: shimmer ? getComputedStyle(shimmer).visibility : null,
+      };
+    }, pane);
+    const pulsing = await spinner();
+    expect(pulsing.rowColor).toBe("rgb(215, 119, 87)");
+    expect(pulsing.glyphAnimation).toBe("termic-cli-spinner");
+    expect(pulsing.messageAnimation).toBe("termic-cli-pulse");
+    expect(pulsing.shimmerAnimation).toBeNull();
     expect(await textOf(`${pane} [data-testid="subagent-footer-stats"]`)).toMatch(/^\d+s \u00B7 \u2193 1\.1k tokens$/);
     expect(await textOf(`${pane} [data-testid="subagent-header"]`)).toContain("claude-test-model");
 
@@ -467,6 +496,7 @@ describe("subagent transcript view", () => {
       const cell = parseFloat(style.getPropertyValue("--cell"));
       const row = parseFloat(style.getPropertyValue("--row"));
       const said = root.querySelector<HTMLElement>('[data-entry-kind="assistantText"]')!;
+      const expectedBullet = /Mac/i.test(navigator.platform || navigator.userAgent) ? "\u23FA" : "\u25CF";
       const bullet = said.querySelector<HTMLElement>("span[aria-hidden]")!;
       const text = bullet.nextElementSibling as HTMLElement;
       const entries = [...root.querySelectorAll<HTMLElement>('[data-testid="subagent-entry"]')];
@@ -486,7 +516,7 @@ describe("subagent transcript view", () => {
         fontWeight: style.fontWeight,
         theme: root.getAttribute("data-claude-theme"),
         textColor: getComputedStyle(text).color,
-        bulletText: bullet.textContent,
+        bulletIsPlatforms: bullet.textContent === expectedBullet,
         summaryColor: getComputedStyle(root.querySelector('[data-testid="subagent-group"]')!).color,
         background: style.backgroundColor,
       };
@@ -499,9 +529,9 @@ describe("subagent transcript view", () => {
     expect(grid.lineHeight).toBe(grid.row);
     expect(grid.fontWeight).toBe("400");
     expect(grid.theme).toBe("dark");
-    expect(grid.bulletText).toBe("\u25CF");
+    expect(grid.bulletIsPlatforms).toBe(true);
     expect(grid.textColor).toBe("rgb(255, 255, 255)");
-    expect(grid.summaryColor).toBe("rgba(255, 255, 255, 0.5)");
+    expect(grid.summaryColor).toBe("rgb(153, 153, 153)");
     await snap("subagent-cli-running.png");
 
     await clickWhenVisible(`${pane} [data-entry-kind="group"]:last-of-type [data-testid="subagent-group"]`);
@@ -510,41 +540,40 @@ describe("subagent transcript view", () => {
       timeoutMsg: `clicking the running group never unfolded it: ${JSON.stringify(await toolStates())}`,
     });
 
-    // Inside an unfolded group the columns are Claude Code's too: the hook
-    // sits two cells in from the dot and its text five.
+    // Inside an unfolded group the columns are Claude Code's too: the result
+    // connector is two spaces, the hook, a space and a no-break space, so
+    // the result's text starts five cells in.
     const layout = await browser.execute((sel) => {
       const root = document.querySelector<HTMLElement>(sel)!;
       const cell = parseFloat(getComputedStyle(root).getPropertyValue("--cell"));
       const dot = root.querySelector<HTMLElement>('[data-testid="subagent-tool-state"]')!;
       const gutter = dot.parentElement!;
       const hookBlock = root.querySelector<HTMLElement>('[data-testid="subagent-tool-result"]')!;
-      const hook = hookBlock.firstElementChild as HTMLElement;
+      const connector = hookBlock.querySelector<HTMLElement>('[data-testid="subagent-result-connector"]')!;
       const hookText = hookBlock.lastElementChild as HTMLElement;
       const fonts = [root, dot, hookText, root.querySelector<HTMLElement>('[data-testid="subagent-tool-name"]')!]
         .map(el => getComputedStyle(el).fontFamily);
       return {
         cell,
-        hookOffset: hook.getBoundingClientRect().left - gutter.getBoundingClientRect().left,
+        connector: connector.textContent,
         textOffset: hookText.getBoundingClientRect().left - gutter.getBoundingClientRect().left,
         fonts,
         blinking: getComputedStyle(root.querySelectorAll<HTMLElement>('[data-testid="subagent-tool-state"]')[1]).animationName,
       };
     }, pane);
-    expect(Math.abs(layout.hookOffset - 2 * layout.cell)).toBeLessThanOrEqual(0.5);
+    expect(layout.connector).toBe("  \u23BF \u00A0");
     expect(Math.abs(layout.textOffset - 5 * layout.cell)).toBeLessThanOrEqual(0.5);
     expect(new Set(layout.fonts).size).toBe(1);
     expect(layout.blinking).toBe("termic-cli-blink");
     await snap("subagent-cli-group-open.png");
 
+    // Unfolded, the thought shows under a U+2234 at once, and "Thought for"
+    // is written only on the summary line above it.
     await clickWhenVisible(`${pane} [data-testid="subagent-group"]`);
-    const thinking = `${pane} [data-testid="subagent-thinking-toggle"]`;
+    const thinking = `${pane} [data-testid="subagent-thinking"]`;
     await waitVisible(thinking, 5_000);
-    expect(await textOf(thinking)).toContain("Thought for 4s");
-    await clickWhenVisible(thinking);
-    await browser.waitUntil(async () => (await textOf(`${pane}`)).includes("the port lives in src/config.ts"), {
-      timeout: 5_000,
-      timeoutMsg: "clicking the thinking line never showed the thought",
-    });
+    expect((await textOf(thinking)).replace(/\s+/g, " ")).toBe("\u2234 the port lives in src/config.ts");
+    expect((await textOf(pane)).split("Thought for").length - 1).toBe(1);
     await snap("subagent-cli-thinking-open.png");
 
     appendTranscript(agentId, result(20, "toolu_build", buildOutput));
@@ -558,6 +587,17 @@ describe("subagent transcript view", () => {
         .find(text => text.includes("npm run build")) ?? "", pane);
     expect(await buildRowText()).toContain("+37 lines");
     expect(await textOf(`${pane} [data-testid="subagent-footer"]`)).not.toContain("Bash(npm run build)");
+
+    // Nothing has arrived since the build result 20s in, so the row has
+    // stalled: the shimmer is parked and the message has gone red.
+    await browser.waitUntil(async () => (await spinner()).messageColor === "rgb(171, 43, 63)", {
+      timeout: 5_000,
+      timeoutMsg: `the stalled spinner never turned red: ${JSON.stringify(await spinner())}`,
+    });
+    const stalled = await spinner();
+    expect(stalled.messageAnimation).toBe("termic-cli-stall");
+    expect(stalled.shimmerAnimation).toBe("termic-cli-shimmer-window, termic-cli-park");
+    expect(stalled.shimmerVisibility).toBe("hidden");
     await snap("subagent-cli-bash-done.png");
 
     appendTranscript(agentId, call(22, "toolu_edit", "Edit", {
@@ -574,7 +614,19 @@ describe("subagent transcript view", () => {
     appendTranscript(agentId, result(25, "toolu_todo", "Todos have been modified successfully."));
     appendTranscript(agentId, call(26, "toolu_test", "Bash", { command: "npm test" }));
     appendTranscript(agentId, result(30, "toolu_test", "Error: 2 tests failed\n  at acme.test.ts:12", true));
-    appendTranscript(agentId, said(31, "The port is **4000** now; two tests still fail."));
+    appendTranscript(agentId, said(31, [
+      "# Result",
+      "",
+      "The port is **4000** now; two tests still fail.",
+      "",
+      "| Name | Port |",
+      "|---|--:|",
+      "| web | 4000 |",
+      "",
+      "```",
+      "npm test",
+      "```",
+    ].join("\n")));
 
     // The calls join the group that is already unfolded, since nothing but
     // calls and results arrived between them.
@@ -595,6 +647,8 @@ describe("subagent transcript view", () => {
         names,
         args,
         diff: all("subagent-diff-line", "data-diff"),
+        gutters: [...root.querySelectorAll('[data-testid="subagent-diff-gutter"]')].map(el => el.textContent),
+        words: [...root.querySelectorAll('[data-testid="subagent-diff-word"]')].map(el => el.textContent),
         todos: all("subagent-todo", "data-todo-status"),
         removedTint: removed ? getComputedStyle(removed).backgroundColor : null,
         doneStrike: getComputedStyle(root.querySelector('[data-todo-status="completed"] span:last-child')!).textDecorationLine,
@@ -604,11 +658,33 @@ describe("subagent transcript view", () => {
     expect(tools.args).toEqual(["(src/config.ts)", "(npm run build)", "(src/config.ts)", "(npm test)"]);
     expect(tools.diff.map(([kind]) => kind)).toEqual(["remove", "add", "add"]);
     expect(tools.diff[0][1]).toContain("12");
+    expect(tools.gutters).toEqual([" 12 -", " 12 +", " 13 +"]);
+    expect(tools.words).toEqual(["3", "4"]);
     expect(tools.todos.map(([status]) => status)).toEqual(["completed", "in_progress", "pending"]);
     expect(tools.removedTint).toBe("rgb(122, 41, 54)");
     expect(tools.doneStrike).toBe("line-through");
     expect(await textOf(pane)).toContain("Updated src/config.ts with 2 additions and 1 removal");
     expect(await textOf(pane)).toContain("Error: 2 tests failed");
+
+    const markdown = await browser.execute((sel) => {
+      const root = document.querySelector(sel)!;
+      const heading = root.querySelector<HTMLElement>('[data-heading-level="1"]')!;
+      const code = root.querySelector<HTMLElement>('[data-code-language=""]')!;
+      return {
+        heading: [getComputedStyle(heading).fontWeight, getComputedStyle(heading).fontStyle, getComputedStyle(heading).textDecorationLine],
+        table: root.querySelector<HTMLElement>('[data-testid="subagent-table"]')!.textContent!.split("\n"),
+        codeColor: getComputedStyle(code).color,
+      };
+    }, pane);
+    expect(markdown.heading).toEqual(["700", "italic", "underline"]);
+    expect(markdown.table).toEqual([
+      "\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u252C\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
+      "\u2502 Name \u2502 Port \u2502",
+      "\u251C\u2500\u2500\u2500\u2500\u2500\u2500\u253C\u2500\u2500\u2500\u2500\u2500\u2500\u2524",
+      "\u2502 web  \u2502 4000 \u2502",
+      "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+    ]);
+    expect(markdown.codeColor).toBe("rgb(177, 185, 249)");
     await snap("subagent-cli-tools.png");
 
     // ctrl+o in the focused pane unfolds every group, and again folds them
@@ -631,8 +707,8 @@ describe("subagent transcript view", () => {
     });
     expect(await toolStates()).toEqual([]);
     expect((await groups()).map(group => group.text)).toEqual([
-      "Thought for 4s",
-      "Edited 1 file +2 -1, read 1 file, called 3 tools",
+      "Thought for 4s (ctrl+o to expand)",
+      "Edited 1 file +2 -1, read 1 file, called 3 tools (ctrl+o to expand)",
     ]);
     await snap("subagent-cli-collapsed.png");
 

@@ -327,21 +327,147 @@ export function toolSummary(
 
 /** `42s`, `1m 3s`, `2h 5m`, as Claude Code prints an elapsed time. */
 export function formatElapsed(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
+  const isUnderAMinute = ms < 60_000;
+  if (isUnderAMinute) return `${Math.max(0, Math.floor(ms / 1000))}s`;
+
+  const totalSeconds = Math.round(ms / 1000);
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor((totalSeconds % 86_400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  return `${minutes}m ${seconds}s`;
 }
 
-/** `950`, `3.1k`, `1.2m`. */
+/** `950`, `1.0k`, `233.8k`, `1.2m`: one decimal past a thousand, as
+ *  claude's spinner prints a count. */
 export function formatTokens(count: number): string {
   if (count < 1000) return String(count);
-  if (count < 1_000_000) return `${(count / 1000).toFixed(1).replace(/\.0$/, "")}k`;
-  return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
+
+  const thousands = (count / 1000).toFixed(1);
+  const roundsToAMillion = Number(thousands) >= 1000;
+  if (!roundsToAMillion) return `${thousands}k`;
+
+  return `${(count / 1_000_000).toFixed(1)}m`;
+}
+
+/** Keyframe stops for claude's spinner glyph: frame `round(p * (n - 1))`
+ *  with `p = (1 - cos(2 pi t / period)) / 2`, so one period runs out and
+ *  back with the ends dwelling longest. Each stop is the percent of the
+ *  period where that frame starts. */
+export function cosineFrameStops(frameCount: number): Array<{ percent: number; frame: number }> {
+  const last = frameCount - 1;
+  const stops = [{ percent: 0, frame: 0 }];
+  const turnAt = (p: number) => Math.acos(1 - 2 * p) / (2 * Math.PI);
+  const round = (value: number) => Math.round(value * 10_000) / 100;
+
+  for (let frame = 1; frame <= last; frame++) stops.push({ percent: round(turnAt((frame - 0.5) / last)), frame });
+  for (let frame = last - 1; frame >= 0; frame--) stops.push({ percent: round(1 - turnAt((frame + 0.5) / last)), frame });
+  return stops;
+}
+
+const SPINNER_SHOWS_SUFFIX_AFTER_MS = 16_000;
+
+/** The dim part after the spinner's message, "(42s \u00B7 \u2193 1.1k tokens)",
+ *  or null while claude would not draw it yet. */
+export function spinnerSuffix(elapsedMs: number, tokens: number, thinking: boolean): string | null {
+  const hasTokens = tokens > 0;
+  const hasRunLong = elapsedMs > SPINNER_SHOWS_SUFFIX_AFTER_MS;
+  const shows = hasTokens || hasRunLong || thinking;
+  if (!shows) return null;
+
+  const segments = [formatElapsed(elapsedMs)];
+  if (hasTokens) segments.push(`\u2193 ${formatTokens(tokens)} tokens`);
+  if (thinking) segments.push("thinking");
+  return `(${segments.join(" \u00B7 ")})`;
+}
+
+/** The spinner's message: the in-progress todo's activeForm from the
+ *  newest TodoWrite, else "Working", with the ellipsis claude adds. */
+export function spinnerMessage(rows: readonly Pick<TranscriptRow, "kind" | "toolName" | "text">[]): string {
+  let message = "Working";
+
+  for (let index = rows.length - 1; index >= 0; index--) {
+    const row = rows[index];
+    const isTodoWrite = row.kind === "toolUse" && row.toolName === "TodoWrite";
+    if (!isTodoWrite) continue;
+
+    const todos = parseFields(row.text)?.todos;
+    const active = Array.isArray(todos)
+      ? todos.find((todo): todo is Fields => typeof todo === "object" && todo !== null && todo.status === "in_progress")
+      : undefined;
+    const activeForm = active ? text(active, "activeForm") : null;
+    if (activeForm) message = activeForm;
+    break;
+  }
+
+  const hasEllipsis = message.endsWith("\u2026") || message.endsWith("...");
+  return hasEllipsis ? message : `${message}\u2026`;
+}
+
+/** A changed span inside one diff line, drawn on the word colour. */
+export interface WordSpan {
+  start: number;
+  end: number;
+}
+
+const WORD_HIGHLIGHT_MAX_CHANGE = 0.4;
+
+/** Claude's word highlight: each run of removed lines pairs one to one with
+ *  the added lines right after it, and a pair whose changed characters are
+ *  at most 40% of its total gets the changed middle marked on both sides. */
+export function wordSpans(diff: readonly DiffLine[]): Array<WordSpan | null> {
+  const spans: Array<WordSpan | null> = diff.map(() => null);
+  let position = 0;
+
+  while (position < diff.length) {
+    if (diff[position].kind !== "remove") {
+      position++;
+      continue;
+    }
+
+    const removedStart = position;
+    while (position < diff.length && diff[position].kind === "remove") position++;
+    const addedStart = position;
+    while (position < diff.length && diff[position].kind === "add") position++;
+
+    const pairs = Math.min(addedStart - removedStart, position - addedStart);
+    for (let offset = 0; offset < pairs; offset++) {
+      const before = diff[removedStart + offset].text;
+      const after = diff[addedStart + offset].text;
+      const pair = changedMiddle(before, after);
+      if (!pair) continue;
+
+      spans[removedStart + offset] = pair.before;
+      spans[addedStart + offset] = pair.after;
+    }
+  }
+  return spans;
+}
+
+function changedMiddle(before: string, after: string): { before: WordSpan; after: WordSpan } | null {
+  const shorter = Math.min(before.length, after.length);
+  let prefix = 0;
+  while (prefix < shorter && before[prefix] === after[prefix]) prefix++;
+
+  let suffix = 0;
+  const fitsSuffix = () => suffix < shorter - prefix;
+  while (fitsSuffix() && before[before.length - 1 - suffix] === after[after.length - 1 - suffix]) suffix++;
+
+  const changedBefore = before.length - prefix - suffix;
+  const changedAfter = after.length - prefix - suffix;
+  const changed = changedBefore + changedAfter;
+  const total = before.length + after.length;
+  const isUnchanged = changed === 0;
+  const isTooDifferent = total === 0 || changed / total > WORD_HIGHLIGHT_MAX_CHANGE;
+  if (isUnchanged || isTooDifferent) return null;
+
+  return {
+    before: { start: prefix, end: prefix + changedBefore },
+    after: { start: prefix, end: prefix + changedAfter },
+  };
 }
 
 export interface TranscriptStats {
