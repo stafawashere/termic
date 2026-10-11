@@ -380,8 +380,10 @@ badge, and none of them touches the parent tab's work badge or bell.
 - **Workflow agents sit under a run row.** A run is one row
   (`WorkflowRunRow.tsx`) at a plain agent's indent, with its name, a
   `running/total` count and a running, failed or done badge, all read from
-  one counts string so it never selects an agent record. It starts
-  collapsed; opened it lists a phase row per phase and the agents with no
+  one counts string so it never selects an agent record. The badge is
+  running while any agent in the run runs, failed once none runs and one
+  failed, done otherwise. It starts collapsed whatever the auto-collapse
+  setting; opened it lists a phase row per phase and the agents with no
   phase, each one step deeper. Clicking a run or phase row folds it and
   opens nothing. A workflow agent row opens its transcript like any other,
   with its `workflowRunId` on the tab so the view reads under

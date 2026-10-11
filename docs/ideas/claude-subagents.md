@@ -18,7 +18,7 @@ resume or a session change; nothing is persisted. A refcounted notify
 watcher tails only the transcripts a view has open, and Settings > Tasks
 has a "Claude subagents" block (master toggle, type filters, retention,
 auto-collapse, view options). Host and Docker are covered on macOS and
-Linux; workflow agents are recorded but get no row. Where each part is
+Linux; workflow agents sit under collapsed run rows. Where each part is
 documented: the hook bodies and their rejection rules in
 [docs/agent-hooks.md](../agent-hooks.md) "Subagent reports", the rows, the
 view and the settings in [docs/ui.md](../ui.md) "Subagent rows in the
@@ -63,7 +63,7 @@ session, marked by `agent_id` and `agent_type` (`docs/agent-hooks.md`,
 
 Phase 1 reads only `session_id`, `agent_id` and `agent_type` (see
 docs/agent-hooks.md). Nothing uses the `tool_use_id` link yet, and
-`workflowPhase` is read into the summary but drawn nowhere until phase 2.
+`workflowPhase` is drawn as the phase rows of a workflow run.
 
 ## Transcript layout
 
@@ -105,16 +105,34 @@ does not parse is skipped without dropping the rest of the file.
 
 ## Open design: phases 2 and 3
 
-**Phase 2: workflow run nodes.** Each workflow run becomes one row,
-collapsed by default, expanding to its phases (`workflowPhase` in the
-sidecar) and then its agents. Each agent opens the same view as a plain
-subagent. Phase 1 already keeps workflow agents in the store
-(`isWorkflow`) and leaves them off the row selector, the workflow type
-filter in Settings is drawn disabled until this exists, and
-`subagent_list` already lists `subagents/workflows/wf_<runid>/`. Not yet
-decided: whether the run node reads `workflows/wf_<runid>.json` or the
-run's `journal.jsonl` for its phase list, and what the node shows while
-a run has started no agent yet.
+**Phase 2: workflow run nodes (shipped).** Each workflow run is one
+row, collapsed by default, expanding to a row per phase and then its
+agents; each agent opens the same view as a plain subagent. The rows are
+in [docs/ui.md](../ui.md) "Subagent rows in the sidebar".
+
+The open question, where a run node reads its name and phase list, was
+settled on the state file. `subagent_workflow_runs` reads
+`workflows/wf_<runid>.json` for `workflowName` and the `phases[].title`
+list, confined to the session dir and capped at 4 MiB, and caches the
+result by canonical path while the file's mtime and length are
+unchanged. `journal.jsonl` is not read. When the file is missing or
+unreadable the run is named by its `wf_` id and its phases follow
+first-seen order (earliest agent start). A phase the file does not
+declare is placed after the declared ones, and agents with no
+`workflowPhase` sit last under the run.
+
+The state file has only ever been observed after a run finished or was
+killed, so nothing says whether claude writes it while a run is live.
+The reader treats it as optional: a running run shows its id and
+first-seen phases until the file appears, and the store re-asks on the
+next refresh. A run that has started no agent yet has no row, because a
+run exists in the sidebar only through its agents.
+
+A workflow agent is placed only after a `subagent_list` refresh has
+named its run. One a hook reported earlier stays off the list until
+then, rather than drawing loose and jumping into its run. Caps: the
+listing returns up to 200 plain agents and up to 1000 workflow agents
+live, and a rebuild after a relaunch keeps 50 plain and 500 workflow.
 
 **Phase 3: alerts.** A running-subagent count on the parent row, and
 finish and fail notifications wired into the attention notifier, off
