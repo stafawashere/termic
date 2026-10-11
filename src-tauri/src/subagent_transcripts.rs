@@ -113,6 +113,28 @@ pub struct TranscriptEntry {
     /// counts each message once.
     pub model: Option<String>,
     pub output_tokens: Option<u64>,
+    /// The Claude Code version that wrote the line, on the same first entry
+    /// as `model`.
+    pub version: Option<String>,
+    /// Extra dim lines Claude prints under a tool result, on `toolResult`
+    /// entries only.
+    pub notes: Vec<ResultNote>,
+    /// The result carries a file diff, which pulls its call out of a
+    /// collapsed group the way Claude does.
+    pub pops_out: bool,
+}
+
+/// A dim line Claude prints under a tool result, named here and worded by
+/// the view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResultNote {
+    /// Another command ran in the same repository while this one did.
+    SharedRepo,
+    DiffSkipped,
+    DiffUnavailable,
+    /// The auto mode classifier approved the call.
+    AutoClassifier,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -372,6 +394,9 @@ fn entry(kind: EntryKind, body: &str, timestamp: &Option<String>) -> TranscriptE
         duration_ms: None,
         model: None,
         output_tokens: None,
+        version: None,
+        notes: Vec::new(),
+        pops_out: false,
     }
 }
 
@@ -423,6 +448,59 @@ fn parse_user(message: &serde_json::Value, timestamp: &Option<String>) -> Vec<Tr
         }
     }
     out
+}
+
+fn is_true(value: &serde_json::Value, key: &str) -> bool {
+    value.get(key).and_then(|v| v.as_bool()).unwrap_or(false)
+}
+
+/// The notes Claude prints under a Bash result about the files the command
+/// changed, read from `toolUseResult.bashEditDiff`, and whether that diff
+/// pulls the call out of its collapsed group.
+fn edit_diff_notes(diff: &serde_json::Value) -> (Option<ResultNote>, bool) {
+    if !diff.is_object() {
+        return (None, false);
+    }
+
+    let has_no_files = diff.get("files").and_then(|f| f.as_array()).is_none_or(|files| files.is_empty());
+    let more_files = diff.get("moreFiles").and_then(|m| m.as_u64()).unwrap_or(0);
+    let skipped = is_true(diff, "skipped");
+    let unavailable = is_true(diff, "unavailable");
+    let shared = is_true(diff, "shared");
+
+    let nothing_to_show = unavailable && has_no_files && more_files == 0;
+    let pops_out = !skipped && !nothing_to_show;
+
+    let says_why_empty = (unavailable || shared) && has_no_files;
+    let note = if skipped {
+        Some(ResultNote::DiffSkipped)
+    } else if says_why_empty && unavailable {
+        Some(ResultNote::DiffUnavailable)
+    } else if says_why_empty {
+        Some(ResultNote::SharedRepo)
+    } else {
+        None
+    };
+    (note, pops_out)
+}
+
+/// Hangs the line-level facts about a tool result (`toolUseResult` and
+/// `permissionDecision`) on the result entry the line carries.
+fn annotate_result(entries: &mut [TranscriptEntry], line: &serde_json::Value) {
+    let Some(result) = entries.iter_mut().rev().find(|e| e.kind == EntryKind::ToolResult) else { return };
+
+    if let Some(diff) = line.get("toolUseResult").and_then(|r| r.get("bashEditDiff")) {
+        let (note, pops_out) = edit_diff_notes(diff);
+        result.notes.extend(note);
+        result.pops_out = pops_out;
+    }
+
+    let decision = line.get("permissionDecision");
+    let accepted = decision.and_then(|d| d.get("decision")).and_then(|d| d.as_str()) == Some("accept");
+    let by_classifier = decision.and_then(|d| d.get("reasonType")).and_then(|r| r.as_str()) == Some("classifier");
+    if accepted && by_classifier {
+        result.notes.push(ResultNote::AutoClassifier);
+    }
 }
 
 fn string_field(value: &serde_json::Value, key: &str) -> Option<String> {
@@ -500,7 +578,13 @@ fn parse_line(line: &str) -> Option<ParsedLine> {
 
     match line_type {
         "user" => {
-            let entries = parse_user(v.get("message")?, &timestamp);
+            let is_meta = v.get("isMeta").and_then(|m| m.as_bool()).unwrap_or(false);
+            if is_meta {
+                return Some(ParsedLine { entries: Vec::new(), outcome: Outcome::None });
+            }
+
+            let mut entries = parse_user(v.get("message")?, &timestamp);
+            annotate_result(&mut entries, &v);
             let ends_on_error = entries
                 .last()
                 .is_some_and(|e| e.kind == EntryKind::ToolResult && e.is_error);
@@ -517,7 +601,10 @@ fn parse_line(line: &str) -> Option<ParsedLine> {
             }
 
             let thinking_duration_ms = v.get("thinkingDurationMs").and_then(|d| d.as_u64());
-            let entries = parse_assistant(message, thinking_duration_ms, &timestamp);
+            let mut entries = parse_assistant(message, thinking_duration_ms, &timestamp);
+            if let Some(first) = entries.first_mut() {
+                first.version = string_field(&v, "version");
+            }
             let outcome = assistant_outcome(message, &entries);
             Some(ParsedLine { entries, outcome })
         }
@@ -1347,6 +1434,85 @@ mod tests {
 
         let json = serde_json::to_value(&parsed.entries[1]).unwrap();
         assert_eq!(json["toolUseId"], "toolu_x");
+    }
+
+    fn annotated_result(extra: serde_json::Value) -> String {
+        let mut line = serde_json::json!({
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{ "type": "tool_result", "tool_use_id": "toolu_x", "content": "out", "is_error": false }],
+            },
+        });
+        for (key, value) in extra.as_object().unwrap() {
+            line[key] = value.clone();
+        }
+        line.to_string()
+    }
+
+    #[test]
+    fn meta_user_lines_are_dropped() {
+        let meta = serde_json::json!({
+            "type": "user",
+            "isMeta": true,
+            "message": { "role": "user", "content": "<system-reminder>be brief</system-reminder>" },
+        })
+        .to_string();
+        let parsed = parse_transcript(&jsonl(&[user_text("go"), meta]));
+
+        let texts: Vec<&str> = parsed.entries.iter().map(|e| e.text.as_str()).collect();
+        assert_eq!(texts, vec!["go"]);
+        assert_eq!(parsed.skipped_lines, 0);
+    }
+
+    #[test]
+    fn result_notes_come_from_edit_diff_and_permission_decision() {
+        let shared = annotated_result(serde_json::json!({
+            "toolUseResult": { "stdout": "", "bashEditDiff": { "files": [], "moreFiles": 0, "shared": true } },
+            "permissionDecision": { "decision": "accept", "reasonType": "classifier", "source": "config" },
+        }));
+        let by_mode = annotated_result(serde_json::json!({
+            "toolUseResult": { "stdout": "" },
+            "permissionDecision": { "decision": "accept", "reasonType": "mode", "source": "config" },
+        }));
+        let skipped = annotated_result(serde_json::json!({
+            "toolUseResult": { "bashEditDiff": { "files": [], "moreFiles": 0, "skipped": true } },
+        }));
+        let nothing = annotated_result(serde_json::json!({
+            "toolUseResult": { "bashEditDiff": { "files": [], "moreFiles": 0, "unavailable": true } },
+        }));
+        let odd = annotated_result(serde_json::json!({ "toolUseResult": "plain text", "permissionDecision": 7 }));
+        let parsed = parse_transcript(&jsonl(&[shared, by_mode, skipped, nothing, odd]));
+
+        let facts: Vec<(Vec<ResultNote>, bool)> =
+            parsed.entries.iter().map(|e| (e.notes.clone(), e.pops_out)).collect();
+        assert_eq!(
+            facts,
+            vec![
+                (vec![ResultNote::SharedRepo, ResultNote::AutoClassifier], true),
+                (vec![], false),
+                (vec![ResultNote::DiffSkipped], false),
+                (vec![ResultNote::DiffUnavailable], false),
+                (vec![], false),
+            ]
+        );
+    }
+
+    #[test]
+    fn version_sits_on_the_first_entry_of_an_assistant_line() {
+        let line = serde_json::json!({
+            "type": "assistant",
+            "version": "9.9.9",
+            "message": {
+                "role": "assistant",
+                "content": [{ "type": "text", "text": "a" }, { "type": "text", "text": "b" }],
+            },
+        })
+        .to_string();
+        let parsed = parse_transcript(&jsonl(&[line]));
+
+        let versions: Vec<Option<&str>> = parsed.entries.iter().map(|e| e.version.as_deref()).collect();
+        assert_eq!(versions, vec![Some("9.9.9"), None]);
     }
 
     #[test]
