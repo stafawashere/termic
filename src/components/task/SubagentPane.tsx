@@ -25,7 +25,7 @@ import {
   type DisplayRow,
 } from "@/lib/subagentTranscript";
 import { spinnerMessage, toolDisplay, transcriptStats } from "@/lib/subagentCliView";
-import { isAnsiTheme, paletteStyle, resolveClaudePalette, STALL_RED } from "@/lib/claudePalette";
+import { claudeLinkColor, isAnsiTheme, paletteStyle, resolveClaudePalette, STALL_RED } from "@/lib/claudePalette";
 import { TERMINAL_FONT_WEIGHT } from "@/lib/terminalCell";
 import { useClaudeTheme } from "@/store/claudeTheme";
 import { isSubagentVerboseChord } from "@/lib/shortcuts";
@@ -130,6 +130,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
     return {
       ...paletteStyle(palette),
       "--cc-dim": palette.inactive,
+      "--cc-link": claudeLinkColor(claudeTheme, terminal, palette),
       "--cc-stall": isAnsiTheme(claudeTheme) ? palette.error : STALL_RED,
       "--cell": `${cell.width}px`,
       "--row": `${cell.height}px`,
@@ -137,7 +138,9 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
       fontSize: terminalFontSize,
       fontWeight: TERMINAL_FONT_WEIGHT,
       lineHeight: `${cell.height}px`,
-      letterSpacing: `${terminalLetterSpacing}px`,
+      letterSpacing: `${cell.width - cell.glyphWidth}px`,
+      fontKerning: "none",
+      fontVariantLigatures: "none",
       background: terminal.background,
       color: palette.text,
     } as CSSProperties;

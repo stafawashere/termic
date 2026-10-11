@@ -2,6 +2,9 @@ import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { parseMarkdown, type MarkdownBlock, type MarkdownSpan } from "@/lib/subagentMarkdown";
 
+/** Claude's quote border, a left eighth block and a space per level. */
+const QUOTE_BAR = "\u258E ";
+
 function Spans({ spans }: { spans: readonly MarkdownSpan[] }) {
   return (
     <>
@@ -12,6 +15,8 @@ function Spans({ spans }: { spans: readonly MarkdownSpan[] }) {
             span.bold && "font-bold",
             span.italic && "italic",
             span.code && "text-[var(--cc-permission)]",
+            span.strike && "line-through",
+            span.link && "text-[var(--cc-link)]",
           )}
         >
           {span.text}
@@ -43,7 +48,7 @@ function Block({ block }: { block: MarkdownBlock }) {
 
     case "bullet":
       return (
-        <div className="flex" style={{ paddingLeft: `calc(var(--cell) * ${block.depth * 2})` }}>
+        <div className="flex" style={{ paddingLeft: `calc(var(--cell) * ${block.indent})` }}>
           <span aria-hidden className="w-[calc(var(--cell)*2)] shrink-0">-</span>
           <div className="min-w-0 flex-1"><Spans spans={block.spans} /></div>
         </div>
@@ -51,7 +56,7 @@ function Block({ block }: { block: MarkdownBlock }) {
 
     case "numbered":
       return (
-        <div className="flex" style={{ paddingLeft: `calc(var(--cell) * ${block.depth * 2})` }}>
+        <div className="flex" style={{ paddingLeft: `calc(var(--cell) * ${block.indent})` }}>
           <span className="shrink-0" style={{ width: `calc(var(--cell) * ${block.marker.length + 1})` }}>{block.marker}</span>
           <div className="min-w-0 flex-1"><Spans spans={block.spans} /></div>
         </div>
@@ -59,8 +64,9 @@ function Block({ block }: { block: MarkdownBlock }) {
 
     case "quote":
       return (
-        <div className="pl-[calc(var(--cell)*2)] italic text-[var(--cc-dim)]">
-          <Spans spans={block.spans} />
+        <div data-testid="subagent-quote" className="flex">
+          <span aria-hidden className="shrink-0 whitespace-pre text-[var(--cc-dim)]">{QUOTE_BAR.repeat(block.depth)}</span>
+          <div className="min-w-0 flex-1 italic"><Spans spans={block.spans} /></div>
         </div>
       );
 

@@ -522,9 +522,16 @@ describe("subagent transcript view", () => {
         const content = above.firstElementChild as HTMLElement;
         return entry.getBoundingClientRect().top - content.getBoundingClientRect().bottom;
       });
+      const firstRun = document.createTreeWalker(text, NodeFilter.SHOW_TEXT).nextNode()!;
+      const glyphCount = Math.min(10, firstRun.textContent!.length);
+      const run = document.createRange();
+      run.setStart(firstRun, 0);
+      run.setEnd(firstRun, glyphCount);
       return {
         cell,
         row,
+        glyphAdvance: run.getBoundingClientRect().width / glyphCount,
+        glyphCount,
         textOffset: text.getBoundingClientRect().left - bullet.getBoundingClientRect().left,
         gaps,
         lineHeight: parseFloat(style.lineHeight),
@@ -541,6 +548,10 @@ describe("subagent transcript view", () => {
     expect(grid.cell).toBeGreaterThan(4);
     expect(grid.row).toBeGreaterThan(8);
     expect(Math.abs(grid.textOffset - 2 * grid.cell)).toBeLessThanOrEqual(0.5);
+    // Every glyph advances exactly one cell, as xterm draws it, so a word
+    // here is as wide as the same word in the claude tab.
+    expect(grid.glyphCount).toBe(10);
+    expect(Math.abs(grid.glyphAdvance - grid.cell)).toBeLessThanOrEqual(0.02);
     expect(grid.gaps.length).toBe(3);
     for (const gap of grid.gaps) expect(Math.abs(gap - grid.row)).toBeLessThanOrEqual(0.5);
     expect(grid.lineHeight).toBe(grid.row);

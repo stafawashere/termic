@@ -166,6 +166,13 @@ export function resolveClaudePalette(theme: ClaudeTheme, terminal: Record<string
   return resolved;
 }
 
+/** Claude draws a link in the terminal's own blue, plain on a light theme
+ *  and bright on every other. */
+export function claudeLinkColor(theme: ClaudeTheme, terminal: Record<string, string>, palette: Palette): string {
+  const key = theme.startsWith("light") ? "blue" : "brightBlue";
+  return terminal[key] ?? palette.permission;
+}
+
 /** The palette as custom properties for the view's root, `--cc-<role>`. */
 export function paletteStyle(palette: Palette): Record<string, string> {
   const style: Record<string, string> = {};

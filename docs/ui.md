@@ -487,9 +487,14 @@ terminal tabs are durable.
   list drawn the way Claude Code 2.1.296 draws its own transcript, so
   flipping from the claude tab to a subagent tab looks like the same
   screen. It mounts no xterm and creates no WebGL context. It takes the
-  font, weight 400, line height 1.0 and letter spacing from exactly what
-  TerminalPane hands xterm (the constants live in `lib/terminalCell.ts`),
-  and the background from the active terminal theme.
+  font, weight 400 and line height 1.0 from exactly what TerminalPane
+  hands xterm (the constants live in `lib/terminalCell.ts`), and the
+  background from the active terminal theme. Its CSS letter spacing is
+  NOT the pref: xterm floors the glyph advance to device pixels and adds
+  the pref in device pixels, so the pane sets `cell - glyph advance`,
+  which makes every glyph advance exactly one `--cell` (kerning and
+  ligatures off). Passing the pref through made words visibly wider than
+  the same words in the claude tab; the e2e spec measures a ten-glyph run.
 - **A cell grid, measured like xterm.** `useTerminalCell` measures a run of
   `W` in the terminal font and `cellFromGlyph` rounds it to device pixels
   the way xterm's WebGL renderer sizes a cell (width floored, height
@@ -520,7 +525,8 @@ terminal tabs are durable.
   "-ing" forms with an ellipsis. Clicking the line unfolds that group, and
   ctrl+o while the pane has focus flips every group and opens every
   folded output, as claude's verbose toggle does. Unfolded, a thought
-  shows at once under U+2234 (dim italic), so "Thought for" is written
+  shows at once under a dim italic U+2234, the thought itself dim
+  markdown (not italic) as claude draws it in verbose, so "Thought for" is written
   only on the summary line. The phrases stay English in every locale,
   like the tool labels.
 - **A tool result draws under its call.** In an unfolded group
@@ -548,10 +554,18 @@ terminal tabs are durable.
 - **Text and prompts.** Assistant text is claude's bullet (U+23FA on
   macOS, U+25CF elsewhere, `MESSAGE_BULLET`) in the text colour with the
   text two cells in, through the markdown subset in
-  `lib/subagentMarkdown.ts` as React elements: bold, italic, inline code
-  and language-less fences in the permission colour, H1 bold italic
-  underlined, lists, quotes, and tables drawn in box characters with a
-  rule after every row (`renderTable`). There is no
+  `lib/subagentMarkdown.ts` as React elements, following claude's own
+  renderer: bold, italic, strikethrough, inline code and language-less
+  fences in the permission colour, links and bare URLs as their text in
+  the terminal's bright blue (plain blue on a light theme, `--cc-link`),
+  backslash escapes dropped, H1 bold italic underlined and every heading
+  followed by exactly one blank row, quotes as a dim U+258E bar per level
+  with italic text in the text colour, ordered lists numbered from their
+  first item and counted on (letters one level down, roman numerals two
+  down), a nested list one cell past its parent's marker, and tables drawn
+  in box characters with a rule after every row (`renderTable`). A fence
+  with a language is plain text: claude highlights it with its native
+  highlighter, which the view does not reproduce. There is no
   HTML path, and a unit test renders `<script>` and raw tags and checks
   they come out escaped. The prompt the agent was given is a U+276F
   pointer on claude's `userMessageBackground` across the row, drawn whole

@@ -25,6 +25,17 @@ describe("parseInline", () => {
   it("leaves snake_case names and a lone star alone", () => {
     expect(parseInline("call snake_case_name, my_var_ and 2 * 3")).toHaveLength(1);
   });
+  it("reads links, bare urls, strikethrough and backslash escapes the way claude does", () => {
+    const spans = parseInline("see [the docs](https://acme.com/a), https://acme.com/b. ~~old~~ \\*not italic\\*");
+    const styled = spans.filter(span => span.link || span.strike).map(span => [span.text, span.link, span.strike]);
+
+    expect(styled).toEqual([
+      ["the docs", true, false],
+      ["https://acme.com/b", true, false],
+      ["old", false, true],
+    ]);
+    expect(spans.map(span => span.text).join("")).toBe("see the docs, https://acme.com/b. old *not italic*");
+  });
 });
 
 describe("parseMarkdown", () => {
@@ -38,6 +49,27 @@ describe("parseMarkdown", () => {
     expect(blocks[4]).toMatchObject({ marker: "2." });
     expect(blocks[0]).toMatchObject({ level: 1 });
     expect(blocks[6]).toEqual({ kind: "code", language: "ts", lines: ["const a = 1"] });
+  });
+
+  it("numbers an ordered list from its first item, in letters and roman numerals further down", () => {
+    const blocks = parseMarkdown("3. three\n3. four\n   1. sub\n   1. sub\n      1. deep\n      1. deeper\n- dash\n  - inner");
+    const markers = blocks.map(block => block.kind === "numbered" ? [block.marker, block.indent] : block.kind === "bullet" ? ["-", block.indent] : null);
+
+    expect(markers).toEqual([
+      ["3.", 0], ["4.", 0], ["a.", 3], ["b.", 3], ["i.", 6], ["ii.", 6], ["-", 0], ["-", 2],
+    ]);
+  });
+
+  it("ends a heading on exactly one blank row", () => {
+    const kinds = (source: string) => parseMarkdown(source).map(block => block.kind);
+
+    expect(kinds("## Title\ntext")).toEqual(["heading", "blank", "paragraph"]);
+    expect(kinds("## Title\n\n\n\ntext")).toEqual(["heading", "blank", "paragraph"]);
+    expect(kinds("text\n## Title")).toEqual(["paragraph", "heading"]);
+  });
+
+  it("counts nested quote levels", () => {
+    expect(parseMarkdown("> one\n>> two")).toMatchObject([{ kind: "quote", depth: 1 }, { kind: "quote", depth: 2 }]);
   });
 
   it("keeps an unclosed fence as code to the end", () => {

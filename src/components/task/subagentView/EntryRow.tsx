@@ -400,15 +400,17 @@ export const EntryRow = memo(function EntryRow({ row, result, toolState, expande
         </div>
       );
 
-    case "thinking": {
-      const body = options.verbose ? row.text.replace(/\s+$/, "") : row.text.replace(/\s+/g, " ").trim();
+    case "thinking":
+      // Verbose, claude draws a thought as dim markdown; folded, as one dim
+      // italic line. The glyph is italic either way.
       return (
-        <div data-testid="subagent-thinking" className="flex italic text-[var(--cc-dim)]">
-          <Gutter>{GLYPH.therefore}</Gutter>
-          <div className="min-w-0 flex-1 whitespace-pre-wrap break-words">{body}</div>
+        <div data-testid="subagent-thinking" className="flex text-[var(--cc-dim)]">
+          <Gutter className="italic">{GLYPH.therefore}</Gutter>
+          {options.verbose
+            ? <Markdown text={row.text.trim()} />
+            : <div className="min-w-0 flex-1 whitespace-pre-wrap break-words italic">{row.text.replace(/\s+/g, " ").trim()}</div>}
         </div>
       );
-    }
 
     case "redactedThinking":
       return (
