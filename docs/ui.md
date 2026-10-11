@@ -404,6 +404,40 @@ badge, and none of them touches the parent tab's work badge or bell.
   at a time, and nothing in hydration awaits it (pinned in
   `subagentRebuild.test.ts`).
 
+### Claude subagent settings
+
+Settings > Tasks ends with a "Claude subagents" block
+(`SubagentSettingsBlock.tsx`). It lives in Tasks, not Agents: Agents edits
+per-agent cards stored in `settings.json`, while these are prefs, and a
+subagent is something a claude task does. Every control applies live.
+
+- **Master toggle (`subagentsEnabled`).** Off does no work at all. The
+  pref drives a plain flag (`lib/subagentGate.ts`, kept in step by
+  `lib/subagentSettingsWatch.ts`) that the hook sink in `TerminalPane.tsx`,
+  `receiveSubagentEvent`, `rebuildSubagentsForTab` / `runLaunchRebuild` and
+  `openTranscriptSession` check before any IPC. Turning it off clears
+  `useSubagents` and releases every open view's watch while the view keeps
+  what it read; turning it on rescans every claude tab that names a session,
+  the same pass a launch runs. Pinned in `store/subagentSettings.test.ts`.
+- **Type filters (`subagentTypeFilter`).** `lib/subagentKind.ts` classes an
+  agent type as built-in, custom, fork or workflow. Forks are unmeasured:
+  only an agent type spelled `fork` counts as one. The workflow switch is
+  drawn disabled because workflow agents have no row yet.
+- **Retention (`subagentRetention`).** How long a `done`, `failed` or
+  `interrupted` row stays. `running`, `unknown` and `expired` rows never go.
+  `SubagentRows` schedules one timer per tab, only while an ended row is
+  waiting to expire (`nextRetentionExpiry`).
+- **Auto-collapse (`subagentAutoCollapse`).** Sets whether a claude tab's
+  subagent group starts folded; the chevron on the tab row
+  (`SubagentGroupToggle`) folds it by hand, and that wins until the tab's
+  session changes.
+- **Scope.** The four row settings are profile-scoped (`scoped()` keys); the
+  view options below are global.
+- **View options.** `subagentViewShowThinking`, `subagentViewShowToolInputs`,
+  `subagentViewShowToolOutputs`, `subagentViewTruncateLines` (0 never cuts)
+  and `subagentViewAutoScroll` redraw an open transcript view from the
+  entries it already holds, never by reading the file again.
+
 ### The subagent transcript view
 
 Clicking a subagent row opens a read-only, live view of that agent's

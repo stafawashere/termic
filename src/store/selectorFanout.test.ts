@@ -42,6 +42,7 @@ vi.mock("@/lib/tabFocus", () => ({
 import { useApp, selectTaskTabs, selectActiveTabId, EMPTY_TABS } from "@/store/app";
 import { useAgentUsage, usageKey } from "@/store/agentUsage";
 import { useSubagents, selectTabSubagents } from "@/store/subagents";
+import { usePrefs } from "@/store/prefs";
 import { createSubagentStructureSelector, hasSubagentRow, selectSubagentRecord } from "@/components/sidebar/subagentTree";
 import {
   createSidebarFactsSelector, createRowTabsSelector, tabRenderEqual, tabListRenderEqual,
@@ -1148,5 +1149,76 @@ describe("subagent rows (bear traps 5, 8)", () => {
       }]));
 
     expect(changed.sort()).toEqual([`row ${child}`, `structure ${tabIds[3]}`].sort());
+  });
+});
+
+// -- Subagent settings -------------------------------------------------------
+//
+// Settings > Tasks > Claude subagents. A pref write lands on usePrefs, so it
+// must wake nothing on useApp, and only the components that draw subagents
+// (SubagentRows, SubagentGroupToggle, SubagentPane) may select those prefs.
+describe("subagent settings (bear traps 5, 8)", () => {
+  const SESSION = "11111111-2222-4333-8444-555555555555";
+
+  /** Every subagent pref except the master toggle, flipped and flipped
+   *  back, so each write is a real change. */
+  const prefWrite = (i: number) => {
+    const on = i % 2 === 1;
+    const prefs = usePrefs.getState();
+    switch (Math.floor(i / 2) % 8) {
+      case 0: prefs.setSubagentTypeFilter("builtIn", on); break;
+      case 1: prefs.setSubagentTypeFilter("custom", on); break;
+      case 2: prefs.setSubagentRetention(on ? "session" : "hour"); break;
+      case 3: prefs.setSubagentAutoCollapse(on ? "never" : "always"); break;
+      case 4: prefs.setSubagentViewShowThinking(on); break;
+      case 5: prefs.setSubagentViewShowToolOutputs(on); break;
+      case 6: prefs.setSubagentViewTruncateLines(on ? 40 : 3); break;
+      case 7: prefs.setSubagentViewAutoScroll(on); break;
+    }
+  };
+
+  beforeEach(() => {
+    const seeded = Array.from({ length: SUBSCRIBERS }, (_, i) => `task-${i}`);
+    useApp.setState({ tabs: Object.fromEntries(seeded.map(id => [id, [tab(`${id}-a`)]])) });
+    useSubagents.setState({ byTab: {} });
+    useSubagents.getState().start("task-0", "task-0-a", SESSION, "a1", "Explore");
+  });
+
+  it("a subagent pref write invalidates no useApp selector, sidebar body, row or status fact", () => {
+    const taskIds = Object.keys(useApp.getState().tabs);
+    const subs = [
+      createSidebarFactsSelector(),
+      createStatusFactsSelector(),
+      ...taskIds.map(id => createRowTabsSelector(id)),
+      ...taskIds.map(id => selectTaskTabs(id)),
+    ];
+    let prefWakes = 0;
+    const unsub = usePrefs.subscribe(() => { prefWakes++; });
+
+    const r = measureFanout(subs, 16, prefWrite);
+    unsub();
+
+    // Not vacuous: every write was a real change to the prefs store.
+    expect(prefWakes).toBe(16);
+    expect(r.invalidations).toBe(0);
+    expect(r.selectorRuns).toBe(0);
+  });
+
+  it("only the master toggle touches the subagent store", () => {
+    let storeWakes = 0;
+    const unsub = useSubagents.subscribe(() => { storeWakes++; });
+    for (let i = 0; i < 16; i++) prefWrite(i);
+    unsub();
+
+    expect(storeWakes).toBe(0);
+  });
+
+  it("no sidebar component outside the subagent rows selects a subagent pref", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const sidebar = readFileSync(resolve(here, "../components/sidebar/Sidebar.tsx"), "utf8");
+    const rows = readFileSync(resolve(here, "../components/sidebar/SubagentRows.tsx"), "utf8");
+
+    expect(sidebar).not.toMatch(/s\.subagent[A-Z]\w*/);
+    expect(rows).toMatch(/usePrefs\(s => s\.subagentTypeFilter\)/);
   });
 });

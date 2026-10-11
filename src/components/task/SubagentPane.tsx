@@ -8,6 +8,11 @@
 // transcript, so loading an earlier page keeps every mounted row (and its
 // measured height) where it was.
 //
+// The Settings rendering options (thinking, tool inputs and outputs,
+// truncation, auto-scroll) apply to the entries already held, so changing
+// one redraws the view without reading the transcript again. Switching the
+// feature off stops the read and keeps what was read on screen.
+//
 // Every string in a transcript is untrusted and is rendered as React text.
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -17,9 +22,11 @@ import { ArrowDown, ChevronDown, ChevronRight, Clock3, Eye } from "lucide-react"
 import { cn } from "@/lib/utils";
 import type { SubagentTab, Task } from "@/lib/types";
 import {
-  EMPTY_WINDOW, formatToolInput, rowOffsets, shouldFollowTail, visibleRange, type TranscriptRow,
+  EMPTY_WINDOW, formatToolInput, positionOfEntry, rowOffsets, rowsForView, shouldFollowTail, truncateLines,
+  visibleRange, type TranscriptRow,
 } from "@/lib/subagentTranscript";
 import { openTranscriptSession, type TranscriptSession, type TranscriptSnapshot } from "@/store/subagentPreview";
+import { usePrefs } from "@/store/prefs";
 
 const ESTIMATED_ROW_PX = 28;
 const OVERSCAN_PX = 600;
@@ -83,10 +90,13 @@ function ExpandToggle({ expanded, onToggle, t }: {
   );
 }
 
-const EntryRow = memo(function EntryRow({ row, expanded, onToggle, t }: {
+const EntryRow = memo(function EntryRow({ row, expanded, onToggle, showToolInput, maxOutputLines, t }: {
   row: TranscriptRow;
   expanded: boolean;
   onToggle: (index: number) => void;
+  showToolInput: boolean;
+  /** Tool output past this many lines is cut; 0 never cuts. */
+  maxOutputLines: number;
   t: TFunction<"task">;
 }) {
   const toggle = () => onToggle(row.index);
@@ -139,31 +149,41 @@ const EntryRow = memo(function EntryRow({ row, expanded, onToggle, t }: {
       );
 
     case "toolUse": {
-      const input = formatToolInput(row.text);
+      const input = showToolInput ? formatToolInput(row.text) : null;
       return (
         <div className="flex gap-2 text-[var(--color-fg)]">
           <Bullet className="bg-[var(--color-ok)]" />
           <div className="min-w-0 flex-1 break-words">
             <span data-testid="subagent-tool-name" className="font-semibold">{row.toolName ?? "?"}</span>
-            <span className="text-[var(--color-fg-dim)]">({input})</span>
-            {truncatedNote}
+            {input !== null && (
+              <span data-testid="subagent-tool-input" className="text-[var(--color-fg-dim)]">({input})</span>
+            )}
+            {input !== null && truncatedNote}
           </div>
         </div>
       );
     }
 
-    case "toolResult":
+    case "toolResult": {
+      const output = truncateLines(row.text, maxOutputLines);
+      const outputCollapsible = isLong(output.text);
       return (
         <div className={cn("ml-3 flex gap-2", row.isError ? "text-[var(--color-err)]" : "text-[var(--color-fg-dim)]")}>
           <Hook />
           <div className="min-w-0 flex-1">
             {row.isError && <div className="text-[11.5px]">{t("subagentView.toolError")}</div>}
-            <Body text={row.text} expanded={expanded} collapsible={collapsible} />
-            {collapsible && <ExpandToggle expanded={expanded} onToggle={toggle} t={t} />}
+            <Body text={output.text} expanded={expanded} collapsible={outputCollapsible} />
+            {outputCollapsible && <ExpandToggle expanded={expanded} onToggle={toggle} t={t} />}
+            {output.cutLines > 0 && (
+              <div data-testid="subagent-lines-cut" className="text-[11px] text-[var(--color-fg-faint)]">
+                {t("subagentView.linesCut", { count: output.cutLines })}
+              </div>
+            )}
             {truncatedNote}
           </div>
         </div>
       );
+    }
 
     case "error":
       return (
@@ -225,7 +245,21 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   const [layoutVersion, setLayoutVersion] = useState(0);
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
 
+  const subagentsEnabled = usePrefs(s => s.subagentsEnabled);
+  const showThinking = usePrefs(s => s.subagentViewShowThinking);
+  const showToolInputs = usePrefs(s => s.subagentViewShowToolInputs);
+  const showToolOutputs = usePrefs(s => s.subagentViewShowToolOutputs);
+  const maxOutputLines = usePrefs(s => s.subagentViewTruncateLines);
+  const autoScroll = usePrefs(s => s.subagentViewAutoScroll);
+
   useEffect(() => {
+    // Switched off: the session was already let go of, and what it read stays
+    // on screen. A view that never got to read says so instead of loading.
+    if (!subagentsEnabled) {
+      setSnapshot(current => (current.status === "loading" ? { ...current, status: "closed" } : current));
+      return;
+    }
+
     heightsRef.current.clear();
     anchorRef.current = null;
     followingRef.current = true;
@@ -249,14 +283,24 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
       session.dispose();
       if (sessionRef.current === session) sessionRef.current = null;
     };
-  }, [task.id, tab.id, tab.sessionId, tab.subagentAgentId, tab.workflowRunId]);
+  }, [task.id, tab.id, tab.sessionId, tab.subagentAgentId, tab.workflowRunId, subagentsEnabled]);
 
   const { window: transcript, status, loadingEarlier } = snapshot;
-  const rows = transcript.rows;
+  const heldRows = transcript.rows;
+  const rows = useMemo(
+    () => rowsForView(heldRows, { showThinking, showToolOutputs }),
+    [heldRows, showThinking, showToolOutputs],
+  );
 
   useEffect(() => {
-    if (rows.length === 0) heightsRef.current.clear();
-  }, [rows.length]);
+    if (heldRows.length === 0) heightsRef.current.clear();
+  }, [heldRows.length]);
+
+  // A rendering option changes what a mounted row draws, and so its height.
+  useEffect(() => {
+    heightsRef.current.clear();
+    setLayoutVersion(version => version + 1);
+  }, [showToolInputs, maxOutputLines]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -311,7 +355,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.clientHeight === 0) return;
 
-    if (followingRef.current) {
+    if (followingRef.current && autoScroll) {
       scroller.scrollTop = scroller.scrollHeight;
       return;
     }
@@ -319,13 +363,12 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
     const anchor = anchorRef.current;
     if (!anchor) return;
 
-    const position = anchor.index - transcript.start;
-    const isInWindow = position >= 0 && position < rows.length;
-    if (!isInWindow) return;
+    const position = positionOfEntry(rows, anchor.index);
+    if (position < 0) return;
 
     const target = offsets[position] + anchor.delta;
     if (Math.abs(scroller.scrollTop - target) > 0.5) scroller.scrollTop = target;
-  }, [offsets, transcript.start, rows.length, viewport.height]);
+  }, [offsets, rows, viewport.height, autoScroll]);
 
   const onScroll = useCallback(() => {
     const scroller = scrollerRef.current;
@@ -376,8 +419,9 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
           : null;
   const stoppedNote =
     status === "unreadable" ? t("subagentView.unreadable")
-      : status === "closed" ? t("subagentView.closed")
-        : null;
+      : status === "closed" && !subagentsEnabled ? t("subagentView.switchedOff")
+        : status === "closed" ? t("subagentView.closed")
+          : null;
 
   return (
     <div
@@ -445,7 +489,14 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
                 className="absolute left-0 right-0 px-4 py-1"
                 style={{ top: offsets[position] }}
               >
-                <EntryRow row={row} expanded={expanded.has(row.index)} onToggle={toggleExpanded} t={t} />
+                <EntryRow
+                  row={row}
+                  expanded={expanded.has(row.index)}
+                  onToggle={toggleExpanded}
+                  showToolInput={showToolInputs}
+                  maxOutputLines={maxOutputLines}
+                  t={t}
+                />
               </div>
             );
           })}

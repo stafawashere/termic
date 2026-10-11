@@ -52,7 +52,7 @@ import { ProjectFilterBar, ProjectFilterToggle } from "./ProjectTaskFilter";
 import { filterTasks, isFilterActive } from "@/lib/taskFilter";
 import { collectTaskProps, collectedText } from "@/lib/tabProps";
 import { TaskGroupBlock } from "./TaskGroupBlock";
-import { SubagentRows } from "./SubagentRows";
+import { SubagentGroupToggle, SubagentRows } from "./SubagentRows";
 import { childRowCarriesSelection, hasSubagentRow, subagentIdOfTab } from "./subagentTree";
 import { useSubagents } from "@/store/subagents";
 import { StatusChips } from "./StatusChips";
@@ -3777,6 +3777,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                   title={tab.delegatedWork ? delegatedTitle(tab.delegatedWork, tChrome) : undefined}
                 >{title}</span>
               )}
+              {isClaudeTab && !isTabRenaming && <SubagentGroupToggle tabId={tab.id} />}
               {/* This tab's own properties (GH #358), so it is visible which
                   agent set what; the task row above shows them collected. */}
               {!isTabRenaming && !!tab.props?.length && (

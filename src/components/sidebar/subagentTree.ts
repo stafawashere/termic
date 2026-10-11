@@ -7,7 +7,9 @@
 // subtree and mounting another. A nested tree of components would remount,
 // which is a frame without the row.
 
-import type { SubagentRecord, TabSubagents } from "@/store/subagents";
+import type { SubagentRecord, SubagentState, TabSubagents } from "@/store/subagents";
+import { subagentKind } from "@/lib/subagentKind";
+import type { SubagentAutoCollapse, SubagentTypeFilter } from "@/lib/subagentPrefs";
 
 /** Deeper agents still get a row, at this indent. */
 export const MAX_SUBAGENT_INDENT_DEPTH = 3;
@@ -82,16 +84,79 @@ export function buildSubagentTree(
   return rows;
 }
 
+/** What the settings decide about which rows show. `retentionMs` is how
+ *  long an ended row stays (null for the whole session, 0 for not at all),
+ *  measured against `now`. */
+export interface SubagentRowRules {
+  typeFilter: SubagentTypeFilter;
+  retentionMs: number | null;
+  now: number;
+}
+
+/** The states retention counts as ended. `unknown` is not one: it is what a
+ *  stop leaves before the transcript says how it ended, and also what a scan
+ *  makes of an agent that may still be running, so it cannot be timed out. */
+const ENDED_STATES: ReadonlySet<SubagentState> = new Set(["done", "failed", "interrupted"]);
+
+/** When an ended record ended. A record scanned from disk without an
+ *  outcome has no end time, and its transcript's last write stands in. */
+function endedAt(record: SubagentRecord): number {
+  return record.endedAt ?? record.startedAt;
+}
+
+/** Whether retention has taken an ended row away. A running row never goes,
+ *  and neither does an expired one (its transcript was deleted, which the
+ *  row says itself) or one whose end is not known yet. */
+export function isPastRetention(record: SubagentRecord, retentionMs: number | null, now: number): boolean {
+  const hasEnded = ENDED_STATES.has(record.state);
+  if (retentionMs === null || !hasEnded) return false;
+  if (retentionMs === 0) return true;
+
+  return now >= endedAt(record) + retentionMs;
+}
+
+export function isSubagentRowShown(record: SubagentRecord, rules: SubagentRowRules): boolean {
+  if (record.isWorkflow) return false;
+
+  const kind = subagentKind(record.agentType, { isWorkflow: record.isWorkflow });
+  if (!rules.typeFilter[kind]) return false;
+
+  return !isPastRetention(record, rules.retentionMs, rules.now);
+}
+
+/** The next moment retention takes a shown row away, or null when no row is
+ *  waiting on one. What schedules the sidebar's one timer. */
+export function nextRetentionExpiry(entry: TabSubagents | undefined, rules: SubagentRowRules): number | null {
+  const hasWindow = rules.retentionMs !== null && rules.retentionMs > 0;
+  if (!entry || !hasWindow) return null;
+
+  let next: number | null = null;
+  for (const agentId of entry.order) {
+    const record = entry.agents[agentId];
+    const isWaiting = !!record && ENDED_STATES.has(record.state) && isSubagentRowShown(record, rules);
+    if (!isWaiting) continue;
+
+    const expiry = endedAt(record) + (rules.retentionMs as number);
+    if (next === null || expiry < next) next = expiry;
+  }
+  return next;
+}
+
 /** One string per tab that changes only when a row is added, removed, or
  *  moves to another parent. A running agent finishing leaves it as it was,
- *  which is what keeps a state change off the list component. */
-export function subagentStructureKey(entry: TabSubagents | undefined): string {
+ *  which is what keeps a state change off the list component, unless
+ *  `rules` hide finished rows. Without `rules` every non-workflow agent
+ *  counts. */
+export function subagentStructureKey(entry: TabSubagents | undefined, rules?: SubagentRowRules): string {
   if (!entry) return "";
 
   let key = "";
   for (const agentId of entry.order) {
     const record = entry.agents[agentId];
     if (!record || record.isWorkflow) continue;
+
+    const isHidden = !!rules && !isSubagentRowShown(record, rules);
+    if (isHidden) continue;
 
     key += `${agentId}>${record.parentAgentId ?? ""};`;
   }
@@ -112,7 +177,7 @@ export function parseSubagentStructureKey(key: string): readonly SubagentLink[] 
 
 /** A selector for one tab's structure key, cached on the tab's entry so
  *  a write to any other tab returns at once. */
-export function createSubagentStructureSelector(tabId: string) {
+export function createSubagentStructureSelector(tabId: string, rules?: SubagentRowRules) {
   let lastEntry: TabSubagents | undefined;
   let lastKey = "";
 
@@ -121,9 +186,34 @@ export function createSubagentStructureSelector(tabId: string) {
     if (entry === lastEntry) return lastKey;
 
     lastEntry = entry;
-    lastKey = subagentStructureKey(entry);
+    lastKey = subagentStructureKey(entry, rules);
     return lastKey;
   };
+}
+
+export function createRetentionExpirySelector(tabId: string, rules: SubagentRowRules) {
+  return (s: { byTab: Record<string, TabSubagents> }): number | null =>
+    nextRetentionExpiry(s.byTab[tabId], rules);
+}
+
+/** Whether a tab's subagent group starts collapsed, before the user folds
+ *  it by hand. */
+export function subagentGroupStartsCollapsed(
+  entry: TabSubagents | undefined,
+  mode: SubagentAutoCollapse,
+): boolean {
+  if (mode === "never") return false;
+  if (mode === "always") return true;
+  if (!entry) return false;
+
+  let agentCount = 0;
+  for (const agentId of entry.order) {
+    const record = entry.agents[agentId];
+    if (!record || record.isWorkflow) continue;
+    if (record.state === "running") return false;
+    agentCount++;
+  }
+  return agentCount > 0;
 }
 
 /** One row's own record, or null. Another agent's state change hands back

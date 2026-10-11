@@ -836,3 +836,208 @@ describe("prefs: status section", () => {
     expect(JSON.parse(localStorage.getItem("statusGroupCollapsed")!)).toEqual({ g1: true });
   });
 });
+
+// The Claude subagent settings. Row behaviour is profile-scoped and view
+// rendering is global, so each row pref is also read back under a non-root
+// profile window's namespace, and each view pref is checked to stay on its
+// bare key there.
+describe("prefs: claude subagents", () => {
+  type Prefs = Awaited<typeof import("./prefs")>["usePrefs"];
+
+  function asProfileWindow(label: string) {
+    vi.stubGlobal("__TAURI_INTERNALS__", { metadata: { currentWindow: { label } } });
+  }
+
+  function countNotifications(usePrefs: Prefs, write: () => void): number {
+    let notified = 0;
+    const unsub = usePrefs.subscribe(() => { notified++; });
+    write();
+    unsub();
+    return notified;
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", fakeLocalStorage());
+    vi.resetModules();
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("defaults every setting with nothing in localStorage", async () => {
+    const { usePrefs } = await import("./prefs");
+    const s = usePrefs.getState();
+
+    expect(s.subagentsEnabled).toBe(true);
+    expect(s.subagentTypeFilter).toEqual({ builtIn: true, custom: true, fork: true, workflow: false });
+    expect(s.subagentRetention).toBe("session");
+    expect(s.subagentAutoCollapse).toBe("never");
+    expect(s.subagentViewShowThinking).toBe(true);
+    expect(s.subagentViewShowToolInputs).toBe(true);
+    expect(s.subagentViewShowToolOutputs).toBe(true);
+    expect(s.subagentViewTruncateLines).toBe(40);
+    expect(s.subagentViewAutoScroll).toBe(true);
+  });
+
+  it("reads persisted values back on load", async () => {
+    localStorage.setItem("subagentsEnabled", "0");
+    localStorage.setItem("subagentTypeFilter", '{"builtIn":false,"custom":true,"fork":false,"workflow":true}');
+    localStorage.setItem("subagentRetention", "tenMinutes");
+    localStorage.setItem("subagentAutoCollapse", "allFinished");
+    localStorage.setItem("subagentViewShowThinking", "0");
+    localStorage.setItem("subagentViewShowToolInputs", "0");
+    localStorage.setItem("subagentViewShowToolOutputs", "0");
+    localStorage.setItem("subagentViewTruncateLines", "0");
+    localStorage.setItem("subagentViewAutoScroll", "0");
+    const { usePrefs } = await import("./prefs");
+    const s = usePrefs.getState();
+
+    expect(s.subagentsEnabled).toBe(false);
+    expect(s.subagentTypeFilter).toEqual({ builtIn: false, custom: true, fork: false, workflow: true });
+    expect(s.subagentRetention).toBe("tenMinutes");
+    expect(s.subagentAutoCollapse).toBe("allFinished");
+    expect(s.subagentViewShowThinking).toBe(false);
+    expect(s.subagentViewShowToolInputs).toBe(false);
+    expect(s.subagentViewShowToolOutputs).toBe(false);
+    expect(s.subagentViewTruncateLines).toBe(0);
+    expect(s.subagentViewAutoScroll).toBe(false);
+  });
+
+  it("falls back to the default for any value it does not recognise", async () => {
+    localStorage.setItem("subagentsEnabled", "yes");
+    localStorage.setItem("subagentTypeFilter", '{"builtIn":"no","custom":false}');
+    localStorage.setItem("subagentRetention", "forever");
+    localStorage.setItem("subagentAutoCollapse", "sometimes");
+    localStorage.setItem("subagentViewShowThinking", "true");
+    localStorage.setItem("subagentViewTruncateLines", "-3");
+    localStorage.setItem("subagentViewAutoScroll", "");
+    const { usePrefs } = await import("./prefs");
+    const s = usePrefs.getState();
+
+    expect(s.subagentsEnabled).toBe(true);
+    expect(s.subagentTypeFilter).toEqual({ builtIn: true, custom: false, fork: true, workflow: false });
+    expect(s.subagentRetention).toBe("session");
+    expect(s.subagentAutoCollapse).toBe("never");
+    expect(s.subagentViewShowThinking).toBe(true);
+    expect(s.subagentViewTruncateLines).toBe(40);
+    expect(s.subagentViewAutoScroll).toBe(true);
+  });
+
+  it("reads a type filter that is not JSON, and a fractional line count, as the default", async () => {
+    localStorage.setItem("subagentTypeFilter", "{not json");
+    localStorage.setItem("subagentViewTruncateLines", "2.5");
+    const { usePrefs } = await import("./prefs");
+
+    expect(usePrefs.getState().subagentTypeFilter).toEqual({ builtIn: true, custom: true, fork: true, workflow: false });
+    expect(usePrefs.getState().subagentViewTruncateLines).toBe(40);
+  });
+
+  it("persists every setter and survives a reload", async () => {
+    let { usePrefs } = await import("./prefs");
+    const s = usePrefs.getState();
+    s.setSubagentsEnabled(false);
+    s.setSubagentTypeFilter("custom", false);
+    s.setSubagentRetention("hour");
+    s.setSubagentAutoCollapse("always");
+    s.setSubagentViewShowThinking(false);
+    s.setSubagentViewShowToolInputs(false);
+    s.setSubagentViewShowToolOutputs(false);
+    s.setSubagentViewTruncateLines(12);
+    s.setSubagentViewAutoScroll(false);
+
+    vi.resetModules();
+    ({ usePrefs } = await import("./prefs"));
+    const reloaded = usePrefs.getState();
+
+    expect(reloaded.subagentsEnabled).toBe(false);
+    expect(reloaded.subagentTypeFilter).toEqual({ builtIn: true, custom: false, fork: true, workflow: false });
+    expect(reloaded.subagentRetention).toBe("hour");
+    expect(reloaded.subagentAutoCollapse).toBe("always");
+    expect(reloaded.subagentViewShowThinking).toBe(false);
+    expect(reloaded.subagentViewShowToolInputs).toBe(false);
+    expect(reloaded.subagentViewShowToolOutputs).toBe(false);
+    expect(reloaded.subagentViewTruncateLines).toBe(12);
+    expect(reloaded.subagentViewAutoScroll).toBe(false);
+  });
+
+  it("keeps the row settings under the profile's scoped keys and the view settings on bare keys", async () => {
+    asProfileWindow("profile-work");
+    const { usePrefs } = await import("./prefs");
+    const s = usePrefs.getState();
+    s.setSubagentsEnabled(false);
+    s.setSubagentTypeFilter("builtIn", false);
+    s.setSubagentRetention("finished");
+    s.setSubagentAutoCollapse("allFinished");
+    s.setSubagentViewShowThinking(false);
+    s.setSubagentViewTruncateLines(5);
+
+    expect(localStorage.getItem("profile-work:subagentsEnabled")).toBe("0");
+    expect(JSON.parse(localStorage.getItem("profile-work:subagentTypeFilter")!).builtIn).toBe(false);
+    expect(localStorage.getItem("profile-work:subagentRetention")).toBe("finished");
+    expect(localStorage.getItem("profile-work:subagentAutoCollapse")).toBe("allFinished");
+    expect(localStorage.getItem("subagentsEnabled")).toBeNull();
+    expect(localStorage.getItem("subagentRetention")).toBeNull();
+
+    expect(localStorage.getItem("subagentViewShowThinking")).toBe("0");
+    expect(localStorage.getItem("subagentViewTruncateLines")).toBe("5");
+    expect(localStorage.getItem("profile-work:subagentViewShowThinking")).toBeNull();
+  });
+
+  it("does not read the root profile's row settings in another profile's window", async () => {
+    localStorage.setItem("subagentsEnabled", "0");
+    localStorage.setItem("subagentRetention", "hour");
+    localStorage.setItem("subagentViewAutoScroll", "0");
+    asProfileWindow("profile-work");
+    const { usePrefs } = await import("./prefs");
+
+    expect(usePrefs.getState().subagentsEnabled).toBe(true);
+    expect(usePrefs.getState().subagentRetention).toBe("session");
+    expect(usePrefs.getState().subagentViewAutoScroll).toBe(false);
+  });
+
+  it("bails without notifying anyone when a setter is handed the current value", async () => {
+    const { usePrefs } = await import("./prefs");
+    const s = usePrefs.getState();
+
+    const notified = countNotifications(usePrefs, () => {
+      s.setSubagentsEnabled(true);
+      s.setSubagentTypeFilter("builtIn", true);
+      s.setSubagentTypeFilter("workflow", false);
+      s.setSubagentRetention("session");
+      s.setSubagentAutoCollapse("never");
+      s.setSubagentViewShowThinking(true);
+      s.setSubagentViewShowToolInputs(true);
+      s.setSubagentViewShowToolOutputs(true);
+      s.setSubagentViewTruncateLines(40);
+      s.setSubagentViewAutoScroll(true);
+    });
+
+    expect(notified).toBe(0);
+    expect(localStorage.getItem("subagentsEnabled")).toBeNull();
+    expect(localStorage.getItem("subagentTypeFilter")).toBeNull();
+    expect(localStorage.getItem("subagentViewTruncateLines")).toBeNull();
+  });
+
+  it("notifies once per real change (control for the bail)", async () => {
+    const { usePrefs } = await import("./prefs");
+    const s = usePrefs.getState();
+
+    const notified = countNotifications(usePrefs, () => {
+      s.setSubagentsEnabled(false);
+      s.setSubagentsEnabled(false);
+      s.setSubagentTypeFilter("fork", false);
+      s.setSubagentTypeFilter("fork", false);
+      s.setSubagentViewTruncateLines(7);
+      s.setSubagentViewTruncateLines(7);
+    });
+
+    expect(notified).toBe(3);
+  });
+
+  it("stores an invalid truncation as the default rather than as written", async () => {
+    const { usePrefs } = await import("./prefs");
+    usePrefs.getState().setSubagentViewTruncateLines(12);
+    usePrefs.getState().setSubagentViewTruncateLines(-1);
+
+    expect(usePrefs.getState().subagentViewTruncateLines).toBe(40);
+    expect(localStorage.getItem("subagentViewTruncateLines")).toBe("40");
+  });
+});

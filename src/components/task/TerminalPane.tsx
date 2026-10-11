@@ -50,6 +50,7 @@ import { useAgentUsage } from "@/store/agentUsage";
 import { useSubagents } from "@/store/subagents";
 import { subagentWatchPoke } from "@/lib/subagentWatch";
 import { isClaudeCli, rebuildSubagentsForTab } from "@/lib/subagentRebuild";
+import { subagentsEnabled } from "@/lib/subagentGate";
 import { useAgentContext } from "@/store/agentContext";
 import { imageFromClipboard, pastePathText } from "@/lib/clipboardImage";
 import { setupImeReplacementBridge } from "@/lib/ime";
@@ -2247,6 +2248,8 @@ const captureArmedRef = useRef(false);
       // through badges the tab. Reports from another session (a nested
       // `claude -p`, a stale pty) are dropped.
       if (trusted && body.startsWith(HOOK_OSC_SUBAGENT_PREFIX)) {
+        if (!subagentsEnabled()) return false;
+
         const event = parseSubagentBody(body.slice(HOOK_OSC_SUBAGENT_PREFIX.length));
         const live = useApp.getState().tabs[task.id]
           ?.find(t => t.id === tab.id) as TerminalTab | undefined;

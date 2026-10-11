@@ -215,5 +215,7 @@ export default {
     expiredHint: "其记录已不存在，没有更多内容可显示。",
     expand: "显示它启动的子智能体",
     collapse: "隐藏它启动的子智能体",
+    expandGroup: "显示此标签页的子智能体",
+    collapseGroup: "隐藏此标签页的子智能体",
   },
 };

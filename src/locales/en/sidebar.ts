@@ -220,5 +220,7 @@ export default {
     expiredHint: "Its transcript is gone, so there is nothing more to show.",
     expand: "Show the subagents it started",
     collapse: "Hide the subagents it started",
+    expandGroup: "Show this tab's subagents",
+    collapseGroup: "Hide this tab's subagents",
   },
 };

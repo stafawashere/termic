@@ -35,6 +35,11 @@ import {
   type CompletionSoundId,
 } from "@/lib/notificationSounds";
 import { scoped } from "@/lib/profileScope";
+import type { SubagentKind } from "@/lib/subagentKind";
+import {
+  parseStoredFlag, parseSubagentAutoCollapse, parseSubagentRetention, parseSubagentTypeFilter,
+  parseTruncateLines, type SubagentAutoCollapse, type SubagentRetention, type SubagentTypeFilter,
+} from "@/lib/subagentPrefs";
 import { encodeOpenWithPick, parseOpenWithPick } from "@/lib/openWith";
 import type { OpenWithPick } from "@/lib/types";
 import { applyLanguage, parseLanguagePref, LS_LANGUAGE, type LanguagePref } from "@/lib/i18n";
@@ -112,6 +117,15 @@ const LS_TASK_PR_BADGE = scoped("taskPrBadge");
 const LS_STATUS_BUCKET_COLLAPSED = scoped("statusBucketCollapsed");
 const LS_STATUS_TASK_EXPANDED = scoped("statusTaskExpanded");
 const LS_STATUS_GROUP_COLLAPSED = scoped("statusGroupCollapsed");
+const LS_SUBAGENTS_ENABLED = scoped("subagentsEnabled");
+const LS_SUBAGENT_TYPE_FILTER = scoped("subagentTypeFilter");
+const LS_SUBAGENT_RETENTION = scoped("subagentRetention");
+const LS_SUBAGENT_AUTO_COLLAPSE = scoped("subagentAutoCollapse");
+const LS_SUBAGENT_VIEW_SHOW_THINKING = "subagentViewShowThinking";
+const LS_SUBAGENT_VIEW_SHOW_TOOL_INPUTS = "subagentViewShowToolInputs";
+const LS_SUBAGENT_VIEW_SHOW_TOOL_OUTPUTS = "subagentViewShowToolOutputs";
+const LS_SUBAGENT_VIEW_TRUNCATE_LINES = "subagentViewTruncateLines";
+const LS_SUBAGENT_VIEW_AUTO_SCROLL = "subagentViewAutoScroll";
 const LS_BRANCH_AS_TASK_NAME = "useBranchAsTaskName";
 const LS_DOUBLE_SHIFT_MODE = "doubleShiftMode";
 const LS_CTRL_TAB_MODE = "ctrlTabMode";
@@ -602,6 +616,25 @@ interface PrefsState {
    *  webview is outside the cage". A per-document affordance in the
    *  preview can unblock a single file without flipping this pref. */
   loadRemoteImages: boolean;
+  /** Claude subagent rows in the sidebar and their transcript views. Off
+   *  means the feature does no work at all: hook reports are dropped, no
+   *  directory is scanned and no transcript is read or watched. Scoped, like
+   *  the other three row settings below. */
+  subagentsEnabled: boolean;
+  /** Which kinds of subagent get a row (lib/subagentKind.ts). */
+  subagentTypeFilter: SubagentTypeFilter;
+  /** How long a row stays after its agent ended. A running row always shows. */
+  subagentRetention: SubagentRetention;
+  /** Whether a claude tab's subagent group starts collapsed. A manual fold of
+   *  the group wins until the tab's session changes. */
+  subagentAutoCollapse: SubagentAutoCollapse;
+  /** Transcript view rendering. Global: taste, not identity. */
+  subagentViewShowThinking: boolean;
+  subagentViewShowToolInputs: boolean;
+  subagentViewShowToolOutputs: boolean;
+  /** Tool output longer than this many lines is cut; 0 never cuts. */
+  subagentViewTruncateLines: number;
+  subagentViewAutoScroll: boolean;
   /** When the sidebar is collapsed to the 56px icon rail, hovering it slides
    *  the full sidebar in as a floating overlay (Arc-style peek). OFF by
    *  default (issue #312): every row in the rail already carries an instant
@@ -993,6 +1026,15 @@ interface PrefsState {
   setPartialDoneIndicator: (v: boolean) => void;
   setAttentionIndicator: (v: boolean) => void;
   setLoadRemoteImages: (v: boolean) => void;
+  setSubagentsEnabled: (v: boolean) => void;
+  setSubagentTypeFilter: (kind: SubagentKind, v: boolean) => void;
+  setSubagentRetention: (v: SubagentRetention) => void;
+  setSubagentAutoCollapse: (v: SubagentAutoCollapse) => void;
+  setSubagentViewShowThinking: (v: boolean) => void;
+  setSubagentViewShowToolInputs: (v: boolean) => void;
+  setSubagentViewShowToolOutputs: (v: boolean) => void;
+  setSubagentViewTruncateLines: (v: number) => void;
+  setSubagentViewAutoScroll: (v: boolean) => void;
   setSidebarHoverReveal: (v: boolean) => void;
   setProfileSidebarWash: (v: boolean) => void;
   setFindInFilesRegex: (v: boolean) => void;
@@ -1248,6 +1290,18 @@ function readStoredPrefs() {
   // OFF by default (issue #69): closing the remote-image sandbox gap must not
   // silently start firing image requests for existing users.
   const initialLoadRemoteImages = lsGetBool(LS_LOAD_REMOTE_IMAGES, false);
+  const lsGetRaw = (k: string): string | null => {
+    try { return localStorage.getItem(k); } catch { return null; }
+  };
+  const initialSubagentsEnabled = parseStoredFlag(lsGetRaw(LS_SUBAGENTS_ENABLED), true);
+  const initialSubagentTypeFilter = parseSubagentTypeFilter(lsGetRaw(LS_SUBAGENT_TYPE_FILTER));
+  const initialSubagentRetention = parseSubagentRetention(lsGet(LS_SUBAGENT_RETENTION, ""));
+  const initialSubagentAutoCollapse = parseSubagentAutoCollapse(lsGet(LS_SUBAGENT_AUTO_COLLAPSE, ""));
+  const initialSubagentViewShowThinking = parseStoredFlag(lsGetRaw(LS_SUBAGENT_VIEW_SHOW_THINKING), true);
+  const initialSubagentViewShowToolInputs = parseStoredFlag(lsGetRaw(LS_SUBAGENT_VIEW_SHOW_TOOL_INPUTS), true);
+  const initialSubagentViewShowToolOutputs = parseStoredFlag(lsGetRaw(LS_SUBAGENT_VIEW_SHOW_TOOL_OUTPUTS), true);
+  const initialSubagentViewTruncateLines = parseTruncateLines(lsGetRaw(LS_SUBAGENT_VIEW_TRUNCATE_LINES));
+  const initialSubagentViewAutoScroll = parseStoredFlag(lsGetRaw(LS_SUBAGENT_VIEW_AUTO_SCROLL), true);
   const initialSidebarHoverReveal = lsGetBool(LS_SIDEBAR_HOVER_REVEAL, false);
   const initialProfileSidebarWash = lsGetBool(LS_PROFILE_SIDEBAR_WASH, false);
   const initialFindInFilesRegex = lsGetBool(LS_FIND_IN_FILES_REGEX, false);
@@ -1334,6 +1388,15 @@ function readStoredPrefs() {
     partialDoneIndicator: initialPartialDoneIndicator,
     attentionIndicator: initialAttentionIndicator,
     loadRemoteImages: initialLoadRemoteImages,
+    subagentsEnabled: initialSubagentsEnabled,
+    subagentTypeFilter: initialSubagentTypeFilter,
+    subagentRetention: initialSubagentRetention,
+    subagentAutoCollapse: initialSubagentAutoCollapse,
+    subagentViewShowThinking: initialSubagentViewShowThinking,
+    subagentViewShowToolInputs: initialSubagentViewShowToolInputs,
+    subagentViewShowToolOutputs: initialSubagentViewShowToolOutputs,
+    subagentViewTruncateLines: initialSubagentViewTruncateLines,
+    subagentViewAutoScroll: initialSubagentViewAutoScroll,
     sidebarHoverReveal: initialSidebarHoverReveal,
     profileSidebarWash: initialProfileSidebarWash,
     findInFilesRegex: initialFindInFilesRegex,
@@ -1677,6 +1740,55 @@ export const usePrefs = create<PrefsState>(set => ({
   setLoadRemoteImages: (v) => {
     try { localStorage.setItem(LS_LOAD_REMOTE_IMAGES, v ? "1" : "0"); } catch {}
     set({ loadRemoteImages: v });
+  },
+  setSubagentsEnabled: (v) => {
+    if (usePrefs.getState().subagentsEnabled === v) return;  // bear trap 8
+    try { localStorage.setItem(LS_SUBAGENTS_ENABLED, v ? "1" : "0"); } catch {}
+    set({ subagentsEnabled: v });
+  },
+  setSubagentTypeFilter: (kind, v) => {
+    const current = usePrefs.getState().subagentTypeFilter;
+    if (current[kind] === v) return;
+
+    const next: SubagentTypeFilter = Object.freeze({ ...current, [kind]: v });
+    try { localStorage.setItem(LS_SUBAGENT_TYPE_FILTER, JSON.stringify(next)); } catch {}
+    set({ subagentTypeFilter: next });
+  },
+  setSubagentRetention: (v) => {
+    if (usePrefs.getState().subagentRetention === v) return;
+    try { localStorage.setItem(LS_SUBAGENT_RETENTION, v); } catch {}
+    set({ subagentRetention: v });
+  },
+  setSubagentAutoCollapse: (v) => {
+    if (usePrefs.getState().subagentAutoCollapse === v) return;
+    try { localStorage.setItem(LS_SUBAGENT_AUTO_COLLAPSE, v); } catch {}
+    set({ subagentAutoCollapse: v });
+  },
+  setSubagentViewShowThinking: (v) => {
+    if (usePrefs.getState().subagentViewShowThinking === v) return;
+    try { localStorage.setItem(LS_SUBAGENT_VIEW_SHOW_THINKING, v ? "1" : "0"); } catch {}
+    set({ subagentViewShowThinking: v });
+  },
+  setSubagentViewShowToolInputs: (v) => {
+    if (usePrefs.getState().subagentViewShowToolInputs === v) return;
+    try { localStorage.setItem(LS_SUBAGENT_VIEW_SHOW_TOOL_INPUTS, v ? "1" : "0"); } catch {}
+    set({ subagentViewShowToolInputs: v });
+  },
+  setSubagentViewShowToolOutputs: (v) => {
+    if (usePrefs.getState().subagentViewShowToolOutputs === v) return;
+    try { localStorage.setItem(LS_SUBAGENT_VIEW_SHOW_TOOL_OUTPUTS, v ? "1" : "0"); } catch {}
+    set({ subagentViewShowToolOutputs: v });
+  },
+  setSubagentViewTruncateLines: (v) => {
+    const lines = parseTruncateLines(String(v));
+    if (usePrefs.getState().subagentViewTruncateLines === lines) return;
+    try { localStorage.setItem(LS_SUBAGENT_VIEW_TRUNCATE_LINES, String(lines)); } catch {}
+    set({ subagentViewTruncateLines: lines });
+  },
+  setSubagentViewAutoScroll: (v) => {
+    if (usePrefs.getState().subagentViewAutoScroll === v) return;
+    try { localStorage.setItem(LS_SUBAGENT_VIEW_AUTO_SCROLL, v ? "1" : "0"); } catch {}
+    set({ subagentViewAutoScroll: v });
   },
   setSidebarHoverReveal: (v) => {
     try { localStorage.setItem(LS_SIDEBAR_HOVER_REVEAL, v ? "1" : "0"); } catch {}

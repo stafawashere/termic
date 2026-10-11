@@ -150,6 +150,72 @@ export default {
       unlimited: "无限制",
       custom: "自定义",
     },
+    subagents: {
+      title: "Claude 子智能体",
+      hint: "在 claude 标签页下为其启动的子智能体显示行，点击行可打开只读的记录视图。更改立即生效。",
+      enabled: {
+        label: "显示 Claude 子智能体",
+        hint: "关闭后全部停止：不显示行，也不扫描、读取或监视任何记录。重新开启会根据当前会话重建这些行。",
+      },
+      types: {
+        title: "子智能体类型",
+        builtIn: {
+          label: "内置智能体",
+          hint: "claude 自带的智能体，如 Explore、Plan 和 general-purpose。",
+        },
+        custom: {
+          label: "自定义智能体",
+          hint: "由你或插件定义的智能体。",
+        },
+        fork: {
+          label: "分叉",
+          hint: "仅限 claude 报告的智能体类型为 fork 的分叉。其他分叉按自定义智能体计算。",
+        },
+        workflow: {
+          label: "工作流智能体",
+          hint: "工作流智能体暂不在侧边栏中显示。",
+        },
+      },
+      retention: {
+        label: "保留已结束的行",
+        hint: "子智能体完成、失败或被中断后，其行保留多长时间。运行中的子智能体始终显示。",
+        session: "直到会话变化",
+        hour: "1 小时",
+        tenMinutes: "10 分钟",
+        finished: "结束后隐藏",
+      },
+      autoCollapse: {
+        label: "折叠标签页的子智能体",
+        hint: "claude 标签页的子智能体行是否默认折叠。手动折叠或展开会一直生效，直到该标签页的会话变化。",
+        never: "从不",
+        allFinished: "全部结束时",
+        always: "始终",
+      },
+      view: {
+        title: "记录视图",
+        thinking: {
+          label: "显示思考过程",
+          hint: "模型在各步骤之间的思考。",
+        },
+        toolInputs: {
+          label: "显示工具输入",
+          hint: "每次工具调用收到的参数，显示在工具名之后。",
+        },
+        toolOutputs: {
+          label: "显示工具输出",
+          hint: "每次工具调用返回的内容。",
+        },
+        truncate: {
+          label: "截断过长的工具输出",
+          hint: "工具输出显示的行数，超出部分被截断。0 表示全部显示。",
+          lines: "行",
+        },
+        autoScroll: {
+          label: "跟随新条目",
+          hint: "停在底部时，视图保持滚动到最新条目。",
+        },
+      },
+    },
     confirmClose: {
       label: "关闭智能体标签页前先确认",
       hint: "关闭非 shell 终端或智能体标签页前先询问。关闭此选项（或在关闭对话框中取消勾选一次）会立即关闭标签页；随后会有通知提示你从「+」菜单的「恢复」区找回它。",

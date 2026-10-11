@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { usePrefs } from "@/store/prefs";
 import { Block, ListField, SectionTitle, Toggle, useBackendSettings, useTasksPathConflicts } from "./Controls";
+import { SubagentSettingsBlock } from "./SubagentSettingsBlock";
 import { cleanLines } from "@/lib/utils";
 import {
   PORT_RANGE_DEFAULT, PORT_RANGE_FLOOR, portRangeError, resolvePortRange, tasksThatFit,
@@ -444,6 +445,8 @@ export function TasksSection() {
           )}
         </div>
       </Block>
+
+      <SubagentSettingsBlock />
     </div>
   );
 }

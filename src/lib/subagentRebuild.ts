@@ -13,6 +13,7 @@
 import * as ipc from "@/lib/ipc";
 import { builtinBaseId } from "@/lib/agents";
 import type { SubagentSummary } from "@/lib/types";
+import { subagentsEnabled } from "@/lib/subagentGate";
 import { useApp } from "@/store/app";
 import { useSubagents } from "@/store/subagents";
 
@@ -55,6 +56,8 @@ export async function rebuildSubagentsForTab(
   tabId: string,
   sessionId: string,
 ): Promise<boolean> {
+  if (!subagentsEnabled()) return false;
+
   const before = tabSessionNow(taskId, tabId);
   if (!before || before.sessionId !== sessionId) return false;
 
@@ -66,7 +69,7 @@ export async function rebuildSubagentsForTab(
   }
 
   const after = tabSessionNow(taskId, tabId);
-  if (!after) return false;
+  if (!after || !subagentsEnabled()) return false;
 
   const sessionMoved = after.sessionId !== sessionId;
   const parentStopped = before.parentLive && !after.parentLive;
@@ -82,10 +85,26 @@ interface LaunchTarget {
   sessionId: string;
 }
 
-function launchTargets(): LaunchTarget[] {
+/** Every claude tab that names a session. A task whose tabs are loaded
+ *  answers from them, since a live tab may have moved to a newer session than
+ *  the one persisted; any other task answers from what it persisted. */
+function rebuildTargets(): LaunchTarget[] {
+  const state = useApp.getState();
   const targets: LaunchTarget[] = [];
-  for (const task of useApp.getState().tasks) {
+  for (const task of state.tasks) {
     if (task.archived) continue;
+
+    const liveTabs = state.tabs[task.id];
+    if (liveTabs) {
+      for (const tab of liveTabs) {
+        if (tab.type !== "terminal") continue;
+
+        const sessionId = tab.sessionId;
+        if (!sessionId || !isClaudeCli(tab.cli)) continue;
+        targets.push({ taskId: task.id, tabId: tab.id, sessionId });
+      }
+      continue;
+    }
 
     for (const persisted of task.persisted_tabs ?? []) {
       const sessionId = persisted.session_id;
@@ -96,10 +115,12 @@ function launchTargets(): LaunchTarget[] {
   return targets;
 }
 
-/** Every restored claude tab's scan, at most `LAUNCH_REBUILD_CONCURRENCY`
- *  in flight. */
+/** Every claude tab's scan, at most `LAUNCH_REBUILD_CONCURRENCY` in flight.
+ *  Does nothing while the feature is switched off. */
 export async function runLaunchRebuild(): Promise<void> {
-  const queue = launchTargets();
+  if (!subagentsEnabled()) return;
+
+  const queue = rebuildTargets();
 
   const worker = async () => {
     for (let target = queue.shift(); target; target = queue.shift()) {

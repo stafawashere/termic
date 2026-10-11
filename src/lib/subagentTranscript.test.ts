@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { TranscriptEntry } from "@/lib/types";
 import {
-  appendBatch, formatToolInput, prependPage, rowOffsets, shouldFollowTail, stripAnsi,
-  toTranscriptRow, toTranscriptRows, visibleRange, type TranscriptWindow,
+  appendBatch, formatToolInput, positionOfEntry, prependPage, rowOffsets, rowsForView, shouldFollowTail,
+  stripAnsi, toTranscriptRow, toTranscriptRows, truncateLines, visibleRange, type TranscriptWindow,
 } from "@/lib/subagentTranscript";
 
 function entry(kind: TranscriptEntry["kind"], text: string, extra: Partial<TranscriptEntry> = {}): TranscriptEntry {
@@ -152,5 +152,52 @@ describe("visibleRange", () => {
 
   it("is empty for an empty list", () => {
     expect(visibleRange(rowOffsets(0, () => 20), 0, 400, 100)).toEqual({ first: 0, end: 0 });
+  });
+});
+
+describe("rowsForView", () => {
+  const rows = toTranscriptRows([
+    entry("assistantText", "hi"),
+    entry("thinking", "hmm"),
+    entry("redactedThinking", ""),
+    entry("toolUse", "{}", { name: "Read" }),
+    entry("toolResult", "out"),
+  ], 0);
+  const kinds = (shown: readonly { kind: string }[]) => shown.map(row => row.kind);
+
+  it("hands back the same list when nothing is hidden", () => {
+    expect(rowsForView(rows, { showThinking: true, showToolOutputs: true })).toBe(rows);
+  });
+
+  it("hides thinking, redacted thinking included", () => {
+    expect(kinds(rowsForView(rows, { showThinking: false, showToolOutputs: true })))
+      .toEqual(["assistantText", "toolUse", "toolResult"]);
+  });
+
+  it("hides tool output and keeps the call", () => {
+    expect(kinds(rowsForView(rows, { showThinking: true, showToolOutputs: false })))
+      .toEqual(["assistantText", "thinking", "redactedThinking", "toolUse"]);
+  });
+
+  it("keeps each row's place in the whole transcript", () => {
+    const shown = rowsForView(rows, { showThinking: false, showToolOutputs: false });
+
+    expect(shown.map(row => row.index)).toEqual([0, 3]);
+    expect(positionOfEntry(shown, 3)).toBe(1);
+    expect(positionOfEntry(shown, 1)).toBe(-1);
+  });
+});
+
+describe("truncateLines", () => {
+  it("cuts past the line limit and counts what it cut", () => {
+    expect(truncateLines("a\nb\nc\nd", 2)).toEqual({ text: "a\nb", cutLines: 2 });
+  });
+
+  it("leaves text at or under the limit alone", () => {
+    expect(truncateLines("a\nb", 2)).toEqual({ text: "a\nb", cutLines: 0 });
+  });
+
+  it("never cuts with a limit of 0", () => {
+    expect(truncateLines("a\nb\nc", 0)).toEqual({ text: "a\nb\nc", cutLines: 0 });
   });
 });

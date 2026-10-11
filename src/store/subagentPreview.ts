@@ -10,6 +10,7 @@
 import * as ipc from "@/lib/ipc";
 import { i18n } from "@/lib/i18n";
 import { subagentWatchOpen, type SubagentWatchDispose } from "@/lib/subagentWatch";
+import { subagentsEnabled } from "@/lib/subagentGate";
 import {
   appendBatch, EMPTY_WINDOW, prependPage, toTranscriptRows, type TranscriptWindow,
 } from "@/lib/subagentTranscript";
@@ -186,7 +187,8 @@ export function openTranscriptSession(
     disposed = true;
   };
 
-  if (isTaskArchived(target.taskId)) {
+  const isSwitchedOff = !subagentsEnabled();
+  if (isSwitchedOff || isTaskArchived(target.taskId)) {
     publish({ ...LOADING, status: "closed" });
     return { loadEarlier, dispose };
   }
@@ -215,6 +217,15 @@ export function openTranscriptSession(
   );
 
   return { loadEarlier, dispose };
+}
+
+/** Stop every open session, in every task, and leave each view showing
+ *  what it had read. For the feature being switched off: the tabs stay, and
+ *  nothing is watched or read until it is switched back on. */
+export function releaseAllSubagentSessions(): void {
+  const held = [...liveSessions.values()].flatMap(releases => [...releases]);
+  liveSessions.clear();
+  for (const release of held) release();
 }
 
 /** Stop every session of `taskId` and close its subagent tabs. */

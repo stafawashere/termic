@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   buildSubagentTree, childRowCarriesSelection, createSubagentStructureSelector, hasSubagentRow,
-  parseSubagentStructureKey, subagentStructureKey, EMPTY_SUBAGENT_TREE, MAX_SUBAGENT_INDENT_DEPTH,
-  type SubagentLink,
+  isPastRetention, nextRetentionExpiry, parseSubagentStructureKey, subagentGroupStartsCollapsed,
+  subagentStructureKey, EMPTY_SUBAGENT_TREE, MAX_SUBAGENT_INDENT_DEPTH,
+  type SubagentLink, type SubagentRowRules,
 } from "./subagentTree";
+import { DEFAULT_SUBAGENT_TYPE_FILTER } from "@/lib/subagentPrefs";
 import type { SubagentRecord, TabSubagents } from "@/store/subagents";
 
 const NONE: ReadonlySet<string> = new Set();
@@ -208,5 +210,137 @@ describe("hasSubagentRow", () => {
     expect(hasSubagentRow(byTab, ["tab-main"], "nobody")).toBe(false);
     expect(hasSubagentRow(byTab, ["tab-other"], "a1")).toBe(false);
     expect(hasSubagentRow(byTab, ["tab-main"], null)).toBe(false);
+  });
+});
+
+describe("rows under the Settings rules", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  function rules(patch: Partial<SubagentRowRules> = {}): SubagentRowRules {
+    return { typeFilter: DEFAULT_SUBAGENT_TYPE_FILTER, retentionMs: null, now: 10 * HOUR, ...patch };
+  }
+
+  const keyIds = (key: string) => parseSubagentStructureKey(key).map(l => l.agentId);
+
+  it("hides the agents whose kind is filtered out, and only those", () => {
+    const tab = entry([
+      record("a", { agentType: "Explore" }),
+      record("b", { agentType: "reviewer" }),
+      record("c", { agentType: "fork" }),
+    ]);
+    const noBuiltIn = rules({ typeFilter: { ...DEFAULT_SUBAGENT_TYPE_FILTER, builtIn: false } });
+    const noCustom = rules({ typeFilter: { ...DEFAULT_SUBAGENT_TYPE_FILTER, custom: false } });
+
+    expect(keyIds(subagentStructureKey(tab, rules()))).toEqual(["a", "b", "c"]);
+    expect(keyIds(subagentStructureKey(tab, noBuiltIn))).toEqual(["b", "c"]);
+    expect(keyIds(subagentStructureKey(tab, noCustom))).toEqual(["a", "c"]);
+  });
+
+  it("never gives a workflow agent a row, whatever its filter says", () => {
+    const tab = entry([record("w", { agentType: "workflow-subagent", isWorkflow: true })]);
+    const workflowOn = rules({ typeFilter: { ...DEFAULT_SUBAGENT_TYPE_FILTER, workflow: true } });
+
+    expect(subagentStructureKey(tab, workflowOn)).toBe("");
+  });
+
+  it("re-roots a child under the tab when its parent is filtered out", () => {
+    const tab = entry([
+      record("p", { agentType: "reviewer" }),
+      record("k", { agentType: "Explore", parentAgentId: "p" }),
+    ]);
+    const noCustom = rules({ typeFilter: { ...DEFAULT_SUBAGENT_TYPE_FILTER, custom: false } });
+    const rows = buildSubagentTree(parseSubagentStructureKey(subagentStructureKey(tab, noCustom)), NONE);
+
+    expect(ids(rows)).toEqual(["k"]);
+    expect(depths(rows)).toEqual([1]);
+  });
+
+  it("keeps a running row past any retention window", () => {
+    const running = record("a", { state: "running", startedAt: 0 });
+
+    expect(isPastRetention(running, 0, 10 * HOUR)).toBe(false);
+    expect(isPastRetention(running, HOUR, 10 * HOUR)).toBe(false);
+  });
+
+  it("takes an ended row away once its window has passed, and not before", () => {
+    const done = record("a", { state: "done", endedAt: 9 * HOUR });
+
+    expect(isPastRetention(done, null, 100 * HOUR)).toBe(false);
+    expect(isPastRetention(done, HOUR, 9.5 * HOUR)).toBe(false);
+    expect(isPastRetention(done, HOUR, 10 * HOUR)).toBe(true);
+    expect(isPastRetention(done, 0, 9 * HOUR)).toBe(true);
+  });
+
+  it("treats failed and interrupted rows as ended", () => {
+    for (const state of ["failed", "interrupted"] as const) {
+      expect(isPastRetention(record("a", { state, endedAt: 0 }), 0, 0)).toBe(true);
+    }
+  });
+
+  it("keeps a row whose end is not known yet, since it may still be running", () => {
+    expect(isPastRetention(record("a", { state: "unknown", endedAt: 0 }), 0, 10 * HOUR)).toBe(false);
+  });
+
+  it("leaves an expired row alone, since its transcript going is not retention", () => {
+    expect(isPastRetention(record("a", { state: "expired", endedAt: 0 }), 0, 10 * HOUR)).toBe(false);
+  });
+
+  it("times a scanned row with no end time from its transcript's last write", () => {
+    const scanned = record("a", { state: "interrupted", startedAt: 9 * HOUR, endedAt: null, source: "scan" });
+
+    expect(isPastRetention(scanned, HOUR, 9.5 * HOUR)).toBe(false);
+    expect(isPastRetention(scanned, HOUR, 10 * HOUR)).toBe(true);
+  });
+
+  it("names the soonest moment a shown row ends its stay, or null with nothing waiting", () => {
+    const tab = entry([
+      record("a", { state: "done", endedAt: 9.5 * HOUR }),
+      record("b", { state: "failed", endedAt: 9.2 * HOUR }),
+      record("c", { state: "running" }),
+    ]);
+
+    expect(nextRetentionExpiry(tab, rules({ retentionMs: HOUR }))).toBe(10.2 * HOUR);
+    expect(nextRetentionExpiry(tab, rules({ retentionMs: null }))).toBeNull();
+    expect(nextRetentionExpiry(tab, rules({ retentionMs: 0 }))).toBeNull();
+    expect(nextRetentionExpiry(entry([record("c")]), rules({ retentionMs: HOUR }))).toBeNull();
+  });
+
+  it("leaves the structure key alone when an agent finishes under session retention", () => {
+    const running = entry([record("a"), record("b")]);
+    const finished = entry([record("a", { state: "done", endedAt: 1 }), record("b")]);
+
+    expect(subagentStructureKey(finished, rules())).toBe(subagentStructureKey(running, rules()));
+  });
+
+  it("drops a finished agent from the key at once when finished rows hide", () => {
+    const finished = entry([record("a", { state: "done", endedAt: 1 }), record("b")]);
+
+    expect(keyIds(subagentStructureKey(finished, rules({ retentionMs: 0 })))).toEqual(["b"]);
+  });
+});
+
+describe("subagentGroupStartsCollapsed", () => {
+  it("never and always ignore the agents", () => {
+    const tab = entry([record("a")]);
+
+    expect(subagentGroupStartsCollapsed(tab, "never")).toBe(false);
+    expect(subagentGroupStartsCollapsed(tab, "always")).toBe(true);
+  });
+
+  it("collapses once every agent has ended, and not while one runs", () => {
+    const oneRunning = entry([record("a", { state: "done" }), record("b")]);
+    const allEnded = entry([record("a", { state: "done" }), record("b", { state: "failed" })]);
+
+    expect(subagentGroupStartsCollapsed(oneRunning, "allFinished")).toBe(false);
+    expect(subagentGroupStartsCollapsed(allEnded, "allFinished")).toBe(true);
+  });
+
+  it("does not count workflow agents, and stays open with no agent at all", () => {
+    const onlyWorkflow = entry([record("w", { isWorkflow: true, state: "done" })]);
+    const runningWorkflow = entry([record("a", { state: "done" }), record("w", { isWorkflow: true })]);
+
+    expect(subagentGroupStartsCollapsed(undefined, "allFinished")).toBe(false);
+    expect(subagentGroupStartsCollapsed(onlyWorkflow, "allFinished")).toBe(false);
+    expect(subagentGroupStartsCollapsed(runningWorkflow, "allFinished")).toBe(true);
   });
 });

@@ -151,6 +151,72 @@ export default {
       unlimited: "Unlimited",
       custom: "Custom",
     },
+    subagents: {
+      title: "Claude subagents",
+      hint: "Rows under a claude tab for the subagents it starts, and the read-only transcript view a row opens. Changes apply at once.",
+      enabled: {
+        label: "Show Claude subagents",
+        hint: "Off stops all of it: no rows, and no transcript is scanned, read or watched. Turning it back on rebuilds the rows from the current sessions.",
+      },
+      types: {
+        title: "Kinds of subagent",
+        builtIn: {
+          label: "Built-in agents",
+          hint: "The agents claude ships with, such as Explore, Plan and general-purpose.",
+        },
+        custom: {
+          label: "Custom agents",
+          hint: "Agents you or a plugin defined.",
+        },
+        fork: {
+          label: "Forks",
+          hint: "Only forks that claude reports with the agent type fork. Any other fork counts as a custom agent.",
+        },
+        workflow: {
+          label: "Workflow agents",
+          hint: "Workflow agents are not shown in the sidebar yet.",
+        },
+      },
+      retention: {
+        label: "Keep finished rows",
+        hint: "How long a row stays after its subagent finished, failed or was interrupted. Running subagents always show.",
+        session: "Until the session changes",
+        hour: "1 hour",
+        tenMinutes: "10 minutes",
+        finished: "Hide when finished",
+      },
+      autoCollapse: {
+        label: "Collapse a tab's subagents",
+        hint: "Whether a claude tab's subagent rows start folded. Folding them by hand wins until the tab's session changes.",
+        never: "Never",
+        allFinished: "When all have finished",
+        always: "Always",
+      },
+      view: {
+        title: "Transcript view",
+        thinking: {
+          label: "Show thinking",
+          hint: "The model's thinking between steps.",
+        },
+        toolInputs: {
+          label: "Show tool inputs",
+          hint: "What each tool call was given, after its name.",
+        },
+        toolOutputs: {
+          label: "Show tool outputs",
+          hint: "What each tool call returned.",
+        },
+        truncate: {
+          label: "Cut long tool output",
+          hint: "Lines of tool output to show before the rest is cut. 0 shows everything.",
+          lines: "lines",
+        },
+        autoScroll: {
+          label: "Follow new entries",
+          hint: "Keep the view scrolled to the newest entry while you are at the bottom.",
+        },
+      },
+    },
     confirmClose: {
       label: "Confirm before closing an agent tab",
       hint: "Ask before closing a non-shell terminal or agent tab. Turning this off (or unchecking it once from the close dialog) closes tabs immediately; a toast then points back to the '+' menu's Resume section to bring one back.",

@@ -73,6 +73,54 @@ export function toTranscriptRows(entries: readonly unknown[], start: number): Tr
   return entries.map((entry, offset) => toTranscriptRow(entry, start + offset));
 }
 
+export interface TranscriptViewOptions {
+  showThinking: boolean;
+  showToolOutputs: boolean;
+}
+
+/** The rows the view draws under the Settings rendering options. Tool inputs
+ *  and truncation change how a row draws, not whether it does, so they are
+ *  applied by the row itself. Hands back `rows` itself when nothing is
+ *  hidden. */
+export function rowsForView(rows: readonly TranscriptRow[], options: TranscriptViewOptions): readonly TranscriptRow[] {
+  const hidesNothing = options.showThinking && options.showToolOutputs;
+  if (hidesNothing) return rows;
+
+  return rows.filter(row => {
+    const isThinking = row.kind === "thinking" || row.kind === "redactedThinking";
+    const isToolOutput = row.kind === "toolResult";
+    const hiddenThinking = isThinking && !options.showThinking;
+    const hiddenOutput = isToolOutput && !options.showToolOutputs;
+    return !hiddenThinking && !hiddenOutput;
+  });
+}
+
+/** `text` cut to its first `maxLines` lines, and how many lines were cut.
+ *  0 lines means no cut. */
+export function truncateLines(text: string, maxLines: number): { text: string; cutLines: number } {
+  if (maxLines <= 0) return { text, cutLines: 0 };
+
+  const lines = text.split("\n");
+  if (lines.length <= maxLines) return { text, cutLines: 0 };
+
+  return { text: lines.slice(0, maxLines).join("\n"), cutLines: lines.length - maxLines };
+}
+
+/** Where entry `index` sits in `rows`, which hold ascending entry indices
+ *  with gaps where the view hides some, or -1. */
+export function positionOfEntry(rows: readonly TranscriptRow[], index: number): number {
+  let low = 0;
+  let high = rows.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const found = rows[middle].index;
+    if (found === index) return middle;
+    if (found < index) low = middle + 1;
+    else high = middle - 1;
+  }
+  return -1;
+}
+
 const TOOL_INPUT_MAX = 240;
 
 function scalarText(value: unknown): string | null {

@@ -15,6 +15,7 @@
 import { create } from "zustand";
 import * as ipc from "@/lib/ipc";
 import type { SubagentSummary } from "@/lib/types";
+import { subagentsEnabled } from "@/lib/subagentGate";
 import {
   normalizeAgentId, sessionMatches, setSubagentEventSink,
   type SubagentEventOrigin, type SubagentHookEvent,
@@ -61,6 +62,8 @@ interface SubagentsState {
   /** The tab now runs `sessionId`. Records from any other session go. */
   setSession: (tabId: string, sessionId: string | null) => void;
   forget: (tabId: string) => void;
+  /** Drop every tab's records, as the feature is switched off. */
+  clear: () => void;
   /** Fold in what `subagent_list` read from disk for this tab's session. */
   applySummaries: (tabId: string, sessionId: string, summaries: SubagentSummary[]) => void;
   /** Rebuild a tab's records from a directory scan. Creates the records a
@@ -226,6 +229,11 @@ export const useSubagents = create<SubagentsState>((set, get) => ({
     });
   },
 
+  clear: () => {
+    if (Object.keys(get().byTab).length === 0) return;
+    set({ byTab: {} });
+  },
+
   applySummaries: (tabId, sessionId, summaries) => {
     const entry = get().byTab[tabId];
     if (!entry || entry.sessionId !== sessionId) return;
@@ -380,7 +388,8 @@ async function refreshFromTranscripts(tabId: string): Promise<void> {
 
 /** Where TerminalPane's accepted hook reports land. */
 export function receiveSubagentEvent(origin: SubagentEventOrigin, event: SubagentHookEvent): void {
-  if (!sessionMatches(event, origin.tabSessionId)) return;
+  const isDisabled = !subagentsEnabled();
+  if (isDisabled || !sessionMatches(event, origin.tabSessionId)) return;
 
   const store = useSubagents.getState();
   store.setSession(origin.tabId, event.sessionId);

@@ -17,6 +17,7 @@ import { initWindowlessMode } from "@/lib/windowlessMode";
 import { initModKeyClass } from "@/lib/modKeyClass";
 import { installRecentPlacesTracker } from "@/lib/recentPlacesTracker";
 import { installSubagentPreviewArchiveWatch } from "@/store/subagentPreview";
+import { installSubagentsEnabledWatch } from "@/lib/subagentSettingsWatch";
 import { initUserPresence } from "@/lib/userPresence";
 import { initWindowFocus } from "@/lib/windowFocus";
 
@@ -232,6 +233,9 @@ installRecentPlacesTracker();
 
 // An archived task's subagent views stop reading their transcripts and close.
 installSubagentPreviewArchiveWatch();
+
+// Settings > Tasks > Claude subagents: the master toggle, applied live.
+installSubagentsEnabledWatch();
 
 // Mirror uncaught errors + unhandled promise rejections to the Rust-side
 // debug log so they show up in the dev terminal (`/var/folders/.../T/
