@@ -56,6 +56,11 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
     why: "two negatives: the paused project filter's slashed icon must NOT open "
       + "the bar, and a bar a query closed must NOT reopen when the query clears",
   },
+  "subagent-view.e2e.ts": {
+    count: 1,
+    why: "a negative: ctrl+o in the focused view must NOT open the task finder, "
+      + "which fades in, so it gets a window to appear in",
+  },
   "tabs-layout.e2e.ts": {
     count: 2,
     why: "Ctrl-Tab is asynchronous, so 'the task did not switch' has to be asserted "
