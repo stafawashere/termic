@@ -1224,8 +1224,8 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
     <aside
       ref={asideRef}
       data-profile-wash={sidebarWash ? "" : undefined}
-      style={sidebarWash ? { backgroundImage: sidebarWash } : undefined}
-      className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden border-r border-[var(--color-border-soft)] bg-[var(--color-bg-1)]"
+      style={sidebarWash ? { "--sidebar-panel-wash": sidebarWash } as React.CSSProperties : undefined}
+      className="sidebar-panel relative flex h-full min-w-0 flex-1 flex-col overflow-hidden"
     >
       {/* The sidebar's head: nav, filter bar, chips. ONE gap spaces them, and
           none of the three sets vertical padding of its own. Each used to
@@ -1300,7 +1300,8 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
       <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         ref={projectsScrollRef}
-        className={cn("relative flex-1 overflow-y-auto min-h-0", compact ? "no-scrollbar px-1.5 py-1.5" : "px-2 py-2")}
+        data-testid="sidebar-scroll"
+        className={cn("relative min-h-0 flex-1", compact ? "no-scrollbar overflow-y-auto px-1.5 py-1.5" : "sidebar-scroll")}
       >
         {/* Lines to the hovered task's parent and the tasks it spawned. The
             icon rail has no room for them. */}

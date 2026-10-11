@@ -195,24 +195,27 @@ describe("profiles", () => {
   // Measured on the computed style, since a 16% wash is not something a
   // screenshot settles either way.
   it("carries the profile colour down the sidebar only when asked", async () => {
+    // The panel always paints its own gradient; the wash is a SECOND layer
+    // on top of it, so the layer count is what says whether it is on.
     const image = () => browser.execute(
       () => getComputedStyle(document.querySelector("aside")!).backgroundImage,
     );
+    const layers = async () => ((await image()).match(/linear-gradient/g) ?? []).length;
     const setWash = (on: boolean) => browser.execute(
       (v) => window.__termic!.usePrefs.getState().setProfileSidebarWash(v), on,
     );
     expect(await browser.execute(() => window.__termic!.usePrefs.getState().profileSidebarWash)).toBe(false);
-    expect(await image()).toBe("none");
+    expect(await layers()).toBe(1);
     try {
       await setWash(true);
-      await browser.waitUntil(async () => (await image()).includes("linear-gradient"), {
+      await browser.waitUntil(async () => (await layers()) === 2, {
         timeout: 5_000, timeoutMsg: `the sidebar never took the wash: ${await image()}`,
       });
       await snap("profiles-sidebar-wash");
     } finally {
       await setWash(false);
     }
-    await browser.waitUntil(async () => (await image()) === "none", {
+    await browser.waitUntil(async () => (await layers()) === 1, {
       timeout: 5_000, timeoutMsg: "the sidebar kept the wash with the setting off",
     });
   });

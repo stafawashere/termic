@@ -41,6 +41,92 @@
      at 18px: rem padding grows, the literal does not, and the placeholder
      ends up 10px shorter than the rows around it. One token, one height. */
   --task-row-h:      26px;
+  /* Left sidebar ("refined tree", docs/themes.md "Sidebar tokens"). Its own
+     family rather than more --color-* keys: several are whole shadows, and
+     they are recipes for one panel. These are the Dark+ values. html.light
+     and the other dark themes (custom JSON themes included, through
+     html.custom-theme) derive theirs from --color-* further down, so a
+     theme that only sets --color-* still gets a matching sidebar.
+     Selection, the activity trace, checked menu rows and the dragged
+     scrollbar thumb follow --color-accent everywhere. */
+  --sidebar-row-h:          28px;
+  --sidebar-task-row-h:     30px;
+  --sidebar-toolbar-h:      44px;
+  --sidebar-bg-top:         #1c1c1c;
+  --sidebar-bg-bottom:      #181818;
+  --sidebar-border:         #2a2a2a;
+  --sidebar-top-highlight:  rgba(255, 255, 255, 0.04);
+  --sidebar-divider:        #242424;
+  --sidebar-sheen:          rgba(255, 255, 255, 0.02);
+  --sidebar-well-bg:        #141414;
+  --sidebar-well-shadow:    inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.03);
+  --sidebar-seg-hover:      #1f1f1f;
+  --sidebar-chip-top:       #2c2c2c;
+  --sidebar-chip-bottom:    #242424;
+  --sidebar-chip-shadow:    0 1px 0 rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --sidebar-icon:           #8a8a8a;
+  --sidebar-icon-active:    #f0f0f0;
+  --sidebar-ink-strong:     #f0f0f0;
+  --sidebar-ink-group:      #ececec;
+  --sidebar-ink:            #d6d6d6;
+  --sidebar-muted:          #8a8a8a;
+  --sidebar-meta:           #666666;
+  --sidebar-chevron:        #777777;
+  --sidebar-eyebrow:        #6a6a6a;
+  --sidebar-faint:          #5a5a5a;
+  --sidebar-input-bg:       #141414;
+  --sidebar-input-border:   #262626;
+  --sidebar-input-shadow:   inset 0 1px 3px rgba(0, 0, 0, 0.5);
+  --sidebar-input-ink:      #dddddd;
+  --sidebar-placeholder:    #5c5c5c;
+  --sidebar-keycap-bg:      #1a1a1a;
+  --sidebar-keycap-border:  #2a2a2a;
+  --sidebar-row-hover:      #222222;
+  --sidebar-btn-hover-ink:  #eeeeee;
+  --sidebar-badge-bg:       #222222;
+  --sidebar-badge-ink:      #666666;
+  --sidebar-count-bg:       #2b2b2b;
+  --sidebar-count-ink:      #9a9a9a;
+  --sidebar-guide:          #262626;
+  --sidebar-connector:      #3a3a3a;
+  --sidebar-tray-bg:        #1a1a1a;
+  --sidebar-tray-border:    #2a2a2a;
+  --sidebar-tray-hover:     #2c2c2c;
+  --sidebar-newtask-bg:     #1b1b1b;
+  --sidebar-newtask-border: #2a2a2a;
+  --sidebar-newtask-ink:    #9a9a9a;
+  --sidebar-sel-from:       color-mix(in srgb, var(--color-accent) 22%, var(--sidebar-bg-top));
+  --sidebar-sel-to:         color-mix(in srgb, var(--color-accent) 15%, var(--sidebar-bg-top));
+  --sidebar-sel-bar:        var(--color-accent);
+  --sidebar-sel-highlight:  rgba(255, 255, 255, 0.05);
+  --sidebar-sel-ink:        #ffffff;
+  --sidebar-sel-icon:       color-mix(in srgb, var(--color-accent) 50%, #ffffff);
+  --sidebar-sel-meta:       color-mix(in srgb, var(--color-accent) 30%, #d6d6d6);
+  --sidebar-sel-chevron:    color-mix(in srgb, var(--color-accent) 25%, #a8a8a8);
+  --sidebar-sel-menu-border: color-mix(in srgb, var(--color-accent) 35%, var(--sidebar-bg-top));
+  --sidebar-running:        #6cb6ff;
+  --sidebar-settled:        #3fb950;
+  --sidebar-scroll-thumb:   #2a2a2a;
+  --sidebar-scroll-thumb-idle-hover: #3a3a3a;
+  --sidebar-scroll-thumb-hover: #4a4a4a;
+  --sidebar-scroll-thumb-active: var(--color-accent);
+  --sidebar-footer-top:     #181818;
+  --sidebar-footer-bottom:  #141414;
+  --sidebar-footer-icon:    #a8a8a8;
+  --sidebar-popover-bg:     #1e1e1e;
+  --sidebar-popover-border: #2e2e2e;
+  --sidebar-popover-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 40px rgba(0, 0, 0, 0.6);
+  --sidebar-menu-hover:     #262626;
+  --sidebar-menu-divider:   #2a2a2a;
+  --sidebar-menu-checked-bg: var(--sidebar-sel-to);
+  --sidebar-menu-checked-ink: color-mix(in srgb, var(--color-accent) 80%, #ffffff);
+  --sidebar-menu-checked-desc: var(--sidebar-sel-meta);
+  --sidebar-drag-lift-bg:   #262626;
+  --sidebar-drag-lift-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+  --sidebar-drop-ring:      color-mix(in srgb, var(--color-accent) 60%, transparent);
+  --sidebar-focus-ring:     color-mix(in srgb, var(--color-accent) 55%, transparent);
+  --sidebar-card-bg:        #1e1e1e;
+  --sidebar-card-border:    #2e2e2e;
   --color-bg:        #0c0c0c;
   --color-bg-1:      #141414;
   --color-bg-2:      #1c1c1c;
@@ -481,6 +567,155 @@
     --color-palette-pink:   #d8a0c9;
     color-scheme: dark;
   }
+
+  /* Sidebar tokens for every dark theme but Dark+ (which keeps the @theme
+     hex), and for custom JSON themes, which only write --color-* and get
+     html.custom-theme from customTheme.ts. The Dark+ relationships, read
+     off whatever ladder the theme has: the panel sits a step above
+     --color-bg-1, wells sink below it, ink steps down from --color-fg. */
+  html.claude, html.cobalt, html.matrix, html.rosepine, html.solarized,
+  html.custom-theme:not(.light) {
+    --sidebar-bg-top:         color-mix(in srgb, var(--color-bg-1) 96%, var(--color-fg));
+    --sidebar-bg-bottom:      color-mix(in srgb, var(--color-bg-1) 98%, var(--color-fg));
+    --sidebar-border:         color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --sidebar-top-highlight:  rgba(255, 255, 255, 0.04);
+    --sidebar-divider:        color-mix(in srgb, var(--color-bg-1) 93%, var(--color-fg));
+    --sidebar-sheen:          rgba(255, 255, 255, 0.02);
+    --sidebar-well-bg:        var(--color-bg-1);
+    --sidebar-well-shadow:    inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.03);
+    --sidebar-seg-hover:      color-mix(in srgb, var(--color-bg-1) 95%, var(--color-fg));
+    --sidebar-chip-top:       color-mix(in srgb, var(--color-bg-1) 89%, var(--color-fg));
+    --sidebar-chip-bottom:    color-mix(in srgb, var(--color-bg-1) 93%, var(--color-fg));
+    --sidebar-chip-shadow:    0 1px 0 rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --sidebar-icon:           color-mix(in srgb, var(--color-fg-dim) 50%, var(--color-fg-faint));
+    --sidebar-icon-active:    var(--color-fg);
+    --sidebar-ink-strong:     var(--color-fg);
+    --sidebar-ink-group:      var(--color-fg);
+    --sidebar-ink:            color-mix(in srgb, var(--color-fg) 72%, var(--color-fg-dim));
+    --sidebar-muted:          color-mix(in srgb, var(--color-fg-dim) 50%, var(--color-fg-faint));
+    --sidebar-meta:           var(--color-fg-faint);
+    --sidebar-chevron:        color-mix(in srgb, var(--color-fg-faint) 85%, var(--color-fg-dim));
+    --sidebar-eyebrow:        var(--color-fg-faint);
+    --sidebar-faint:          color-mix(in srgb, var(--color-fg-faint) 78%, var(--color-bg-1));
+    --sidebar-input-bg:       var(--color-bg-1);
+    --sidebar-input-border:   color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
+    --sidebar-input-shadow:   inset 0 1px 3px rgba(0, 0, 0, 0.5);
+    --sidebar-input-ink:      color-mix(in srgb, var(--color-fg) 85%, var(--color-fg-dim));
+    --sidebar-placeholder:    color-mix(in srgb, var(--color-fg-faint) 80%, var(--color-bg-1));
+    --sidebar-keycap-bg:      color-mix(in srgb, var(--color-bg-1) 97%, var(--color-fg));
+    --sidebar-keycap-border:  color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --sidebar-row-hover:      color-mix(in srgb, var(--color-bg-1) 93%, var(--color-fg));
+    --sidebar-btn-hover-ink:  var(--color-fg);
+    --sidebar-badge-bg:       color-mix(in srgb, var(--color-bg-1) 93%, var(--color-fg));
+    --sidebar-badge-ink:      var(--color-fg-faint);
+    --sidebar-count-bg:       color-mix(in srgb, var(--color-bg-1) 89%, var(--color-fg));
+    --sidebar-count-ink:      color-mix(in srgb, var(--color-fg-dim) 75%, var(--color-fg-faint));
+    --sidebar-guide:          color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
+    --sidebar-connector:      color-mix(in srgb, var(--color-bg-1) 82%, var(--color-fg));
+    --sidebar-tray-bg:        color-mix(in srgb, var(--color-bg-1) 97%, var(--color-fg));
+    --sidebar-tray-border:    color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --sidebar-tray-hover:     color-mix(in srgb, var(--color-bg-1) 89%, var(--color-fg));
+    --sidebar-newtask-bg:     color-mix(in srgb, var(--color-bg-1) 97%, var(--color-fg));
+    --sidebar-newtask-border: color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --sidebar-newtask-ink:    color-mix(in srgb, var(--color-fg-dim) 75%, var(--color-fg-faint));
+    --sidebar-sel-ink:        var(--color-fg);
+    --sidebar-sel-icon:       color-mix(in srgb, var(--color-accent) 50%, var(--color-fg));
+    --sidebar-sel-meta:       color-mix(in srgb, var(--color-accent) 30%, var(--color-fg-dim));
+    --sidebar-sel-chevron:    color-mix(in srgb, var(--color-accent) 25%, var(--color-fg-dim));
+    --sidebar-running:        var(--color-palette-blue);
+    --sidebar-settled:        var(--color-palette-green);
+    --sidebar-scroll-thumb:   color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --sidebar-scroll-thumb-idle-hover: color-mix(in srgb, var(--color-bg-1) 82%, var(--color-fg));
+    --sidebar-scroll-thumb-hover: color-mix(in srgb, var(--color-bg-1) 75%, var(--color-fg));
+    --sidebar-footer-top:     color-mix(in srgb, var(--color-bg-1) 98%, var(--color-fg));
+    --sidebar-footer-bottom:  var(--color-bg-1);
+    --sidebar-footer-icon:    var(--color-fg-dim);
+    --sidebar-popover-bg:     color-mix(in srgb, var(--color-bg-1) 95%, var(--color-fg));
+    --sidebar-popover-border: color-mix(in srgb, var(--color-bg-1) 88%, var(--color-fg));
+    --sidebar-menu-hover:     color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
+    --sidebar-menu-divider:   color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --sidebar-menu-checked-ink: color-mix(in srgb, var(--color-accent) 80%, var(--color-fg));
+    --sidebar-drag-lift-bg:   color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
+    --sidebar-card-bg:        color-mix(in srgb, var(--color-bg-1) 95%, var(--color-fg));
+    --sidebar-card-border:    color-mix(in srgb, var(--color-bg-1) 88%, var(--color-fg));
+  }
+
+  /* Light: the same relationships turned over. Wells are a shade darker
+     than the panel with a soft inner shadow, highlights are white, and the
+     selection wash is a lighter accent tint. Read off --color-*, so a light
+     custom theme (which carries html.light) is covered too. */
+  html.light {
+    --sidebar-bg-top:         var(--color-bg-1);
+    --sidebar-bg-bottom:      color-mix(in srgb, var(--color-bg-1) 96%, var(--color-fg));
+    --sidebar-border:         var(--color-border);
+    --sidebar-top-highlight:  rgba(255, 255, 255, 0.7);
+    --sidebar-divider:        var(--color-border-soft);
+    --sidebar-sheen:          rgba(255, 255, 255, 0.35);
+    --sidebar-well-bg:        color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
+    --sidebar-well-shadow:    inset 0 1px 2px rgba(0, 0, 0, 0.12), 0 1px 0 rgba(255, 255, 255, 0.8);
+    --sidebar-seg-hover:      color-mix(in srgb, var(--color-bg-1) 86%, var(--color-fg));
+    --sidebar-chip-top:       #ffffff;
+    --sidebar-chip-bottom:    color-mix(in srgb, var(--color-bg) 70%, #ffffff);
+    --sidebar-chip-shadow:    0 1px 2px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    --sidebar-icon:           var(--color-fg-dim);
+    --sidebar-icon-active:    var(--color-fg);
+    --sidebar-ink-strong:     var(--color-fg);
+    --sidebar-ink-group:      var(--color-fg);
+    --sidebar-ink:            color-mix(in srgb, var(--color-fg) 85%, var(--color-fg-dim));
+    --sidebar-muted:          var(--color-fg-dim);
+    --sidebar-meta:           var(--color-fg-faint);
+    --sidebar-chevron:        var(--color-fg-faint);
+    --sidebar-eyebrow:        var(--color-fg-faint);
+    --sidebar-faint:          color-mix(in srgb, var(--color-fg-faint) 80%, var(--color-bg-1));
+    --sidebar-input-bg:       color-mix(in srgb, var(--color-bg-1) 94%, var(--color-fg));
+    --sidebar-input-border:   var(--color-border);
+    --sidebar-input-shadow:   inset 0 1px 2px rgba(0, 0, 0, 0.08);
+    --sidebar-input-ink:      var(--color-fg);
+    --sidebar-placeholder:    var(--color-fg-faint);
+    --sidebar-keycap-bg:      var(--color-bg);
+    --sidebar-keycap-border:  var(--color-border);
+    --sidebar-row-hover:      color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
+    --sidebar-btn-hover-ink:  var(--color-fg);
+    --sidebar-badge-bg:       color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --sidebar-badge-ink:      var(--color-fg-dim);
+    --sidebar-count-bg:       color-mix(in srgb, var(--color-bg-1) 88%, var(--color-fg));
+    --sidebar-count-ink:      var(--color-fg-dim);
+    --sidebar-guide:          var(--color-border-soft);
+    --sidebar-connector:      var(--color-border);
+    --sidebar-tray-bg:        var(--color-bg);
+    --sidebar-tray-border:    var(--color-border);
+    --sidebar-tray-hover:     color-mix(in srgb, var(--color-bg-1) 88%, var(--color-fg));
+    --sidebar-newtask-bg:     var(--color-bg);
+    --sidebar-newtask-border: var(--color-border);
+    --sidebar-newtask-ink:    var(--color-fg-dim);
+    --sidebar-sel-from:       color-mix(in srgb, var(--color-accent) 22%, var(--color-bg));
+    --sidebar-sel-to:         color-mix(in srgb, var(--color-accent) 13%, var(--color-bg));
+    --sidebar-sel-highlight:  rgba(255, 255, 255, 0.5);
+    --sidebar-sel-ink:        var(--color-fg);
+    --sidebar-sel-icon:       var(--color-accent-deep);
+    --sidebar-sel-meta:       color-mix(in srgb, var(--color-accent) 55%, var(--color-fg-dim));
+    --sidebar-sel-chevron:    color-mix(in srgb, var(--color-accent) 50%, var(--color-fg-faint));
+    --sidebar-sel-menu-border: color-mix(in srgb, var(--color-accent) 40%, var(--color-bg));
+    --sidebar-running:        var(--color-palette-blue);
+    --sidebar-settled:        var(--color-palette-green);
+    --sidebar-scroll-thumb:   var(--color-border);
+    --sidebar-scroll-thumb-idle-hover: color-mix(in srgb, var(--color-border) 70%, var(--color-fg-faint));
+    --sidebar-scroll-thumb-hover: var(--color-fg-faint);
+    --sidebar-footer-top:     var(--sidebar-bg-bottom);
+    --sidebar-footer-bottom:  color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
+    --sidebar-footer-icon:    var(--color-fg-dim);
+    --sidebar-popover-bg:     var(--color-bg);
+    --sidebar-popover-border: var(--color-border);
+    --sidebar-popover-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 18px 40px rgba(0, 0, 0, 0.18);
+    --sidebar-menu-hover:     color-mix(in srgb, var(--color-bg-1) 85%, var(--color-fg));
+    --sidebar-menu-divider:   var(--color-border-soft);
+    --sidebar-menu-checked-ink: var(--color-accent-deep);
+    --sidebar-drag-lift-bg:   var(--color-bg);
+    --sidebar-drag-lift-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    --sidebar-card-bg:        var(--color-bg);
+    --sidebar-card-border:    var(--color-border);
+  }
+
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 6px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--color-border-soft); }
@@ -1008,3 +1243,42 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   .termic-cli-pulse,
   .termic-cli-stalls { animation: none !important; }
 }
+
+/* ── Left sidebar ("refined tree") ───────────────────────────────────────
+   Shell and scroll areas. Rows style themselves with utilities over the
+   --sidebar-* tokens; what lives here is what utilities cannot say:
+   pseudo-element scrollbars and the panel's layered background. */
+.sidebar-panel {
+  background-color: var(--sidebar-bg-bottom);
+  background-image: var(--sidebar-panel-wash, none), linear-gradient(180deg, var(--sidebar-bg-top) 0%, var(--sidebar-bg-bottom) 100%);
+  box-shadow: inset 0 1px 0 var(--sidebar-top-highlight);
+  border-right: 1px solid var(--sidebar-border);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Overlay-style thin bar inside the panel. The stable gutter keeps rows
+   from shifting when it appears; the right padding is 2px so gutter plus
+   padding matches the 6px inset on the left. */
+.sidebar-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-scroll-thumb) transparent;
+  padding: 0 2px 10px 6px;
+}
+.sidebar-scroll::-webkit-scrollbar { width: 10px; }
+.sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-scroll::-webkit-scrollbar-corner { background: transparent; }
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background: var(--sidebar-scroll-thumb);
+  background-clip: padding-box;
+  transition: background-color 120ms;
+}
+.sidebar-scroll:hover::-webkit-scrollbar-thumb { background-color: var(--sidebar-scroll-thumb-idle-hover); }
+.sidebar-scroll::-webkit-scrollbar-thumb:hover { background-color: var(--sidebar-scroll-thumb-hover); }
+.sidebar-scroll::-webkit-scrollbar-thumb:active { background-color: var(--sidebar-scroll-thumb-active); }

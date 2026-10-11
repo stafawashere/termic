@@ -10,7 +10,7 @@ import { setChosenServers, setChosenCommands } from "@/lib/lsp/serverChoice";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listFontFamilies, listMonospaceFonts, sudoTouchIdSetOffer, themesList } from "@/lib/ipc";
 import {
-  applyCustomVars, clearCustomVars, clearThemeCache, isCustomId, mergeTerminal,
+  applyCustomVars, clearCustomVars, clearThemeCache, CUSTOM_THEME_CLASS, isCustomId, mergeTerminal,
   readThemeCache, sanitizeTheme, writeThemeCache, type CustomTheme,
 } from "@/lib/customTheme";
 import {
@@ -2103,6 +2103,10 @@ export function applyTheme(mode: ThemeMode) {
   html.classList.toggle("cobalt",    resolved === "cobalt");
   html.classList.toggle("matrix",    resolved === "matrix");
   html.classList.toggle("rosepine",  resolved === "rosepine");
+  // The sidebar's --sidebar-* family is not in UI_KEYS, so a custom theme
+  // cannot set it. index.css derives it from --color-* under this class
+  // instead of letting a dark custom theme keep the Dark+ hex.
+  html.classList.toggle(CUSTOM_THEME_CLASS, !!custom);
   if (custom) {
     applyCustomVars(html, custom.ui);
     // Color-scheme tells the browser to use light/dark form controls +
