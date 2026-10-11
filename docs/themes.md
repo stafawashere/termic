@@ -140,6 +140,22 @@ yields a complete, readable ANSI 16.
 Hex (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) and `rgb()` / `rgba()` /
 `hsl()` / `hsla()` notation. Named CSS colors are not accepted.
 
+## The subagent view paints with claude's palette
+
+The subagent transcript view (docs/ui.md "The subagent transcript view")
+is the one place colours do not come from a termic theme. It imitates the
+claude tab beside it, and claude draws with its own palette chosen by its
+own `theme` setting, so the view does too: `src/lib/claudePalette.ts`
+holds one table per claude theme (`dark`, `light`, `dark-daltonized`,
+`light-daltonized`, `dark-ansi`, `light-ansi`), with the rgb numbers
+claude 2.1.296 ships, applied as `--cc-*` custom properties on the pane
+root. They are `rgb()` data in that table rather than `@theme` tokens
+because no termic theme should be able to change them. The two ansi
+themes name terminal colours instead, which resolve against the active
+terminal theme's ANSI palette, so they follow a custom theme's
+`terminal` keys exactly as the claude tab does. When claude changes its
+palette, update the table and its test together.
+
 ## Error handling
 
 Nothing about a theme file can break the app:

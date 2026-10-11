@@ -70,6 +70,7 @@ import { isTerminalCloseCombo, isTerminalFindCombo } from "@/lib/terminalFind";
 import * as ipc from "@/lib/ipc";
 import { maybeRebuildDockerImageForLaunch } from "@/lib/dockerDailyRebuild";
 import { commandShell, loginShell, loginShellArgs } from "@/lib/loginShell";
+import { TERMINAL_FONT_WEIGHT, TERMINAL_FONT_WEIGHT_BOLD, TERMINAL_LINE_HEIGHT } from "@/lib/terminalCell";
 import { usePrefs, useResolvedThemeFull, currentTerminalStack, currentTerminalTheme, currentColorFgBg, currentMinimumContrastRatio } from "@/store/prefs";
 import { spawnArgsForCli, spawnCommandForCli, tryToggleYoloLive, envForCli, agentDisplayName, cliSupportsIdSession, cliSupportsCaptureResume, postLaunchCaptureForCli, decideResume, spawnResumeShape, resumeIdArgsForCli, resumePickerArgsForCli, workDoneCapable, terminalLaunchCommand, isTerminalCli, classifyAgentTitle, compileSignals, hasPendingWork, notificationWantsAttention, PENDING_TAIL_ROWS, STICKY_DONE_MS, ATTENTION_ECHO_MS, builtinBaseId, BUILTIN_OUTPUT_SIGNALS, resolveAgent } from "@/lib/agents";
 import { recordTitle, noteSubmit, noteDone } from "@/lib/agentSignalLog";
@@ -1111,17 +1112,11 @@ const captureArmedRef = useRef(false);
       cursorBlink: true,
       fontFamily: currentTerminalStack(),
       fontSize: usePrefs.getState().terminalFontSize,
-      // Regular 400 / bold 700 — the two static JetBrains Mono masters
-      // bundled with the app. Any other weight forces xterm's WebGL atlas
-      // to interpolate, which WKWebView rasterizes soft. Pinned, not a pref.
-      fontWeight: 400,
-      fontWeightBold: 700,
+      // Pinned, not prefs: see lib/terminalCell.ts.
+      fontWeight: TERMINAL_FONT_WEIGHT,
+      fontWeightBold: TERMINAL_FONT_WEIGHT_BOLD,
       letterSpacing: usePrefs.getState().terminalLetterSpacing,
-      // 1.0 is xterm's default and what TUIs (gemini, claude, etc.) assume.
-      // A larger lineHeight inflates every cell vertically, so any row the TUI
-      // paints with a bg color reads as a visible "ribbon" instead of a tight
-      // band against neighbouring rows.
-      lineHeight: 1.0,
+      lineHeight: TERMINAL_LINE_HEIGHT,
       theme: currentTerminalTheme() as any,
       // Keeps CLI truecolor text readable on a light bg — see
       // currentMinimumContrastRatio (#83).
