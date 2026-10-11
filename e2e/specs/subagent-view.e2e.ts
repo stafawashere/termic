@@ -232,7 +232,7 @@ describe("subagent transcript view", () => {
     // As in Claude Code, the thinking and the tool call fold into one
     // summary line until it is clicked.
     expect(facts.kinds).toEqual(["userText", "group", "assistantText"]);
-    expect(facts.texts[1]).toMatch(/^Thought for \d+s, read 1 file \(ctrl\+o to expand\)$/);
+    expect(facts.texts[1]).toMatch(/^Thought for \d+s, read 1 file$/);
 
     await clickWhenVisible(`${paneSelector(agentId)} [data-testid="subagent-group"]`);
     const members = () => browser.execute((sel) =>
