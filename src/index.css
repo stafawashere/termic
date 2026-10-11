@@ -1575,7 +1575,12 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   --focus-ring: var(--sidebar-focus-ring);
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  /* Each side column starts at the narrowest its cluster can get (the right
+     one never shrinks, the left one down to its truncated text, see
+     .titlebar-trunc), then the title takes its full width, then the sides
+     share what is left. So the badge and the strip truncate before the
+     title does, and the title never runs under a cluster. */
+  grid-template-columns: minmax(min-content, 1fr) auto minmax(max-content, 1fr);
   height: 50px;
   flex-shrink: 0;
   align-items: center;
@@ -1613,9 +1618,33 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   align-items: center;
   overflow: hidden;
 }
+.titlebar-side[data-side="left"] {
+  padding-right: 12px;
+}
 .titlebar-side[data-side="right"] {
   justify-content: flex-end;
   gap: 8px;
+  padding-left: 12px;
+}
+/* Text that gives way first. A nowrap ellipsis would count its whole
+   string toward the left column's min-content and pin the column wide, so
+   this clamps one line instead: min-content becomes one character (or the
+   element's min-width), and the ellipsis still lands at the end. */
+.titlebar-trunc {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+.titlebar-status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
 }
 /* Window in the background: text and glyphs fade, wells and chips do not. */
 .titlebar[data-inactive] .titlebar-ink {
@@ -1676,13 +1705,14 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   border-radius: 8px 0 0 8px;
 }
 .titlebar-session-name {
-  flex-shrink: 0;
+  min-width: 32px;
   max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-size: 12px;
   font-weight: 600;
   color: var(--sidebar-ink-strong);
+}
+.titlebar-session-label {
+  min-width: 48px;
 }
 .titlebar-session-state {
   flex-shrink: 0;
@@ -1701,13 +1731,12 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 }
 .titlebar-session-target {
   max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   color: var(--sidebar-ink);
 }
 .titlebar-session-tool {
   display: flex;
   min-width: 0;
+  flex-shrink: 100;
   align-items: center;
   gap: 4px;
   animation: titlebar-fade-in 120ms cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -1809,12 +1838,15 @@ button.titlebar-title[aria-expanded="true"] {
   background-color: var(--titlebar-title-divider);
 }
 .titlebar-title-project {
-  flex-shrink: 0;
+  min-width: 24px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--sidebar-muted);
 }
 .titlebar-title-branch {
   display: flex;
-  min-width: 0;
+  min-width: 56px;
+  flex-shrink: 100;
   align-items: center;
   gap: 5px;
   font-size: 12px;
@@ -1986,8 +2018,7 @@ button.titlebar-title[aria-expanded="true"] {
 .titlebar-badge {
   display: flex;
   height: 22px;
-  min-width: 0;
-  flex-shrink: 1;
+  flex-shrink: 100;
   align-items: center;
   gap: 6px;
   border-radius: 6px;
@@ -2003,10 +2034,8 @@ button.titlebar-title[aria-expanded="true"] {
 .titlebar-badge[data-tone="e2e"] { --titlebar-badge-tone: var(--color-err); }
 .titlebar-badge[data-tone="beta"] { --titlebar-badge-tone: var(--color-info); }
 .titlebar-badge-branch {
-  min-width: 0;
+  min-width: 40px;
   max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-weight: 400;
   letter-spacing: 0;
   opacity: 0.8;

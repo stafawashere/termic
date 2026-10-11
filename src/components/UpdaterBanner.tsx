@@ -51,7 +51,7 @@ export function UpdaterBanner() {
   // means the window is not on any branch, so it is probably not running
   // what you think it is.
   const branchLabel = branch ? (
-    <span className="titlebar-badge-branch titlebar-mono">
+    <span className="titlebar-badge-branch titlebar-trunc titlebar-mono">
       {branch}
     </span>
   ) : null;

@@ -170,7 +170,7 @@ export function UnifiedBar() {
         {/* Profiles: a bare icon until profiles exist, then the current one's
             dot and name, in the accent wash this bar already carries. */}
         <ProfileChip />
-        <div className="ml-[6px] flex min-w-0 items-center gap-[6px]">
+        <div className="titlebar-status">
         {task && <SessionStrip taskId={task.id} />}
         {/* Waiting-agents pill (issue #56): appears only when an agent needs
             you, jumps to the next on click, across every task. The strip

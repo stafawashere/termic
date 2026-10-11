@@ -95,7 +95,7 @@ export const SessionStrip = memo(function SessionStrip({ taskId }: { taskId: str
       <div data-testid="session-strip" data-state="idle" className="titlebar-well titlebar-session">
         <div className="titlebar-session-main">
           <SessionTrace running={false} />
-          <span className="titlebar-session-meta titlebar-ink">{t("sessionStrip.idle")}</span>
+          <span className="titlebar-session-meta titlebar-session-label titlebar-trunc titlebar-ink">{t("sessionStrip.idle")}</span>
         </div>
       </div>
     );
@@ -131,7 +131,7 @@ export const SessionStrip = memo(function SessionStrip({ taskId }: { taskId: str
           onClick={() => focusSession(taskId, pick.tabId)}
         >
           <SessionTrace running={isRunning && visible} />
-          <span className="titlebar-session-name titlebar-ink">{name}</span>
+          <span className="titlebar-session-name titlebar-trunc titlebar-ink">{name}</span>
           <span data-testid="session-strip-state" data-state={pick.state} className="titlebar-session-state titlebar-ink">
             {t(`sessionStrip.${pick.state}`)}
           </span>
@@ -147,7 +147,7 @@ export const SessionStrip = memo(function SessionStrip({ taskId }: { taskId: str
               <span key={pick.tool} data-testid="session-strip-tool" className="titlebar-session-tool titlebar-session-meta titlebar-ink">
                 <WrenchGlyph size={12} className="shrink-0" />
                 <span>{t("sessionStrip.allow")}</span>
-                <span className="titlebar-session-target titlebar-mono">{pick.tool}</span>
+                <span className="titlebar-session-target titlebar-trunc titlebar-mono">{pick.tool}</span>
               </span>
             </>
           )}
