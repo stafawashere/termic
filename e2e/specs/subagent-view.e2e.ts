@@ -8,6 +8,7 @@
 // is what claude is, and the claude terminal is not on screen while the view
 // is, so the fake agent's stdin directives cannot reach it then.
 
+import { Key } from "webdriverio";
 import { appendFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { dataDir } from "../../wdio.conf.js";
@@ -670,7 +671,14 @@ describe("subagent transcript view", () => {
       const root = document.querySelector(sel)!;
       const heading = root.querySelector<HTMLElement>('[data-heading-level="1"]')!;
       const code = root.querySelector<HTMLElement>('[data-code-language=""]')!;
+      const table = root.querySelector<HTMLElement>('[data-testid="subagent-table"]')!;
+      const style = getComputedStyle(root as HTMLElement);
+      const cell = parseFloat(style.getPropertyValue("--cell"));
+      const row = parseFloat(style.getPropertyValue("--row"));
+      const codeIndent = parseFloat(getComputedStyle(code).paddingLeft);
       return {
+        tableRows: table.getBoundingClientRect().height / row,
+        codeIndentCells: codeIndent / cell,
         heading: [getComputedStyle(heading).fontWeight, getComputedStyle(heading).fontStyle, getComputedStyle(heading).textDecorationLine],
         table: root.querySelector<HTMLElement>('[data-testid="subagent-table"]')!.textContent!.split("\n"),
         codeColor: getComputedStyle(code).color,
@@ -685,20 +693,27 @@ describe("subagent transcript view", () => {
       "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
     ]);
     expect(markdown.codeColor).toBe("rgb(177, 185, 249)");
+    // Five text rows exactly: border, header, rule, body, border.
+    expect(Math.abs(markdown.tableRows - 5)).toBeLessThanOrEqual(0.01);
+    expect(Math.abs(markdown.codeIndentCells - 2)).toBeLessThanOrEqual(0.02);
     await snap("subagent-cli-tools.png");
 
     // ctrl+o in the focused pane unfolds every group, and again folds them
     // all back to their summary lines.
     const pressCtrlO = async () => {
       await browser.execute((sel) => document.querySelector<HTMLElement>(sel)!.focus(), pane);
-      await browser.keys(["Control", "o"]);
-      await browser.keys(["Control"]);
+      await browser.action("key").down(Key.Control).down("o").up("o").up(Key.Control).perform();
     };
+    const finderOpen = () => browser.execute(() => !!document.querySelector('[data-testid="task-finder"]'));
     await pressCtrlO();
     await browser.waitUntil(async () => (await groups()).every(group => group.unfolded), {
       timeout: 5_000,
       timeoutMsg: `ctrl+o never unfolded every group: ${JSON.stringify(await groups())}`,
     });
+    // ctrl+o belongs to the pane, so the app's own ctrl-as-cmd task finder
+    // must stay shut. The finder fades in, so give it time to appear.
+    await browser.pause(400);
+    expect(await finderOpen()).toBe(false);
     await snap("subagent-cli-verbose.png");
     await pressCtrlO();
     await browser.waitUntil(async () => (await groups()).every(group => !group.unfolded), {
@@ -711,6 +726,29 @@ describe("subagent transcript view", () => {
       "Edited 1 file +2 -1, read 1 file, called 3 tools (ctrl+o to expand)",
     ]);
     await snap("subagent-cli-collapsed.png");
+
+    // Cmd+O from inside the pane still opens the task finder on macOS.
+    if (process.platform === "darwin") {
+      await browser.execute((sel) => document.querySelector<HTMLElement>(sel)!.focus(), pane);
+      await browser.action("key").down(Key.Command).down("o").up("o").up(Key.Command).perform();
+      await waitVisible('[data-testid="task-finder"]', 5_000);
+      await browser.action("key").down(Key.Escape).up(Key.Escape).perform();
+      await browser.waitUntil(
+        async () => browser.execute(() => {
+          const storeClosed = !window.__termic!.useUI.getState().taskFinderOpen;
+          const dialogState = document.querySelector('[data-testid="task-finder"]')?.getAttribute("data-state") ?? "gone";
+          return storeClosed && dialogState !== "open";
+        }),
+        {
+          timeout: 10_000,
+          timeoutMsg: `the task finder never closed: ${JSON.stringify(await browser.execute(() => ({
+            open: window.__termic!.useUI.getState().taskFinderOpen,
+            state: document.querySelector('[data-testid="task-finder"]')?.getAttribute("data-state") ?? null,
+            active: (document.activeElement as HTMLElement | null)?.getAttribute("data-testid") ?? document.activeElement?.tagName,
+          })))}`,
+        },
+      );
+    }
 
     const paneCell = await browser.execute((sel) => {
       const style = getComputedStyle(document.querySelector<HTMLElement>(sel)!);

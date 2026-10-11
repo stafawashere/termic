@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isSubagentVerboseChord,
   DEFAULT_BINDINGS, FIXED_SHORTCUTS, GROUP_ORDER, NON_CONFLICTING_GROUPS, SHORTCUT_DEFS,
   bindingFromEvent, bindingMatches, bindingSignature, bindingText, bindingToCmKey, bindingsEqual, isValidBinding, isReservedKey,
 } from "./shortcuts";
@@ -265,5 +266,20 @@ describe("bindingText", () => {
   });
   it("keeps the glyph run on macOS", () => {
     expect(bindingText({ key: "p", cmd: true, shift: true, alt: false }, true)).toBe("⇧⌘P");
+  });
+});
+
+describe("isSubagentVerboseChord", () => {
+  const key = (k: string, mods: Partial<Record<"ctrlKey" | "metaKey" | "altKey" | "shiftKey", boolean>> = {}) =>
+    ({ key: k, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...mods });
+
+  it("is plain ctrl+o and nothing with another modifier on it", () => {
+    expect(isSubagentVerboseChord(key("o", { ctrlKey: true }))).toBe(true);
+    expect(isSubagentVerboseChord(key("O", { ctrlKey: true }))).toBe(true);
+    expect(isSubagentVerboseChord(key("o", { metaKey: true }))).toBe(false);
+    expect(isSubagentVerboseChord(key("o", { ctrlKey: true, metaKey: true }))).toBe(false);
+    expect(isSubagentVerboseChord(key("o", { ctrlKey: true, shiftKey: true }))).toBe(false);
+    expect(isSubagentVerboseChord(key("o", { ctrlKey: true, altKey: true }))).toBe(false);
+    expect(isSubagentVerboseChord(key("p", { ctrlKey: true }))).toBe(false);
   });
 });

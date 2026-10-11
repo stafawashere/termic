@@ -67,7 +67,7 @@ function Block({ block }: { block: MarkdownBlock }) {
     case "code": {
       const hasLanguage = block.language !== "";
       return (
-        <div data-code-language={block.language} className={cn("whitespace-pre-wrap", !hasLanguage && "text-[var(--cc-permission)]")}>
+        <div data-code-language={block.language} className={cn("whitespace-pre-wrap pl-[calc(var(--cell)*2)]", !hasLanguage && "text-[var(--cc-permission)]")}>
           {block.lines.length > 0 ? block.lines.join("\n") : "\u00A0"}
         </div>
       );

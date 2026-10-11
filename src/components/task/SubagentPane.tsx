@@ -28,6 +28,7 @@ import { spinnerMessage, toolDisplay, transcriptStats } from "@/lib/subagentCliV
 import { isAnsiTheme, paletteStyle, resolveClaudePalette, STALL_RED } from "@/lib/claudePalette";
 import { TERMINAL_FONT_WEIGHT } from "@/lib/terminalCell";
 import { useClaudeTheme } from "@/store/claudeTheme";
+import { isSubagentVerboseChord } from "@/lib/shortcuts";
 import { openTranscriptSession, type TranscriptSession, type TranscriptSnapshot } from "@/store/subagentPreview";
 import { currentTerminalStack, currentTerminalTheme, usePrefs, useResolvedThemeFull } from "@/store/prefs";
 import { useSubagents, type SubagentState } from "@/store/subagents";
@@ -284,8 +285,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   // ctrl+o, as in Claude Code: every group unfolds into its calls, or folds
   // back to its summary line.
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const isToggle = event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "o";
-    if (!isToggle) return;
+    if (!isSubagentVerboseChord(event)) return;
 
     event.preventDefault();
     setVerbose(current => !current);

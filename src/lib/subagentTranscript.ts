@@ -359,8 +359,12 @@ export function visibleRange(
   const count = offsets.length - 1;
   if (count <= 0) return { first: 0, end: 0 };
 
-  const top = Math.max(0, scrollTop - overscanPx);
-  const bottom = scrollTop + viewportHeight + overscanPx;
+  // A scrollTop read before the content shrank can point past the end; the
+  // scroller has already clamped it, so clamp it here too.
+  const deepest = Math.max(0, offsets[count] - viewportHeight);
+  const reachable = Math.min(scrollTop, deepest);
+  const top = Math.max(0, reachable - overscanPx);
+  const bottom = reachable + viewportHeight + overscanPx;
 
   let low = 0;
   let high = count - 1;

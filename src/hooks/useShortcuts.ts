@@ -39,7 +39,7 @@ import { focusMainTab, focusPaneTab } from "@/lib/tabFocus";
 import { jumpToNextWaiting } from "@/lib/waitingAgents";
 import { newScratchTab } from "@/lib/scratchTabs";
 import { dirHistoryTarget, goDirHistory } from "@/lib/dirTabs";
-import { bindingMatches, eventKeyToken, isTabKey, IS_MAC, SHORTCUT_DEFS, type ShortcutId } from "@/lib/shortcuts";
+import { bindingMatches, eventKeyToken, isSubagentVerboseChord, isTabKey, IS_MAC, SHORTCUT_DEFS, type ShortcutId } from "@/lib/shortcuts";
 import { isTerminalCloseCombo } from "@/lib/terminalFind";
 import { visualProjectOrder } from "@/lib/projectGroups";
 import type { TerminalTab } from "@/lib/types";
@@ -107,6 +107,9 @@ export function useShortcuts() {
       // (not Cmd) is down and a terminal has focus, bail so the keystroke
       // reaches the shell/editor. App shortcuts still work via Cmd. (issue #10)
       if (IS_MAC && e.ctrlKey && !e.metaKey && inTermFocused()) return;
+      // Same deal for the subagent view's ctrl+o, which toggles its verbose
+      // mode the way it does in claude.
+      if (isSubagentVerboseChord(e) && inSubagentViewFocused()) return;
 
       // Double-Shift → Search Everywhere (GH #174), JetBrains' gesture. Not a
       // registry binding because the registry describes chords, and this is a
@@ -859,6 +862,10 @@ function useCtrlTabWalk() {
       window.removeEventListener("blur", onBlur);
     };
   }, []);
+}
+
+function inSubagentViewFocused() {
+  return !!(document.activeElement as HTMLElement | null)?.closest?.('[data-testid="subagent-pane"]');
 }
 
 function inTermFocused() {

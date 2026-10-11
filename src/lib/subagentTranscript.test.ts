@@ -283,3 +283,11 @@ describe("groupToolRuns", () => {
     expect(display[2].entry?.row.text).toBe("done");
   });
 });
+
+describe("visibleRange after the content shrinks", () => {
+  it("reads a scrollTop past the end as the bottom, so the rows on screen stay mounted", () => {
+    const offsets = rowOffsets(4, () => 30);
+    expect(visibleRange(offsets, 5_000, 200, 0)).toEqual({ first: 0, end: 4 });
+    expect(visibleRange(rowOffsets(20, () => 30), 5_000, 90, 0)).toEqual({ first: 17, end: 20 });
+  });
+});

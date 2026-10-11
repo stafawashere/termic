@@ -373,6 +373,14 @@ export function eventCmd(e: KeyboardEvent): boolean {
   return e.metaKey || e.ctrlKey || superIsHeld();
 }
 
+/** Plain Ctrl+O, the subagent view's own verbose toggle, as in claude.
+ *  Inside that view it belongs to the view: the app folds Ctrl into Cmd,
+ *  so without this it would also open the task finder. Cmd+O still does. */
+export function isSubagentVerboseChord(e: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">): boolean {
+  const onlyCtrl = e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+  return onlyCtrl && e.key.toLowerCase() === "o";
+}
+
 const TERMINAL_OWN: ReadonlySet<ShortcutId> = new Set<ShortcutId>(["terminal-copy", "terminal-paste", "find-in-files"]);
 
 /** Off macOS: is this key one of the app's chords that a TERMINAL should let
