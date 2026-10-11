@@ -1,5 +1,6 @@
-// Full release-notes browser. Opened from the sidebar UpdateCard's
-// "Changelog →" link (and reusable from anywhere via useUI().openChangelog()).
+// Full release-notes browser. Opened from the sidebar footer's mail button,
+// the UpdateCard's "Changelog" link, and anywhere else via
+// useUI().openChangelog(). Its title line carries the Contact mailto.
 //
 // The body is the human-authored CHANGELOG.md, rendered with the same
 // markdown pipeline as the editor's preview (MarkdownPreview). Data comes
@@ -13,8 +14,10 @@ import { useTranslation } from "react-i18next";
 import { useUI } from "@/store/ui";
 import { useUpdate } from "@/store/update";
 import { usePrefs, resolveTheme } from "@/store/prefs";
-import { AppDialog } from "@/components/ui/Dialog";
-import { Loader2 } from "lucide-react";
+import { AppDialog, dialogTitleAction } from "@/components/ui/Dialog";
+import { Tip } from "@/components/ui/Tooltip";
+import { CONTACT_ADDRESS, openMailto } from "@/lib/contact";
+import { Loader2, Mail } from "lucide-react";
 
 // markdown-it + mermaid are heavy; load the renderer only when the dialog
 // actually shows notes (same lazy split the editor preview uses).
@@ -55,6 +58,20 @@ export function ChangelogDialog() {
       onOpenChange={(v) => { if (!v) close(); }}
       title={t("changelog.title")}
       className="max-w-4xl"
+      titleAction={
+        // Contact lives here since the sidebar's mail button became What's New.
+        <Tip content={t("changelog.contactTip", { address: CONTACT_ADDRESS })}>
+          <button
+            type="button"
+            data-testid="changelog-contact"
+            {...dialogTitleAction}
+            onClick={() => openMailto(CONTACT_ADDRESS, t("changelog.contactSubject"), "")}
+          >
+            <Mail className="h-3.5 w-3.5" />
+            {t("changelog.contact")}
+          </button>
+        </Tip>
+      }
     >
       {!hasData && status === "loading" && (
         <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-[var(--color-fg-dim)]">

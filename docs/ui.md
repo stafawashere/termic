@@ -278,10 +278,8 @@ accent is the theme's, never a literal.
 - **Menus** opt in with `.sidebar-menu`, which restyles the shared menu
   primitives (34px items, labelled sections, checked rows) for the sidebar
   only.
-- **The bottom bar** stays `--bottom-bar-h` (36px, shared with every
-  other bottom bar). Its glyphs are the sidebar's own, 17px, in 30px
-  buttons; the row is shifted so the gear's glyph ends where the tree's
-  badges do.
+- **The bottom bar** is the sidebar half of the footer strip (see "The
+  footer strip" below).
 - **The icon rail** stacks the views in the same well. Every row is a 32px
   tile (`.sidebar-rail-tile`) with a corner dot for what its full row would
   draw.
@@ -291,6 +289,70 @@ accent is the theme's, never a literal.
 - **Accent presets** (group folders, task groups, profiles) paint with
   `--color-swatch-*`, the palette at 57% chroma. The raw `--color-palette-*`
   still drives state marks and links.
+
+## The footer strip
+
+Two footers read as one strip across the bottom of the window: the
+sidebar's (`SidebarFooter`, `sidebar-footer`) and the task's (`FooterBar`
+in `TerminalPane.tsx`, `task-footer`). Both are `--footer-h` (46px) with a
+1px `--footer-border` top hairline and a white top highlight, and the
+sidebar's right border runs through as the divider. `--bottom-bar-h` stays
+36px for the bars that are not part of the strip: the split terminal's tab
+strip and the right panel's footer. Tokens: docs/themes.md "Footer tokens".
+Glyphs are the design's own paths, in `src/components/footer/footerIcons.tsx`.
+
+Both are built from the sidebar's wells (`.footer-well`, `--sidebar-well-*`):
+3px padding, 8px radius, 2px gap.
+
+**The sidebar half.** One well holds theme (`footer-theme`), bug
+(`footer-bug`), mail (`footer-whats-new`), keyboard (`footer-shortcuts`) and
+activity (`open-activity`); settings (`footer-settings`) sits in its own
+well at the far edge. Each is a 32x26 `.footer-icon-btn` with a 16px,
+1.8-stroke glyph in `--sidebar-footer-icon`, hovering to
+`--sidebar-seg-hover`. The theme glyph is a moon, or in light a sun in
+`--footer-sun`. The icon rail keeps a vertical stack of the same buttons
+(`.sidebar-footer-btn`, 22px glyphs).
+
+The bug button opens a prefilled GitHub issue. The mail button opens the
+Changelog (What's New) dialog and marks the running version seen through
+`dismissWhatsNew`. While `isWhatsNewUnread(currentVersion,
+lastSeenVersion)` holds, a 6px `--color-accent` dot with a glow and a ring
+in the well's colour sits at the glyph's top-right
+(`footer-whats-new-dot`). The watermark is the update store's
+`updateLastSeenVersion`, so the dot stays gone across a reload and comes
+back only when a newer version runs. A fresh install adopts its version
+silently and shows no dot. `dismissWhatsNew` writes nothing when the
+version is already seen. The unread flag is a primitive boolean selected
+inside the footer, a memo component, so a version change re-renders the
+bar and not the sidebar. The contact mailto (`src/lib/contact.ts`, which
+also copies the address, #103) lives in the Changelog dialog's title line
+as `changelog-contact`.
+
+**The task half.** Left, one well with two 26px segments (`.footer-seg`):
+Queue messages (`queue-button`) and Terminal (`footer-terminal`). A
+segment is raised (`data-active`, the sidebar's chip gradient, weight 600)
+while it is in use: Queue while it holds messages or its popover is open,
+with its glyph in `--color-accent` and the count in a 16px pill
+(`queue-count`, hidden at 0); Terminal while the bottom split is open and
+expanded. Terminal runs `toggleBottomTerminal`, the same action as ⌘J. The
+Queue control stays in this bar while the split is open; the split strip no
+longer carries a second copy, so a task has exactly one. Labels drop below
+680px of bar width (a container query), counts never do.
+
+Right, the usage readouts ("The usage readout" below), the "N blocked"
+count when the cage has denied something, and the sandbox chip
+(`footer-sandbox`) pinned rightmost: 30px, 8px radius, a 1px
+`--footer-chip-border`, shield glyph, "Sandbox" and a keycap naming the
+state (`.footer-tag`: OFF, ON, FS, LOG, DOCKER). An enforcing cage tints
+border, wash and keycap with `--color-ok`, monitoring with `--color-warn`.
+A click opens the sandbox dialog, the same action as the title bar's
+sandbox segment, so the two never disagree. `data-sandbox-mode` names the
+mode for specs.
+
+**Window in the background:** `initWindowFocus` mirrors `windowFocused`
+onto `data-window-inactive` on the root, and `.footer-ink` (text and
+glyphs) fades to 55% under it; wells and chips do not. An attribute rather
+than a subscription per bar, so a focus change costs no React render.
 
 ## The sidebar's filter bar
 
@@ -2439,27 +2501,41 @@ It is localStorage and not a `last_opened_at` on the `Task` record for the same
 reason folder colours are: it is a per-machine UI convenience, and a disk write
 on every task click would be the wrong trade.
 
-## A gauge that is a background, and what it costs the text on it
+## The usage readout: one meter per window, named in words
 
-The task footer's usage chip (GH #277) draws each window's gauge as the fill
-behind its own figure: `85% wk` sits on a box filled 85% of the way across,
-with the unused part left as a visible track. It has been three designs, and
+The task footer's usage chip (GH #277) is a recessed well (`.footer-usage`):
+the agent's brand glyph with a soft glow, then one reading per window. The
+lead window gets a 64x4 meter and its figure in words, `42% of 5h limit`;
+any reading beside it (the week next to the session, the context) is
+compact, a 24px meter and `95% wk`, so a chip carrying everything stays
+near 290px and two agents still fit one bar. It has been four designs, and
 the reasons are worth keeping because they are not about this chip.
 
-The context window (`NN% ctx`) is a third gauge of the same kind, LEADING the
-chip because it is this conversation's number rather than the account's. It
-uses its own thresholds (80 / 90, `contextLevel`), later than the plan's,
+One bar, showing whichever window was closest to its limit, sat hard against
+the 5h number and displayed the OTHER one. Two pill bars fixed that and left
+four marks for two facts. The third design drew each window's gauge as the
+fill BEHIND its own figure, which nothing could misread but which cost the
+text contrast exactly when it mattered (amber on amber measured 3.3:1). The
+footer design brought the bar back, and what makes it safe this time is the
+label: every meter is followed by the window it measures, spelled out, so no
+bar on the row can be read against the other window's number.
+
+The meter's fill is `--color-accent` (a gradient from a darker mix of it),
+`--color-warn` at the warn level and `--color-err` at critical, where the
+label takes the same hue; at `normal` the label is `--sidebar-ink`. A stale
+reading halves the fill's opacity. The width eases over 300ms and nothing
+else animates. Colour comes from `data-level` in `index.css`, never from
+`transition-colors`, which never repaints a themed colour in WKWebView
+(docs/gotchas.md). An agent that can report and has not shows a dashed
+track and "Usage unknown".
+
+The context window (`NN% ctx`) is a third reading of the same kind, LEADING
+the chip because it is this conversation's number rather than the account's.
+It uses its own thresholds (80 / 90, `contextLevel`), later than the plan's,
 because a filling context is a session's normal life and only the approach to
 compaction is news. Each readout can be switched off per agent in Settings >
 Agents (`agentFooterHidden` in prefs, stored as opt-outs); hiding usage also
 stops the pull transports asking, so a hidden number spawns nothing.
-
-One bar, showing whichever window was closest to its limit, sat hard against
-the 5h number and displayed the OTHER one. Two bars fixed that and left four
-marks for two facts, costing 56px of a bar that starts hiding chips at 780px
-(264px with the pills, 219px without). Both were reported by someone looking
-straight at the thing, which is the only evidence that counts for a footer
-meant to be read at a glance.
 
 **A chip is fully shown or not shown at all, and the bar says when it hid
 one.** The original rule was a single hide-below-780px on a secondary agent's
@@ -2488,35 +2564,13 @@ ResizeObserver, scope it to the chip strip and set state only when the fitting
 count changes, never per pixel.
 
 The chips also sit in their own `min-w-0 overflow-hidden` box inside the right
-group, so width is shed from the left and the sandbox status stays pinned as
+group, so width is shed from the left and the sandbox chip stays pinned as
 the rightmost item whatever happens.
 
-**A fill behind text costs that text contrast, and the cost lands where you
-can least afford it.** Amber text on an amber fill measures 3.3:1 in dark
-mode, so the number gets hardest to read exactly when it matters most, and
-tuning the mix does not rescue it (22% still only reaches 4.08). So the BOX
-carries the severity and the text carries the reading: warn and critical inks
-go neutral-bright instead of taking their own hue, which puts every
-level/theme pairing above 4.5:1 and in light mode actually improves on what
-shipped before (warn was 3.71:1 on cream). A red-filled box is louder than red
-text ever was.
-
-**The quiet end is where the real constraint binds.** `normal` keeps a dim ink
-so a calm chip does not shout, and dim ink falls through 4.5:1 once its fill
-passes 18%. That caps how visible a calm gauge's fill EDGE can be (1.40 in
-dark against 5.87 for warn). The trade is stated rather than hidden: the box
-is always plainly a box, so a nearly-empty one is never mistaken for a failed
-render, and the fill earns visibility as it grows.
-
-Two mechanics that generalise: the fill is a **hard stop**, not a fade, because
-a gradient that eases out has no readable edge and "where does it end" is the
-whole question the shape answers; and both layers are `color-mix(...,
-transparent)` over the footer's own ground, so a custom theme's tokens carry
-through without the component knowing any of them.
-
-Measurements live next to the constants in `AgentChip.tsx`. Re-derive them
-before moving a number, and do it in both themes: every one of these values is
-the ceiling of something.
+The footer classes live in `@layer components` in `index.css`. Unlayered,
+`.footer-usage`'s `display: flex` beat the chip's container-query `hidden`
+utility (layered CSS always loses to unlayered), so no chip ever hid and
+two chips ran past a 600px bar.
 
 ## Scheduled queue messages (GH #300)
 

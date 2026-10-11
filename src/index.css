@@ -158,6 +158,24 @@
   --titlebar-menu-top:      #202020;
   --titlebar-menu-bottom:   #1c1c1c;
   --titlebar-menu-shadow:   0 18px 40px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  /* The two bottom footers ("Footers" design, docs/themes.md "Footer
+     tokens"): the sidebar's bar and the task's bar, one 46px strip across
+     the window. Wells, raised chips, counts and ink reuse the --sidebar-*
+     family; these are the values it has no name for. */
+  --footer-h:               46px;
+  --footer-bg-top:          #1a1a1a;
+  --footer-bg-bottom:       #161616;
+  --footer-border:          #242424;
+  --footer-highlight:       rgba(255, 255, 255, 0.035);
+  --footer-side-highlight:  rgba(255, 255, 255, 0.03);
+  --footer-chip-border:     #262626;
+  --footer-chip-hover:      #202020;
+  --footer-well-hover-ring: #2a2a2a;
+  --footer-tag-bg:          #222222;
+  --footer-meter-track:     #1f1f1f;
+  --footer-meter-shadow:    inset 0 1px 1px rgba(0, 0, 0, 0.6);
+  --footer-meter-dash:      #2a2a2a;
+  --footer-sun:             #e8b44a;
   --color-bg:        #0c0c0c;
   --color-bg-1:      #141414;
   --color-bg-2:      #1c1c1c;
@@ -704,6 +722,19 @@
     --titlebar-menu-top:      color-mix(in srgb, var(--color-bg-1) 94%, var(--color-fg));
     --titlebar-menu-bottom:   color-mix(in srgb, var(--color-bg-1) 96%, var(--color-fg));
     --titlebar-menu-shadow:   0 18px 40px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    --footer-bg-top:          color-mix(in srgb, var(--color-bg-1) 96%, var(--color-fg));
+    --footer-bg-bottom:       color-mix(in srgb, var(--color-bg-1) 98.5%, var(--color-fg));
+    --footer-border:          color-mix(in srgb, var(--color-bg-1) 93%, var(--color-fg));
+    --footer-highlight:       rgba(255, 255, 255, 0.035);
+    --footer-side-highlight:  rgba(255, 255, 255, 0.03);
+    --footer-chip-border:     color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
+    --footer-chip-hover:      color-mix(in srgb, var(--color-bg-1) 94%, var(--color-fg));
+    --footer-well-hover-ring: color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --footer-tag-bg:          color-mix(in srgb, var(--color-bg-1) 93%, var(--color-fg));
+    --footer-meter-track:     color-mix(in srgb, var(--color-bg-1) 95%, var(--color-fg));
+    --footer-meter-shadow:    inset 0 1px 1px rgba(0, 0, 0, 0.6);
+    --footer-meter-dash:      color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --footer-sun:             var(--color-warn);
   }
 
   /* Light: the same relationships turned over. Wells are a shade darker
@@ -802,6 +833,19 @@
     --titlebar-menu-top:      var(--color-bg);
     --titlebar-menu-bottom:   color-mix(in srgb, var(--color-bg) 96%, var(--color-fg));
     --titlebar-menu-shadow:   0 18px 40px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    --footer-bg-top:          var(--color-bg-1);
+    --footer-bg-bottom:       color-mix(in srgb, var(--color-bg-1) 97%, var(--color-fg));
+    --footer-border:          var(--color-border-soft);
+    --footer-highlight:       rgba(255, 255, 255, 0.7);
+    --footer-side-highlight:  rgba(255, 255, 255, 0.7);
+    --footer-chip-border:     var(--color-border);
+    --footer-chip-hover:      color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
+    --footer-well-hover-ring: var(--color-border);
+    --footer-tag-bg:          color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --footer-meter-track:     color-mix(in srgb, var(--color-bg-1) 86%, var(--color-fg));
+    --footer-meter-shadow:    inset 0 1px 1px rgba(0, 0, 0, 0.15);
+    --footer-meter-dash:      color-mix(in srgb, var(--color-bg-1) 75%, var(--color-fg));
+    --footer-sun:             var(--color-warn);
   }
 
   ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -1881,6 +1925,261 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 .sidebar-footer-btn:hover {
   background-color: var(--sidebar-row-hover);
   color: var(--sidebar-btn-hover-ink);
+}
+/* The two footers (docs/ui.md "The footer strip"): the sidebar's bar and
+   the task's bar share --footer-h, a top hairline and a top highlight, so
+   they read as one strip with the sidebar's right border running through. */
+/* Layered so a Tailwind utility on the same element wins: the chip strip
+   hides chips with container-query hidden utilities, which an unlayered
+   `display` here would override. */
+@layer components {
+  .sidebar-footer[data-expanded] {
+    height: var(--footer-h);
+    gap: 8px;
+    padding: 0 10px;
+    border-top: 1px solid var(--footer-border);
+    box-shadow: inset 0 1px 0 var(--footer-side-highlight);
+  }
+  .task-footer {
+    display: flex;
+    height: var(--footer-h);
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px 0 10px;
+    border-top: 1px solid var(--footer-border);
+    background-image: linear-gradient(180deg, var(--footer-bg-top), var(--footer-bg-bottom));
+    box-shadow: inset 0 1px 0 var(--footer-highlight);
+  }
+  /* The split strip above already draws the line. */
+  .task-footer[data-seamless] {
+    border-top-color: transparent;
+  }
+  .footer-well {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 8px;
+    background-color: var(--sidebar-well-bg);
+    box-shadow: var(--sidebar-well-shadow);
+  }
+  .footer-icon-btn {
+    position: relative;
+    display: flex;
+    height: 26px;
+    width: 32px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: var(--sidebar-footer-icon);
+    transition: background-color 120ms, color 120ms;
+  }
+  .footer-icon-btn:hover,
+  .footer-icon-btn[aria-expanded="true"] {
+    background-color: var(--sidebar-seg-hover);
+    color: var(--sidebar-btn-hover-ink);
+  }
+  .footer-icon-btn:active {
+    background-color: var(--titlebar-pressed-bg);
+    box-shadow: var(--titlebar-pressed-shadow);
+  }
+  .footer-unread-dot {
+    position: absolute;
+    top: 4px;
+    right: 7px;
+    height: 6px;
+    width: 6px;
+    border-radius: 50%;
+    background-color: var(--color-accent);
+    box-shadow: 0 0 0 2px var(--sidebar-well-bg), 0 0 6px color-mix(in srgb, var(--color-accent) 60%, transparent);
+  }
+  .footer-seg {
+    display: flex;
+    height: 26px;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 7px;
+    padding: 0 11px 0 9px;
+    border-radius: 6px;
+    white-space: nowrap;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--sidebar-icon);
+    transition: background-color 120ms, color 120ms;
+  }
+  .footer-seg:hover {
+    color: var(--sidebar-icon-active);
+  }
+  .footer-seg:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+  .footer-seg:disabled:hover {
+    color: var(--sidebar-icon);
+  }
+  .footer-seg[data-active] {
+    background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+    box-shadow: var(--sidebar-chip-shadow);
+    font-weight: 600;
+    color: var(--sidebar-icon-active);
+  }
+  .footer-seg[data-active] .footer-seg-accent {
+    color: var(--color-accent);
+  }
+  .footer-count {
+    display: flex;
+    height: 16px;
+    min-width: 16px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    border-radius: 8px;
+    background-color: var(--sidebar-count-bg);
+    font-size: 10px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--sidebar-ink);
+  }
+  .footer-usage {
+    display: flex;
+    height: 30px;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 9px;
+    padding: 0 12px 0 10px;
+    border-radius: 8px;
+    background-color: var(--sidebar-well-bg);
+    box-shadow: var(--sidebar-well-shadow);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--sidebar-ink);
+    transition: box-shadow 120ms;
+  }
+  .footer-usage:hover,
+  .footer-usage[aria-expanded="true"] {
+    box-shadow: var(--sidebar-well-shadow), inset 0 0 0 1px var(--footer-well-hover-ring);
+  }
+  .footer-usage[data-quiet] {
+    color: var(--sidebar-muted);
+  }
+  .footer-usage[data-alert] {
+    color: var(--color-warn);
+  }
+  .footer-usage-glyph {
+    display: flex;
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 45%, transparent));
+  }
+  .footer-usage-sep {
+    color: var(--sidebar-faint);
+  }
+  .footer-usage-window {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 9px;
+  }
+  .footer-usage-window[data-compact] {
+    gap: 6px;
+  }
+  .footer-usage-window[data-compact] .footer-meter {
+    width: 24px;
+  }
+  .footer-usage-window[data-level="warn"] .footer-usage-label {
+    color: var(--color-warn);
+  }
+  .footer-usage-window[data-level="critical"] .footer-usage-label {
+    color: var(--color-err);
+  }
+  .footer-usage-unknown {
+    color: var(--sidebar-muted);
+  }
+  .footer-meter {
+    position: relative;
+    height: 4px;
+    width: 64px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 2px;
+    background-color: var(--footer-meter-track);
+    box-shadow: var(--footer-meter-shadow);
+  }
+  .footer-meter-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: 2px;
+    background-image: linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 78%, rgb(0, 0, 0)), var(--color-accent));
+    box-shadow: 0 0 6px color-mix(in srgb, var(--color-accent) 40%, transparent);
+    transition: width 300ms;
+  }
+  .footer-usage-window[data-level="warn"] .footer-meter-fill {
+    background-image: linear-gradient(90deg, color-mix(in srgb, var(--color-warn) 78%, rgb(0, 0, 0)), var(--color-warn));
+    box-shadow: 0 0 6px color-mix(in srgb, var(--color-warn) 40%, transparent);
+  }
+  .footer-usage-window[data-level="critical"] .footer-meter-fill {
+    background-image: linear-gradient(90deg, color-mix(in srgb, var(--color-err) 78%, rgb(0, 0, 0)), var(--color-err));
+    box-shadow: 0 0 6px color-mix(in srgb, var(--color-err) 40%, transparent);
+  }
+  .footer-usage-window[data-stale] .footer-meter-fill {
+    opacity: 0.5;
+  }
+  .footer-meter[data-unknown] {
+    background-image: repeating-linear-gradient(90deg, var(--footer-meter-dash) 0 4px, transparent 4px 7px);
+  }
+  .footer-sandbox {
+    display: flex;
+    height: 30px;
+    min-width: 0;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 7px;
+    padding: 0 11px 0 9px;
+    border: 1px solid var(--footer-chip-border);
+    border-radius: 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--sidebar-muted);
+    transition: background-color 120ms, border-color 120ms;
+  }
+  .footer-sandbox:hover {
+    background-color: var(--footer-chip-hover);
+  }
+  .footer-sandbox[data-tone="ok"] {
+    border-color: color-mix(in srgb, var(--color-ok) 35%, transparent);
+    background-color: color-mix(in srgb, var(--color-ok) 5%, transparent);
+  }
+  .footer-sandbox[data-tone="warn"] {
+    border-color: color-mix(in srgb, var(--color-warn) 35%, transparent);
+    background-color: color-mix(in srgb, var(--color-warn) 5%, transparent);
+  }
+  .footer-sandbox[data-tone]:hover {
+    background-color: var(--footer-chip-hover);
+  }
+  .footer-tag {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background-color: var(--footer-tag-bg);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: var(--sidebar-muted);
+  }
+  .footer-sandbox[data-tone="ok"] .footer-tag {
+    background-color: color-mix(in srgb, var(--color-ok) 12%, transparent);
+    color: var(--color-ok);
+  }
+  .footer-sandbox[data-tone="warn"] .footer-tag {
+    background-color: color-mix(in srgb, var(--color-warn) 12%, transparent);
+    color: var(--color-warn);
+  }
+  /* Window in the background: text and glyphs fade, wells and chips do not. */
+  :root[data-window-inactive] .footer-ink {
+    opacity: 0.55;
+  }
 }
 /* The icon rail's tiles: view buttons aside, every row on the rail is one
    32px tile with a corner dot for the state its row would have drawn. */

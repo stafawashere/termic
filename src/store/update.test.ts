@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 vi.mock("@/store/app", () => ({ useApp: { getState: vi.fn(() => ({})), setState: vi.fn(), subscribe: vi.fn() } }));
 
 import { check } from "@tauri-apps/plugin-updater";
-import { cmpVersion, entryFor, useUpdate } from "@/store/update";
+import { cmpVersion, entryFor, isWhatsNewUnread, useUpdate } from "@/store/update";
 import type { ChangelogEntry } from "@/store/update";
 
 // ── cmpVersion ────────────────────────────────────────────────────────
@@ -158,5 +158,76 @@ describe("checkNow", () => {
     await useUpdate.getState().checkNow();
     const s = useUpdate.getState();
     expect(s.update && s.update.version !== s.dismissedVersion).toBe(true);
+  });
+});
+
+// ── what's new ───────────────────────────────────────────────────────
+
+describe("isWhatsNewUnread", () => {
+  it("is unread when the running version is newer than the seen one", () => {
+    expect(isWhatsNewUnread("1.2.0", "1.1.9")).toBe(true);
+  });
+
+  it("is read when the running version is the seen one", () => {
+    expect(isWhatsNewUnread("1.2.0", "1.2.0")).toBe(false);
+  });
+
+  it("is read when the seen version is newer, after a downgrade", () => {
+    expect(isWhatsNewUnread("1.1.0", "1.2.0")).toBe(false);
+  });
+
+  it("is read while the running version is still unresolved", () => {
+    expect(isWhatsNewUnread("", "1.2.0")).toBe(false);
+    expect(isWhatsNewUnread("", "")).toBe(false);
+  });
+});
+
+describe("dismissWhatsNew", () => {
+  const store = new Map<string, string>();
+  const setItem = vi.fn((k: string, v: string) => { store.set(k, String(v)); });
+
+  beforeEach(() => {
+    store.clear();
+    setItem.mockClear();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem,
+      removeItem: (k: string) => { store.delete(k); },
+      clear: () => { store.clear(); },
+    });
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("persists the running version as seen", () => {
+    useUpdate.setState({ currentVersion: "1.2.0", lastSeenVersion: "1.1.0" });
+
+    useUpdate.getState().dismissWhatsNew();
+
+    expect(useUpdate.getState().lastSeenVersion).toBe("1.2.0");
+    expect(store.get("updateLastSeenVersion")).toBe("1.2.0");
+  });
+
+  it("writes nothing when the running version is already seen", () => {
+    useUpdate.setState({ currentVersion: "1.2.0", lastSeenVersion: "1.2.0" });
+    const notify = vi.fn();
+    const unsubscribe = useUpdate.subscribe(notify);
+
+    useUpdate.getState().dismissWhatsNew();
+    unsubscribe();
+
+    expect(notify).not.toHaveBeenCalled();
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing before the running version resolves", () => {
+    useUpdate.setState({ currentVersion: "", lastSeenVersion: "1.1.0" });
+    const notify = vi.fn();
+    const unsubscribe = useUpdate.subscribe(notify);
+
+    useUpdate.getState().dismissWhatsNew();
+    unsubscribe();
+
+    expect(notify).not.toHaveBeenCalled();
+    expect(setItem).not.toHaveBeenCalled();
   });
 });

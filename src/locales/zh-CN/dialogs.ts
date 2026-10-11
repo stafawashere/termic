@@ -19,6 +19,9 @@ export default {
     loadError: "无法加载更新日志。",
     empty: "暂无更新日志条目。",
     installed: "已安装",
+    contact: "联系我们",
+    contactTip: "发送邮件至 {{address}}（地址也会复制到剪贴板）",
+    contactSubject: "Hello from Termic",
   },
   closeDialog: {
     title: "关闭 Termic？",
