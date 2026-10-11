@@ -12,7 +12,7 @@ import { usePrefs, scheduledNavVisible, taskLocationIconShown } from "@/store/pr
 import { Button } from "@/components/ui/Button";
 import { Tip } from "@/components/ui/Tooltip";
 import { Spinner } from "@/components/ui/Spinner";
-import { LayoutGrid, History, Columns3, CalendarClock, FolderPlus, Settings, Plus, Archive, Layers, Moon, Cog, MoreVertical, GitBranch, GitBranchPlus, FolderGit2, ChevronRight, ChevronDown, Bug, Mail, Zap, X, Pencil, Copy, ChevronsDownUp, ChevronsUpDown, Check, AudioWaveform, Radio, SquareChevronRight, CircleStop, Trash2, Folder, FolderMinus, FolderOpen, Megaphone, Keyboard, Activity, Waypoints, Square, Play, GitPullRequest } from "lucide-react";
+import { LayoutGrid, History, Columns3, CalendarClock, FolderPlus, Settings, Plus, Archive, Layers, Moon, Cog, MoreVertical, GitBranch, GitBranchPlus, FolderGit2, ChevronRight, ChevronDown, Bug, Mail, Zap, X, Pencil, Copy, Check, AudioWaveform, Radio, SquareChevronRight, CircleStop, Trash2, Folder, FolderMinus, FolderOpen, Megaphone, Keyboard, Activity, Waypoints, Square, Play, GitPullRequest } from "lucide-react";
 import { DropdownRoot, DropdownTrigger, DropdownMenu, DropdownItem, DropdownSeparator, DropdownLabel, DropdownSub, DropdownSubTrigger, DropdownSubContent } from "@/components/ui/Dropdown";
 import { ContextMenuRoot, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuLabel, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent } from "@/components/ui/ContextMenu";
 import { ProjectActionsMenuItems } from "./ProjectActionsMenuItems";
@@ -1414,18 +1414,18 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
             {/* preventDefault on close keeps focus from snapping back to the
                 trigger, which would otherwise re-fire its (focus-triggered)
                 tooltip and leave it stuck open after selecting an item. */}
-            <DropdownMenu side="right" align="start" sideOffset={4} className="w-[280px]" onCloseAutoFocus={(e) => e.preventDefault()}>
+            <DropdownMenu side="right" align="start" sideOffset={4} className="sidebar-menu w-[280px]" onCloseAutoFocus={(e) => e.preventDefault()}>
               {/* Both actions cover group folders too — expanding agents
                   under a still-collapsed folder would look like a no-op,
                   and "collapse all" means the whole tree tidies up. Task rows
                   have no throwaway fold, so while the query filters they are
                   left alone rather than rewriting the stored layout. */}
               <DropdownItem onSelect={() => setTreeExpanded(true)}>
-                <ChevronsUpDown className="h-5 w-5 text-[var(--color-fg-dim)]" />
+                <ExpandAllGlyph size={14} strokeWidth={2} className="shrink-0 text-[var(--sidebar-ink)]" />
                 <span>{t("expandAll")}</span>
               </DropdownItem>
               <DropdownItem onSelect={() => setTreeExpanded(false)}>
-                <ChevronsDownUp className="h-5 w-5 text-[var(--color-fg-dim)]" />
+                <CollapseAllGlyph size={14} strokeWidth={2} className="shrink-0 text-[var(--sidebar-ink)]" />
                 <span>{t("collapseAll")}</span>
               </DropdownItem>
               <DropdownSeparator />
@@ -1441,15 +1441,15 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                     key={id}
                     onSelect={() => setTaskExpandMode(id)}
                     className={isActive
-                      ? "bg-[var(--color-sel)] data-[highlighted]:bg-[var(--color-sel)]"
+                      ? "bg-[var(--sidebar-menu-checked-bg)]"
                       : undefined}
                   >
                     {isActive
-                      ? <Check className="h-5 w-5 shrink-0 text-[var(--color-accent)]" />
-                      : <span className="h-5 w-5 shrink-0" />}
+                      ? <Check className="h-[14px] w-[14px] shrink-0 text-[var(--color-accent)]" />
+                      : <span className="w-[14px] shrink-0" />}
                     <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className={isActive ? "text-[var(--color-accent)] font-medium" : undefined}>{t(labelKey)}</span>
-                      <span className="text-[11px] leading-snug text-[var(--color-fg-dim)]">{t(hintKey)}</span>
+                      <span className={isActive ? "font-medium text-[var(--sidebar-menu-checked-ink)]" : undefined}>{t(labelKey)}</span>
+                      <span className="text-[12px] leading-[1.35] text-[var(--sidebar-muted)]">{t(hintKey)}</span>
                     </div>
                   </DropdownItem>
                 );
@@ -1458,18 +1458,18 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                   the same pref. */}
               <DropdownSub>
                 <DropdownSubTrigger data-testid="sidebar-task-git-icon" className="justify-between">
-                  <span className="flex items-center gap-2">
-                    <span className="h-5 w-5 shrink-0" />
+                  <span className="flex items-center gap-[10px]">
+                    <span className="w-[14px] shrink-0" />
                     {t("taskGitIcon")}
                   </span>
                   {/* The current choice, as the glyphs it draws: the row
                       says what is on without opening the submenu. */}
                   <span className="flex items-center gap-2">
                     <TaskLocationSamples value={taskLocationIcon} />
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
+                    <TreeChevron open={false} className="shrink-0 text-[var(--sidebar-meta)]" />
                   </span>
                 </DropdownSubTrigger>
-                <DropdownSubContent>
+                <DropdownSubContent className="sidebar-menu">
                   {([
                     ["both",     "taskGitIconBoth"],
                     ["main",     "taskGitIconMain"],
@@ -1477,8 +1477,8 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                     ["none",     "taskGitIconNone"],
                   ] as const).map(([id, labelKey]) => (
                     <DropdownItem key={id} data-value={id} onSelect={() => setTaskLocationIcon(id)} className="items-center">
-                      <Check className={cn("h-4 w-4 shrink-0 text-[var(--color-accent)]", taskLocationIcon === id ? "opacity-100" : "opacity-0")} />
-                      <span className={cn("flex-1", taskLocationIcon === id && "text-[var(--color-accent)] font-medium")}>{t(labelKey)}</span>
+                      <Check className={cn("h-[14px] w-[14px] shrink-0 text-[var(--color-accent)]", taskLocationIcon === id ? "opacity-100" : "opacity-0")} />
+                      <span className={cn("flex-1", taskLocationIcon === id && "font-medium text-[var(--sidebar-menu-checked-ink)]")}>{t(labelKey)}</span>
                       <span className="ml-4 flex items-center"><TaskLocationSamples value={id} /></span>
                     </DropdownItem>
                   ))}
@@ -1488,16 +1488,16 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                   > Appearance > Sidebar, which writes the same pref. */}
               <DropdownSub>
                 <DropdownSubTrigger data-testid="sidebar-task-pr-badge" className="justify-between">
-                  <span className="flex items-center gap-2">
-                    <span className="h-5 w-5 shrink-0" />
+                  <span className="flex items-center gap-[10px]">
+                    <span className="w-[14px] shrink-0" />
                     {t("taskPrBadge")}
                   </span>
                   <span className="flex items-center gap-2">
                     <TaskPrSamples value={taskPrBadge} />
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
+                    <TreeChevron open={false} className="shrink-0 text-[var(--sidebar-meta)]" />
                   </span>
                 </DropdownSubTrigger>
-                <DropdownSubContent>
+                <DropdownSubContent className="sidebar-menu">
                   {([
                     ["both",   "taskPrBadgeBoth"],
                     ["icon",   "taskPrBadgeIcon"],
@@ -1505,8 +1505,8 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                     ["none",   "taskPrBadgeNone"],
                   ] as const).map(([id, labelKey]) => (
                     <DropdownItem key={id} data-pr-value={id} onSelect={() => setTaskPrBadge(id)} className="items-center">
-                      <Check className={cn("h-4 w-4 shrink-0 text-[var(--color-accent)]", taskPrBadge === id ? "opacity-100" : "opacity-0")} />
-                      <span className={cn("flex-1", taskPrBadge === id && "text-[var(--color-accent)] font-medium")}>{t(labelKey)}</span>
+                      <Check className={cn("h-[14px] w-[14px] shrink-0 text-[var(--color-accent)]", taskPrBadge === id ? "opacity-100" : "opacity-0")} />
+                      <span className={cn("flex-1", taskPrBadge === id && "font-medium text-[var(--sidebar-menu-checked-ink)]")}>{t(labelKey)}</span>
                       <span className="ml-4 flex items-center"><TaskPrSamples value={id} /></span>
                     </DropdownItem>
                   ))}
@@ -1516,17 +1516,17 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
               <DropdownItem
                 onSelect={() => setHideInactiveProjects(!hideInactiveProjects)}
                 className={hideInactiveProjects
-                  ? "bg-[var(--color-sel)] data-[highlighted]:bg-[var(--color-sel)]"
+                  ? "bg-[var(--sidebar-menu-checked-bg)]"
                   : undefined}
               >
                 {/* Checkmark when on, empty slot when off — same pattern as
                     the expand-mode rows above (no stray icon). */}
                 {hideInactiveProjects
-                  ? <Check className="h-5 w-5 shrink-0 text-[var(--color-accent)]" />
-                  : <span className="h-5 w-5 shrink-0" />}
+                  ? <Check className="h-[14px] w-[14px] shrink-0 text-[var(--color-accent)]" />
+                  : <span className="w-[14px] shrink-0" />}
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className={hideInactiveProjects ? "text-[var(--color-accent)] font-medium" : undefined}>{t("collapseInactive")}</span>
-                  <span className="text-[11px] leading-snug text-[var(--color-fg-dim)]">{t("collapseInactiveHint")}</span>
+                  <span className={hideInactiveProjects ? "font-medium text-[var(--sidebar-menu-checked-ink)]" : undefined}>{t("collapseInactive")}</span>
+                  <span className="text-[12px] leading-[1.35] text-[var(--sidebar-muted)]">{t("collapseInactiveHint")}</span>
                 </div>
               </DropdownItem>
               {/* Same check-row shape. Mirrored in Settings > Appearance >
@@ -1535,15 +1535,15 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                 data-testid="sidebar-toggle-status-section"
                 onSelect={() => setShowStatusSection(!showStatusSection)}
                 className={showStatusSection
-                  ? "bg-[var(--color-sel)] data-[highlighted]:bg-[var(--color-sel)]"
+                  ? "bg-[var(--sidebar-menu-checked-bg)]"
                   : undefined}
               >
                 {showStatusSection
-                  ? <Check className="h-5 w-5 shrink-0 text-[var(--color-accent)]" />
-                  : <span className="h-5 w-5 shrink-0" />}
+                  ? <Check className="h-[14px] w-[14px] shrink-0 text-[var(--color-accent)]" />
+                  : <span className="w-[14px] shrink-0" />}
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className={showStatusSection ? "text-[var(--color-accent)] font-medium" : undefined}>{t("showStatusSection")}</span>
-                  <span className="text-[11px] leading-snug text-[var(--color-fg-dim)]">{t("showStatusSectionHint")}</span>
+                  <span className={showStatusSection ? "font-medium text-[var(--sidebar-menu-checked-ink)]" : undefined}>{t("showStatusSection")}</span>
+                  <span className="text-[12px] leading-[1.35] text-[var(--sidebar-muted)]">{t("showStatusSectionHint")}</span>
                 </div>
               </DropdownItem>
             </DropdownMenu>
@@ -1898,7 +1898,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                               side="right"
                               align="start"
                               sideOffset={4}
-                              className="w-[276px]"
+                              className="sidebar-menu w-[276px]"
                               onCloseAutoFocus={(e) => e.preventDefault()}
                             >
                               <ProjectActionsMenuItems
@@ -1927,7 +1927,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                   </div>
                 </Tip>
                 </ContextMenuTrigger>
-                <ContextMenuContent>
+                <ContextMenuContent className="sidebar-menu">
                   <ContextMenuLabel>{p.name}</ContextMenuLabel>
                   <ContextMenuSeparator />
                   <ContextMenuItem
@@ -1993,7 +1993,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                       <Folder />
                       {t("moveToGroup")}
                     </ContextMenuSubTrigger>
-                    <ContextMenuSubContent>
+                    <ContextMenuSubContent className="sidebar-menu">
                       {allGroups.map(g => (
                         <ContextMenuItem
                           key={g}
@@ -2093,7 +2093,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                           <span>{t("ctxNewTask")}</span>
                         </button>
                       </DropdownTrigger>
-                      <DropdownMenu side="right" align="start" sideOffset={4} className="w-[276px]">
+                      <DropdownMenu side="right" align="start" sideOffset={4} className="sidebar-menu w-[276px]">
                         <ProjectActionsMenuItems
                                 projectId={p.id}
                                 onPick={(cli, mode) => {
@@ -2463,7 +2463,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                       )}
                     </div>
                   </ContextMenuTrigger>
-                  <ContextMenuContent>
+                  <ContextMenuContent className="sidebar-menu">
                     <GroupActionsMenuItems
                       name={name}
                       accent={accent}
@@ -3341,7 +3341,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
               {terminalTabs.length === 0 && (
                 <Moon
                   data-testid="task-asleep-mark"
-                  className={cn("h-3 w-3 shrink-0 opacity-60", isSelectedRow ? "text-[var(--sidebar-sel-chevron)]" : "text-[var(--sidebar-chevron)]")}
+                  className={cn("ml-[2px] h-3 w-3 shrink-0 opacity-60", isSelectedRow ? "text-[var(--sidebar-sel-chevron)]" : "text-[var(--sidebar-chevron)]")}
                 />
               )}
               {w.spawned_by && <SpawnedFromMark task={w} />}
@@ -3473,7 +3473,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
               </button>
             </DropdownTrigger>
             </Tip>
-            <DropdownMenu
+            <DropdownMenu className="sidebar-menu"
               side="right"
               align="start"
               // Don't return focus to the trigger on close — the user
@@ -3493,7 +3493,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                   </span>
                   <ChevronRight className="h-3.5 w-3.5 text-[var(--color-fg-faint)]" />
                 </DropdownSubTrigger>
-                <DropdownSubContent>
+                <DropdownSubContent className="sidebar-menu">
                   <NewTabMenuItems
                     taskId={w.id}
                     onSpawnCli={(cli) => spawnIntoTask({
@@ -3715,7 +3715,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                       </span>
                       <ChevronRight className="h-3.5 w-3.5 text-[var(--color-fg-faint)]" />
                     </DropdownSubTrigger>
-                    <DropdownSubContent className="max-h-80 overflow-y-auto">
+                    <DropdownSubContent className="sidebar-menu max-h-80 overflow-y-auto">
                       {groups.map(g => {
                         // Join through a live member, not the group id: that is
                         // the lead's task id, and the lead may be archived.

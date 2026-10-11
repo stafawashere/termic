@@ -188,7 +188,7 @@ export function TaskGroupBlock({ group, projectId, label, compact, count, member
               : <span className="ml-auto shrink-0 tabular-nums text-[11px] font-normal text-[var(--sidebar-meta)]">{count}</span>)}
           </div>
         </ContextMenuTrigger>
-        <ContextMenuContent>
+        <ContextMenuContent className="sidebar-menu">
           <GroupActionsMenuItems
             name={label}
             accent={accentCss(group.color)}

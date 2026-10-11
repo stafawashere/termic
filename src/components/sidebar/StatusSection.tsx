@@ -131,7 +131,7 @@ export const StatusViewCount = memo(function StatusViewCount({ matchIds = null }
   return (
     <span
       data-testid="sidebar-status-count"
-      className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--sidebar-count-bg)] px-[5px] text-[10px] font-bold tabular-nums text-[var(--sidebar-count-ink)]"
+      className="sidebar-badge"
     >
       {total}
     </span>
@@ -458,7 +458,8 @@ const StatusTaskRow = memo(function StatusTaskRow({ task: w, projectName, agents
         )}
       >
         {tabCount === 0
-          // No terminals this session: the tree's dormant mark, nothing to expand.
+          // No terminals this session: nothing to expand; the moon after the
+          // name says so, as in the tree.
           ? <span aria-hidden className="w-[10px] shrink-0" />
           : (
             <button
@@ -492,7 +493,7 @@ const StatusTaskRow = memo(function StatusTaskRow({ task: w, projectName, agents
           {projectName && (
             <span className={cn("min-w-0 shrink-[2] truncate text-[12px]", isSelectedRow ? "text-[var(--sidebar-sel-meta)]" : "text-[var(--sidebar-meta)]")}>{projectName}</span>
           )}
-          {tabCount === 0 && <Moon className="h-3 w-3 shrink-0 text-[var(--sidebar-chevron)] opacity-60" />}
+          {tabCount === 0 && <Moon className="ml-[2px] h-3 w-3 shrink-0 text-[var(--sidebar-chevron)] opacity-60" />}
           {/* The tree's terminal count, from two up. */}
           {tabCount > 1 && (
             <span data-testid="status-task-count" className="shrink-0 text-[11px] font-medium tabular-nums text-[var(--sidebar-meta)]">
