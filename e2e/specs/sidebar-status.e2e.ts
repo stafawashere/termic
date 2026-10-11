@@ -506,6 +506,31 @@ describe("sidebar status section", () => {
     expect(await ariaExpanded(HEADER)).toBe("true");
   });
 
+  it("swaps the tree for the buckets from the header, remembers it, and swaps back", async () => {
+    const SWAP = '[data-testid="sidebar-swap-view"]';
+    const eyebrow = () => browser.execute(() => document.querySelector('[data-testid="sidebar-section-eyebrow"]')?.textContent ?? null);
+    const asView = `${SECTION}[data-view]`;
+    await waitVisible(SWAP);
+    expect(await eyebrow()).toBe("Projects");
+    expect(await present('[data-testid="sidebar-status-count"]')).toBe(false);
+
+    await click(SWAP);
+    await waitVisible(asView);
+    expect(await eyebrow()).toBe("Status");
+    expect(await present('[data-testid="sidebar-status-count"]')).toBe(true);
+    // The view is the section without its own header, and the tree is gone.
+    expect(await present(`${asView} ${HEADER}`)).toBe(false);
+    expect(await present(`[data-project-id="${projectId}"]`)).toBe(false);
+    expect(await stored("sidebarView")).toBe("status");
+    await snap("sidebar-status-view.png");
+
+    await click(SWAP);
+    await waitVisible(`[data-project-id="${projectId}"]`);
+    expect(await eyebrow()).toBe("Projects");
+    expect(await present(asView)).toBe(false);
+    expect(await stored("sidebarView")).toBe("tree");
+  });
+
   it("puts a task with an open PR in review, and a merge takes it out", async () => {
     reviewed = await createWorktreeTask("status-review", "status-review-branch", false);
     // The identity Rust persists once a lookup finds a PR, patched into the

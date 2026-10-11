@@ -164,6 +164,41 @@ describe("prefs: find in files leaves Shift+Cmd+F to the sidebar filter", () => 
   });
 });
 
+describe("prefs: sidebarView", () => {
+  const KEY = "sidebarView";
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", fakeLocalStorage());
+    vi.resetModules();
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("starts on the tree, and on the tree for a value it does not know", async () => {
+    localStorage.setItem(KEY, "board");
+    const { usePrefs } = await import("./prefs");
+
+    expect(usePrefs.getState().sidebarView).toBe("tree");
+  });
+
+  it("persists a swap and comes back on it", async () => {
+    const first = await import("./prefs");
+    first.usePrefs.getState().setSidebarView("status");
+    vi.resetModules();
+    const { usePrefs } = await import("./prefs");
+
+    expect(usePrefs.getState().sidebarView).toBe("status");
+  });
+
+  it("does not notify for an unchanged view", async () => {
+    const { usePrefs } = await import("./prefs");
+    let notified = 0;
+    usePrefs.subscribe(() => { notified += 1; });
+
+    usePrefs.getState().setSidebarView("tree");
+
+    expect(notified).toBe(0);
+  });
+});
+
 describe("prefs: findInFilesMatchCase", () => {
   const KEY = "findInFilesMatchCase";
   beforeEach(() => {

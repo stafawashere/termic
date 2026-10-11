@@ -14,6 +14,8 @@ export default {
   navHistory: "History",
   navBoard: "Kanban",
   navScheduled: "Scheduled",
+  swapToStatus: "Show status",
+  swapToProjects: "Show projects",
   projectsHeader: "Projects",
   listOptionsTip: "Project list options",
   expandAll: "Expand all agents",

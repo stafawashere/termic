@@ -14,6 +14,8 @@ export default {
   navHistory: "历史",
   navBoard: "看板",
   navScheduled: "定时任务",
+  swapToStatus: "显示状态",
+  swapToProjects: "显示项目",
   projectsHeader: "项目",
   listOptionsTip: "项目列表选项",
   expandAll: "展开所有智能体",

@@ -84,24 +84,16 @@ function StatusBucketMark({ bucket }: { bucket: StatusBucket }) {
   );
 }
 
-/** `matchIds`: the sidebar filter bar's result, or null while it is empty.
- *  The section lists only those tasks, so a filter means the same thing
- *  here as in the tree below. */
-export function StatusSection({ matchIds = null }: { matchIds?: ReadonlySet<string> | null }) {
-  const { t } = useTranslation("sidebar");
+/** The buckets the filter leaves (`matchIds`, null while the bar is empty),
+ *  and the board prefs that fill them. Shared by the section and the
+ *  header's count in the STATUS view. */
+function useStatusGroups(matchIds: ReadonlySet<string> | null) {
   const projects = useApp(s => s.projects);
   const tasks = useApp(s => s.tasks);
-  const agents = useApp(s => s.agents);
   const facts = useStatusTabFacts();
   const settledHighlight = usePrefs(s => s.settledHighlight);
   const workingIndicator = usePrefs(s => s.workingIndicator);
   const attentionIndicator = usePrefs(s => s.attentionIndicator);
-  const useBranchAsTaskName = usePrefs(s => s.useBranchAsTaskName);
-  const bucketCollapsed = usePrefs(s => s.statusBucketCollapsed);
-  const setBucketCollapsed = usePrefs(s => s.setStatusBucketCollapsed);
-  const statusSectionCollapsed = usePrefs(s => s.statusSectionCollapsed);
-  const setStatusSectionCollapsed = usePrefs(s => s.setStatusSectionCollapsed);
-  const isCollapsed = matchIds ? false : statusSectionCollapsed;
   // The board's pref set, so the same toggles fill the same buckets. Stable
   // identity: it keys every row's badge selector.
   const workPrefs: WorkStatePrefs = useMemo(
@@ -124,7 +116,41 @@ export function StatusSection({ matchIds = null }: { matchIds?: ReadonlySet<stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [projects, listed, facts, workPrefs, prKey],
   );
-  const totalStatusCount = useMemo(() => groups.reduce((acc, g) => acc + g.count, 0), [groups]);
+  const total = useMemo(() => groups.reduce((acc, g) => acc + g.count, 0), [groups]);
+
+  return { projects, tasks, groups, total, workPrefs };
+}
+
+/** The STATUS view's count, beside the section header's eyebrow. */
+export const StatusViewCount = memo(function StatusViewCount({ matchIds = null }: { matchIds?: ReadonlySet<string> | null }) {
+  const { total } = useStatusGroups(matchIds);
+
+  return (
+    <span
+      data-testid="sidebar-status-count"
+      className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--sidebar-count-bg)] px-[5px] text-[10px] font-bold tabular-nums text-[var(--sidebar-count-ink)]"
+    >
+      {total}
+    </span>
+  );
+});
+
+/** `matchIds`: the sidebar filter bar's result, or null while it is empty.
+ *  The section lists only those tasks, so a filter means the same thing
+ *  here as in the tree below.
+ *
+ *  `asView`: the STATUS view, which the sidebar's own section header names
+ *  and counts, so this draws no header of its own and never folds. */
+export function StatusSection({ matchIds = null, asView = false }: { matchIds?: ReadonlySet<string> | null; asView?: boolean }) {
+  const { t } = useTranslation("sidebar");
+  const agents = useApp(s => s.agents);
+  const useBranchAsTaskName = usePrefs(s => s.useBranchAsTaskName);
+  const bucketCollapsed = usePrefs(s => s.statusBucketCollapsed);
+  const setBucketCollapsed = usePrefs(s => s.setStatusBucketCollapsed);
+  const statusSectionCollapsed = usePrefs(s => s.statusSectionCollapsed);
+  const setStatusSectionCollapsed = usePrefs(s => s.setStatusSectionCollapsed);
+  const isCollapsed = matchIds || asView ? false : statusSectionCollapsed;
+  const { projects, tasks, groups, total: totalStatusCount, workPrefs } = useStatusGroups(matchIds);
   const statusTaskIds = useMemo(() => {
     const ids: string[] = [];
     for (const g of groups) {
@@ -138,7 +164,8 @@ export function StatusSection({ matchIds = null }: { matchIds?: ReadonlySet<stri
   const projectName = useMemo(() => new Map(projects.map(p => [p.id, p.name])), [projects]);
 
   return (
-    <div data-testid="status-section" className="mb-1">
+    <div data-testid="status-section" data-view={asView || undefined} className="mb-1">
+      {!asView && (
       <div
         role="button"
         tabIndex={0}
@@ -190,6 +217,7 @@ export function StatusSection({ matchIds = null }: { matchIds?: ReadonlySet<stri
           )}
         </div>
       </div>
+      )}
       {!isCollapsed && groups.map(g => {
         const open = !isStatusBucketCollapsed(g.bucket, bucketCollapsed);
         const count = g.count;

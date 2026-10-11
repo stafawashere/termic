@@ -23,6 +23,7 @@ import { useApp } from "@/store/app";
 import { usePrefs } from "@/store/prefs";
 import { retentionWindowMs } from "@/lib/subagentPrefs";
 import { useSubagents, type SubagentState } from "@/store/subagents";
+import { foldAllSubagents, type GroupFold } from "./subagentFold";
 import { openSubagentPreview } from "@/store/subagentPreview";
 import {
   createRetentionExpirySelector, createSubagentStructureSelector, hasSubagentRow, selectSubagentRecord,
@@ -33,13 +34,6 @@ import { subagentAgentIconName } from "./subagentRowIcon";
 import { WorkflowRunRow } from "./WorkflowRunRow";
 
 const EMPTY_FOLD: readonly string[] = Object.freeze([]);
-
-/** A fold of a tab's whole subagent group, made by hand. It holds for the
- *  session it was made in and gives way to auto-collapse after that. */
-interface GroupFold {
-  sessionId: string;
-  collapsed: boolean;
-}
 
 interface SubagentFoldState {
   /** Per tab, the agents whose children are hidden, and the phases (by
@@ -53,7 +47,11 @@ interface SubagentFoldState {
   toggle: (tabId: string, foldId: string) => void;
   toggleRun: (tabId: string, runId: string) => void;
   setGroupCollapsed: (tabId: string, sessionId: string, collapsed: boolean) => void;
+  /** Expand or Collapse all agents: every tab's subagent group and every
+   *  workflow run, from the subagents the store holds now. */
+  setAllCollapsed: (collapsed: boolean) => void;
 }
+
 
 function toggled(list: readonly string[], id: string): readonly string[] {
   const has = list.includes(id);
@@ -79,6 +77,11 @@ export const useSubagentFold = create<SubagentFoldState>((set, get) => ({
     if (isSame) return;
 
     set(s => ({ groupByTab: { ...s.groupByTab, [tabId]: { sessionId, collapsed } } }));
+  },
+
+  setAllCollapsed: (collapsed) => {
+    const next = foldAllSubagents(get(), useSubagents.getState().byTab, collapsed);
+    if (next) set(next);
   },
 }));
 

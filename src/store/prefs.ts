@@ -109,6 +109,7 @@ const LS_BOARD_ARCHIVE_LIMIT_MODE = scoped("boardArchiveLimitMode");
 const LS_BOARD_ARCHIVE_LIMIT = scoped("boardArchiveLimit");
 const LS_BOARD_PINNED_COLUMNS = scoped("boardPinnedColumns");
 const LS_SHOW_STATUS_SECTION = scoped("showStatusSection");
+const LS_SIDEBAR_VIEW = scoped("sidebarView");
 const LS_STATUS_SECTION_COLLAPSED = scoped("statusSectionCollapsed");
 const LS_SHOW_BOARD = scoped("showBoard");
 const LS_SCHEDULED_NAV = scoped("scheduledNav");
@@ -853,6 +854,9 @@ interface PrefsState {
   showStatusSection: boolean;
   /** Whether the sidebar's STATUS section is collapsed in place. */
   statusSectionCollapsed: boolean;
+  /** What the sidebar lists under its section header: the project tree, or
+   *  the status buckets in its place (the header's swap button). */
+  sidebarView: SidebarView;
   /** The Kanban entry in the sidebar's primary nav, the only way into the
    *  board. On by default; off hides the entry for people who never use it. */
   showBoard: boolean;
@@ -1052,6 +1056,7 @@ interface PrefsState {
   setBoardArchiveLimit: (n: number) => void;
   setBoardPinnedColumns: (cols: readonly BoardStateColumn[]) => void;
   setShowStatusSection: (v: boolean) => void;
+  setSidebarView: (v: SidebarView) => void;
   setStatusSectionCollapsed: (v: boolean) => void;
   setShowBoard: (v: boolean) => void;
   setScheduledNav: (m: ScheduledNavMode) => void;
@@ -1110,6 +1115,13 @@ export function taskLocationIconShown(mode: TaskLocationIconMode, isMainCheckout
 /** Whether the Scheduled nav entry shows. "auto" counts ANY schedule on a
  *  live task, paused ones included: the view is where a paused schedule is
  *  switched back on, so pausing the only one must not remove the way to it. */
+export type SidebarView = "tree" | "status";
+
+/** Anything but "status" is the tree, the view a new install starts on. */
+export function parseSidebarView(raw: string): SidebarView {
+  return raw === "status" ? "status" : "tree";
+}
+
 export function scheduledNavVisible(mode: ScheduledNavMode, hasSchedule: boolean): boolean {
   return mode === "always" || (mode === "auto" && hasSchedule);
 }
@@ -1340,6 +1352,7 @@ function readStoredPrefs() {
   const initialBoardPinnedColumns = parseBoardPinnedColumns(lsGet(LS_BOARD_PINNED_COLUMNS, ""));
   const initialShowStatusSection = lsGet(LS_SHOW_STATUS_SECTION, "") === "1";
   const initialStatusSectionCollapsed = lsGet(LS_STATUS_SECTION_COLLAPSED, "") === "1";
+  const initialSidebarView = parseSidebarView(lsGet(LS_SIDEBAR_VIEW, ""));
   const initialShowBoard = lsGet(LS_SHOW_BOARD, "") !== "0";
   const initialScheduledNav = parseScheduledNav(lsGet(LS_SCHEDULED_NAV, ""));
   const initialTaskLocationIcon = parseTaskLocationIcon(lsGet(LS_TASK_LOCATION_ICON, ""));
@@ -1447,6 +1460,7 @@ function readStoredPrefs() {
     boardArchiveLimit: initialBoardArchiveLimit,
     boardPinnedColumns: initialBoardPinnedColumns,
     showStatusSection: initialShowStatusSection,
+    sidebarView: initialSidebarView,
     statusSectionCollapsed: initialStatusSectionCollapsed,
     showBoard: initialShowBoard,
     scheduledNav: initialScheduledNav,
@@ -1875,6 +1889,11 @@ export const usePrefs = create<PrefsState>(set => ({
     if (s.showStatusSection === v) return s;
     try { localStorage.setItem(LS_SHOW_STATUS_SECTION, v ? "1" : "0"); } catch {}
     return { showStatusSection: v };
+  }),
+  setSidebarView: (v) => set(s => {
+    if (s.sidebarView === v) return s;
+    try { localStorage.setItem(LS_SIDEBAR_VIEW, v); } catch {}
+    return { sidebarView: v };
   }),
   setStatusSectionCollapsed: (v) => set(s => {
     if (s.statusSectionCollapsed === v) return s;

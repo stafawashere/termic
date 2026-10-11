@@ -166,6 +166,7 @@ export const PREF_KEYS: readonly PrefKey[] = [
   { key: "collapsedTaskGroups", scoped: true, class: "local", reason: "collapse state" },
   { key: "statusBucketCollapsed", scoped: true, class: "local", reason: "collapse state" },
   { key: "statusSectionCollapsed", scoped: true, class: "local", reason: "collapse state" },
+  { key: "sidebarView", scoped: true, class: "local", reason: "which list the sidebar shows, toggled in place like a fold" },
   { key: "statusTaskExpanded", scoped: true, class: "local", reason: "collapse state" },
   { key: "statusGroupCollapsed", scoped: true, class: "local", reason: "collapse state" },
   { key: "recentTasks", scoped: true, class: "local", reason: "recent tasks, and tasks are per machine" },

@@ -52,12 +52,13 @@ import { ProjectFilterBar, ProjectFilterToggle } from "./ProjectTaskFilter";
 import { filterTasks, isFilterActive } from "@/lib/taskFilter";
 import { collectTaskProps, collectedText } from "@/lib/tabProps";
 import { TaskGroupBlock } from "./TaskGroupBlock";
-import { SubagentGroupToggle, SubagentRows, useSubagentHasRow } from "./SubagentRows";
+import { SubagentGroupToggle, SubagentRows, useSubagentFold, useSubagentHasRow } from "./SubagentRows";
 import { childRowCarriesSelection, subagentIdOfTab } from "./subagentTree";
 import { StatusChips } from "./StatusChips";
 import { AgentActivityReadout } from "./AgentActivityReadout";
-import { FolderGlyph, HistoryGlyph, KanbanGlyph, ScheduleGlyph } from "./sidebarIcons";
-import { StatusSection } from "./StatusSection";
+import { CollapseAllGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, ScheduleGlyph, SwapGlyph } from "./sidebarIcons";
+import { STATUS_BUCKETS } from "@/lib/sidebarStatus";
+import { StatusSection, StatusViewCount } from "./StatusSection";
 import { RollupMarks } from "./RollupMarks";
 import { BoardFilterBar } from "@/components/views/BoardFilterBar";
 import { useTaskQuery } from "@/hooks/useTaskQuery";
@@ -201,6 +202,15 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
     return profileSidebarWashCss(me?.accent, s.profiles.length > 0);
   });
   const setShowStatusSection = usePrefs(s => s.setShowStatusSection);
+  const sidebarView = usePrefs(s => s.sidebarView);
+  const setSidebarView = usePrefs(s => s.setSidebarView);
+  const statusView = sidebarView === "status" && !compact;
+  // What the header's expand toggle does next. Not derived from the folds:
+  // reading every task's fold to draw one glyph would subscribe the body to
+  // all of them. It starts on expand, the glyph the design draws at rest.
+  const [nextExpandAll, setNextExpandAll] = useState(true);
+  // Each view keeps its own scroll offset across a swap.
+  const viewScrollTop = useRef<Record<string, number>>({});
   // Temporary, non-persisted reveal of the hidden inactive projects. Reset
   // whenever the hide pref flips off so the "Show N inactive" row starts
   // collapsed next time the user re-enables hiding.
@@ -252,6 +262,33 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
     if (!queryOn) { setAllGroupsCollapsed(folded); return; }
     for (const g of new Set(projects.map(groupOf))) if (g) setTreeFold("folder", g, folded, compact);
   };
+
+  // Expand / collapse all agents, from the header toggle and the list
+  // options. In the STATUS view the same press opens or folds the buckets.
+  const setTreeExpanded = (expanded: boolean) => {
+    setNextExpandAll(!expanded);
+
+    if (statusView) {
+      const setBucketCollapsed = usePrefs.getState().setStatusBucketCollapsed;
+      for (const bucket of STATUS_BUCKETS) setBucketCollapsed(bucket, !expanded);
+      return;
+    }
+
+    if (!queryOn) setAllTasksCollapsed(!expanded);
+    setAllFolders(!expanded);
+    useSubagentFold.getState().setAllCollapsed(!expanded);
+  };
+
+  const swapView = () => {
+    const scroller = projectsScrollRef.current;
+    if (scroller) viewScrollTop.current[sidebarView] = scroller.scrollTop;
+    setSidebarView(sidebarView === "status" ? "tree" : "status");
+  };
+
+  useLayoutEffect(() => {
+    const scroller = projectsScrollRef.current;
+    if (scroller) scroller.scrollTop = viewScrollTop.current[sidebarView] ?? 0;
+  }, [sidebarView]);
 
   /** Build a mailto: URL with prefilled subject + body and hand it to
    *  the OS's default mail handler via `open_path` (the same Rust
@@ -1331,8 +1368,188 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
       </div>
       </div>
 
+      {/* The section header: what the list below is (PROJECTS, or STATUS
+          with its count when swapped), and the buttons that act on it. Out
+          of the scroller, so it never scrolls away from the list. */}
+      {!compact && (
+        <div
+          data-testid="projects-section-header"
+          className="mt-[var(--sidebar-head-pad)] flex h-[28px] shrink-0 select-none items-center gap-[8px] px-[14px]"
+        >
+          <span data-testid="sidebar-section-eyebrow" className="truncate text-[11px] font-bold uppercase tracking-[0.8px] text-[var(--sidebar-eyebrow)]">
+            {statusView ? t("statusHeader") : t("projectsHeader")}
+          </span>
+          {statusView && <StatusViewCount matchIds={queryMatchIds} />}
+          <div className="flex-1" />
+          <HeaderButton
+            testId="sidebar-swap-view"
+            label={statusView ? t("swapToProjects") : t("swapToStatus")}
+            onClick={swapView}
+          >
+            <SwapGlyph size={14} />
+          </HeaderButton>
+          <HeaderButton
+            testId="sidebar-expand-toggle"
+            label={nextExpandAll ? t("expandAll") : t("collapseAll")}
+            onClick={() => setTreeExpanded(nextExpandAll)}
+          >
+            {nextExpandAll ? <ExpandAllGlyph size={14} /> : <CollapseAllGlyph size={14} />}
+          </HeaderButton>
+          <DropdownRoot>
+            <Tip content={t("listOptionsTip")}>
+              <DropdownTrigger asChild>
+                <HeaderButton testId="sidebar-list-options" label={t("listOptionsTip")} ownTip={false}>
+                  <ListOptionsGlyph size={14} />
+                </HeaderButton>
+              </DropdownTrigger>
+            </Tip>
+            {/* preventDefault on close keeps focus from snapping back to the
+                trigger, which would otherwise re-fire its (focus-triggered)
+                tooltip and leave it stuck open after selecting an item. */}
+            <DropdownMenu side="right" align="start" sideOffset={4} className="w-[280px]" onCloseAutoFocus={(e) => e.preventDefault()}>
+              {/* Both actions cover group folders too — expanding agents
+                  under a still-collapsed folder would look like a no-op,
+                  and "collapse all" means the whole tree tidies up. Task rows
+                  have no throwaway fold, so while the query filters they are
+                  left alone rather than rewriting the stored layout. */}
+              <DropdownItem onSelect={() => setTreeExpanded(true)}>
+                <ChevronsUpDown className="h-5 w-5 text-[var(--color-fg-dim)]" />
+                <span>{t("expandAll")}</span>
+              </DropdownItem>
+              <DropdownItem onSelect={() => setTreeExpanded(false)}>
+                <ChevronsDownUp className="h-5 w-5 text-[var(--color-fg-dim)]" />
+                <span>{t("collapseAll")}</span>
+              </DropdownItem>
+              <DropdownSeparator />
+              <DropdownLabel>{t("defaultExpand")}</DropdownLabel>
+              {([
+                ["chevron", "expandChevron", "expandChevronHint"],
+                ["click",   "expandClick",   "expandClickHint"],
+                ["always",  "expandAlways",  "expandAlwaysHint"],
+              ] as const).map(([id, labelKey, hintKey]) => {
+                const isActive = taskExpandMode === id;
+                return (
+                  <DropdownItem
+                    key={id}
+                    onSelect={() => setTaskExpandMode(id)}
+                    className={isActive
+                      ? "bg-[var(--color-sel)] data-[highlighted]:bg-[var(--color-sel)]"
+                      : undefined}
+                  >
+                    {isActive
+                      ? <Check className="h-5 w-5 shrink-0 text-[var(--color-accent)]" />
+                      : <span className="h-5 w-5 shrink-0" />}
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className={isActive ? "text-[var(--color-accent)] font-medium" : undefined}>{t(labelKey)}</span>
+                      <span className="text-[11px] leading-snug text-[var(--color-fg-dim)]">{t(hintKey)}</span>
+                    </div>
+                  </DropdownItem>
+                );
+              })}
+              {/* Mirrored in Settings > Appearance > Sidebar, which writes
+                  the same pref. */}
+              <DropdownSub>
+                <DropdownSubTrigger data-testid="sidebar-task-git-icon" className="justify-between">
+                  <span className="flex items-center gap-2">
+                    <span className="h-5 w-5 shrink-0" />
+                    {t("taskGitIcon")}
+                  </span>
+                  {/* The current choice, as the glyphs it draws: the row
+                      says what is on without opening the submenu. */}
+                  <span className="flex items-center gap-2">
+                    <TaskLocationSamples value={taskLocationIcon} />
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
+                  </span>
+                </DropdownSubTrigger>
+                <DropdownSubContent>
+                  {([
+                    ["both",     "taskGitIconBoth"],
+                    ["main",     "taskGitIconMain"],
+                    ["worktree", "taskGitIconWorktree"],
+                    ["none",     "taskGitIconNone"],
+                  ] as const).map(([id, labelKey]) => (
+                    <DropdownItem key={id} data-value={id} onSelect={() => setTaskLocationIcon(id)} className="items-center">
+                      <Check className={cn("h-4 w-4 shrink-0 text-[var(--color-accent)]", taskLocationIcon === id ? "opacity-100" : "opacity-0")} />
+                      <span className={cn("flex-1", taskLocationIcon === id && "text-[var(--color-accent)] font-medium")}>{t(labelKey)}</span>
+                      <span className="ml-4 flex items-center"><TaskLocationSamples value={id} /></span>
+                    </DropdownItem>
+                  ))}
+                </DropdownSubContent>
+              </DropdownSub>
+              {/* The same shape for the row's PR mark. Mirrored in Settings
+                  > Appearance > Sidebar, which writes the same pref. */}
+              <DropdownSub>
+                <DropdownSubTrigger data-testid="sidebar-task-pr-badge" className="justify-between">
+                  <span className="flex items-center gap-2">
+                    <span className="h-5 w-5 shrink-0" />
+                    {t("taskPrBadge")}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <TaskPrSamples value={taskPrBadge} />
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
+                  </span>
+                </DropdownSubTrigger>
+                <DropdownSubContent>
+                  {([
+                    ["both",   "taskPrBadgeBoth"],
+                    ["icon",   "taskPrBadgeIcon"],
+                    ["number", "taskPrBadgeNumber"],
+                    ["none",   "taskPrBadgeNone"],
+                  ] as const).map(([id, labelKey]) => (
+                    <DropdownItem key={id} data-pr-value={id} onSelect={() => setTaskPrBadge(id)} className="items-center">
+                      <Check className={cn("h-4 w-4 shrink-0 text-[var(--color-accent)]", taskPrBadge === id ? "opacity-100" : "opacity-0")} />
+                      <span className={cn("flex-1", taskPrBadge === id && "text-[var(--color-accent)] font-medium")}>{t(labelKey)}</span>
+                      <span className="ml-4 flex items-center"><TaskPrSamples value={id} /></span>
+                    </DropdownItem>
+                  ))}
+                </DropdownSubContent>
+              </DropdownSub>
+              <DropdownSeparator />
+              <DropdownItem
+                onSelect={() => setHideInactiveProjects(!hideInactiveProjects)}
+                className={hideInactiveProjects
+                  ? "bg-[var(--color-sel)] data-[highlighted]:bg-[var(--color-sel)]"
+                  : undefined}
+              >
+                {/* Checkmark when on, empty slot when off — same pattern as
+                    the expand-mode rows above (no stray icon). */}
+                {hideInactiveProjects
+                  ? <Check className="h-5 w-5 shrink-0 text-[var(--color-accent)]" />
+                  : <span className="h-5 w-5 shrink-0" />}
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className={hideInactiveProjects ? "text-[var(--color-accent)] font-medium" : undefined}>{t("collapseInactive")}</span>
+                  <span className="text-[11px] leading-snug text-[var(--color-fg-dim)]">{t("collapseInactiveHint")}</span>
+                </div>
+              </DropdownItem>
+              {/* Same check-row shape. Mirrored in Settings > Appearance >
+                  Sidebar, which writes the same pref. */}
+              <DropdownItem
+                data-testid="sidebar-toggle-status-section"
+                onSelect={() => setShowStatusSection(!showStatusSection)}
+                className={showStatusSection
+                  ? "bg-[var(--color-sel)] data-[highlighted]:bg-[var(--color-sel)]"
+                  : undefined}
+              >
+                {showStatusSection
+                  ? <Check className="h-5 w-5 shrink-0 text-[var(--color-accent)]" />
+                  : <span className="h-5 w-5 shrink-0" />}
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className={showStatusSection ? "text-[var(--color-accent)] font-medium" : undefined}>{t("showStatusSection")}</span>
+                  <span className="text-[11px] leading-snug text-[var(--color-fg-dim)]">{t("showStatusSectionHint")}</span>
+                </div>
+              </DropdownItem>
+            </DropdownMenu>
+          </DropdownRoot>
+          {/* The ONE Add project button (GH #280 removed the footer copy):
+              it belongs next to the list it acts on. */}
+          <HeaderButton testId="sidebar-add-project" label={t("addProjectTip")} onClick={openNewProject}>
+            <FolderPlusGlyph size={15} />
+          </HeaderButton>
+        </div>
+      )}
+
       {/* Projects section */}
-      <div className={cn("relative flex min-h-0 flex-1 flex-col", !compact && "pt-[var(--sidebar-head-pad)]")}>
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         ref={projectsScrollRef}
         data-testid="sidebar-scroll"
@@ -1344,187 +1561,23 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
         {/* STATUS above PROJECTS, in the same scroller (docs/ui.md "The
             sidebar's status section"). Not on the icon rail: the hover
             overlay is a full sidebar and shows it there instead. */}
-        {!compact && showStatusSection && <StatusSection matchIds={queryMatchIds} />}
-        {!compact && showStatusSection && (
+        {!statusView && !compact && showStatusSection && <StatusSection matchIds={queryMatchIds} />}
+        {!statusView && !compact && showStatusSection && (
           <div data-testid="sidebar-section-divider" className="my-2 border-t border-[var(--color-border-soft)]" />
         )}
-        <div
-          data-testid="projects-section-header"
-          className={cn(
-            compact
-              ? "flex flex-col gap-1.5 py-1"
-              : "group mb-1 flex h-7 select-none items-center justify-between rounded-md border border-[var(--color-border-soft)]/50 bg-[var(--color-bg-2)]/60 px-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-fg)] transition-colors hover:bg-[var(--color-bg-2)]",
-          )}
-        >
-          {!compact && (
-            // A label, not a fold. STATUS above it folds because it is a
-            // second copy of some tasks; this is the tree itself, and folding
-            // it away left a sidebar with nothing in it.
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5">
-              <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
-              <span className="truncate">{t("projectsHeader")}</span>
-            </div>
-          )}
-          <div className={cn("flex gap-0.5", compact && "flex-col")}>
-            {/* Expand/collapse-all + expand-mode + hide-inactive controls act
-                on the full project TREE (names, task rows), none of which
-                compact mode renders — the rail is icon-only. Nothing here
-                would do anything if opened, so skip it entirely rather than
-                show a trigger with nothing behind it. */}
-            {!compact && (
-            <DropdownRoot>
-              <Tip content={t("listOptionsTip")}>
-                <DropdownTrigger asChild>
-                  <Button size="icon" variant="icon" data-testid="sidebar-list-options">
-                    <ChevronsUpDown className={iconSize(compact)} />
-                  </Button>
-                </DropdownTrigger>
-              </Tip>
-              {/* preventDefault on close keeps focus from snapping back to the
-                  trigger, which would otherwise re-fire its (focus-triggered)
-                  tooltip and leave it stuck open after selecting an item. */}
-              <DropdownMenu side="right" align="start" sideOffset={4} className="w-[280px]" onCloseAutoFocus={(e) => e.preventDefault()}>
-                {/* Both actions cover group folders too — expanding agents
-                    under a still-collapsed folder would look like a no-op,
-                    and "collapse all" means the whole tree tidies up. Task rows
-                    have no throwaway fold, so while the query filters they are
-                    left alone rather than rewriting the stored layout. */}
-                <DropdownItem onSelect={() => { if (!queryOn) setAllTasksCollapsed(false); setAllFolders(false); }}>
-                  <ChevronsUpDown className="h-5 w-5 text-[var(--color-fg-dim)]" />
-                  <span>{t("expandAll")}</span>
-                </DropdownItem>
-                <DropdownItem onSelect={() => { if (!queryOn) setAllTasksCollapsed(true); setAllFolders(true); }}>
-                  <ChevronsDownUp className="h-5 w-5 text-[var(--color-fg-dim)]" />
-                  <span>{t("collapseAll")}</span>
-                </DropdownItem>
-                <DropdownSeparator />
-                <DropdownLabel>{t("defaultExpand")}</DropdownLabel>
-                {([
-                  ["chevron", "expandChevron", "expandChevronHint"],
-                  ["click",   "expandClick",   "expandClickHint"],
-                  ["always",  "expandAlways",  "expandAlwaysHint"],
-                ] as const).map(([id, labelKey, hintKey]) => {
-                  const isActive = taskExpandMode === id;
-                  return (
-                    <DropdownItem
-                      key={id}
-                      onSelect={() => setTaskExpandMode(id)}
-                      className={isActive
-                        ? "bg-[var(--color-sel)] data-[highlighted]:bg-[var(--color-sel)]"
-                        : undefined}
-                    >
-                      {isActive
-                        ? <Check className="h-5 w-5 shrink-0 text-[var(--color-accent)]" />
-                        : <span className="h-5 w-5 shrink-0" />}
-                      <div className="flex min-w-0 flex-col gap-0.5">
-                        <span className={isActive ? "text-[var(--color-accent)] font-medium" : undefined}>{t(labelKey)}</span>
-                        <span className="text-[11px] leading-snug text-[var(--color-fg-dim)]">{t(hintKey)}</span>
-                      </div>
-                    </DropdownItem>
-                  );
-                })}
-                {/* Mirrored in Settings > Appearance > Sidebar, which writes
-                    the same pref. */}
-                <DropdownSub>
-                  <DropdownSubTrigger data-testid="sidebar-task-git-icon" className="justify-between">
-                    <span className="flex items-center gap-2">
-                      <span className="h-5 w-5 shrink-0" />
-                      {t("taskGitIcon")}
-                    </span>
-                    {/* The current choice, as the glyphs it draws: the row
-                        says what is on without opening the submenu. */}
-                    <span className="flex items-center gap-2">
-                      <TaskLocationSamples value={taskLocationIcon} />
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
-                    </span>
-                  </DropdownSubTrigger>
-                  <DropdownSubContent>
-                    {([
-                      ["both",     "taskGitIconBoth"],
-                      ["main",     "taskGitIconMain"],
-                      ["worktree", "taskGitIconWorktree"],
-                      ["none",     "taskGitIconNone"],
-                    ] as const).map(([id, labelKey]) => (
-                      <DropdownItem key={id} data-value={id} onSelect={() => setTaskLocationIcon(id)} className="items-center">
-                        <Check className={cn("h-4 w-4 shrink-0 text-[var(--color-accent)]", taskLocationIcon === id ? "opacity-100" : "opacity-0")} />
-                        <span className={cn("flex-1", taskLocationIcon === id && "text-[var(--color-accent)] font-medium")}>{t(labelKey)}</span>
-                        <span className="ml-4 flex items-center"><TaskLocationSamples value={id} /></span>
-                      </DropdownItem>
-                    ))}
-                  </DropdownSubContent>
-                </DropdownSub>
-                {/* The same shape for the row's PR mark. Mirrored in Settings
-                    > Appearance > Sidebar, which writes the same pref. */}
-                <DropdownSub>
-                  <DropdownSubTrigger data-testid="sidebar-task-pr-badge" className="justify-between">
-                    <span className="flex items-center gap-2">
-                      <span className="h-5 w-5 shrink-0" />
-                      {t("taskPrBadge")}
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <TaskPrSamples value={taskPrBadge} />
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
-                    </span>
-                  </DropdownSubTrigger>
-                  <DropdownSubContent>
-                    {([
-                      ["both",   "taskPrBadgeBoth"],
-                      ["icon",   "taskPrBadgeIcon"],
-                      ["number", "taskPrBadgeNumber"],
-                      ["none",   "taskPrBadgeNone"],
-                    ] as const).map(([id, labelKey]) => (
-                      <DropdownItem key={id} data-pr-value={id} onSelect={() => setTaskPrBadge(id)} className="items-center">
-                        <Check className={cn("h-4 w-4 shrink-0 text-[var(--color-accent)]", taskPrBadge === id ? "opacity-100" : "opacity-0")} />
-                        <span className={cn("flex-1", taskPrBadge === id && "text-[var(--color-accent)] font-medium")}>{t(labelKey)}</span>
-                        <span className="ml-4 flex items-center"><TaskPrSamples value={id} /></span>
-                      </DropdownItem>
-                    ))}
-                  </DropdownSubContent>
-                </DropdownSub>
-                <DropdownSeparator />
-                <DropdownItem
-                  onSelect={() => setHideInactiveProjects(!hideInactiveProjects)}
-                  className={hideInactiveProjects
-                    ? "bg-[var(--color-sel)] data-[highlighted]:bg-[var(--color-sel)]"
-                    : undefined}
-                >
-                  {/* Checkmark when on, empty slot when off — same pattern as
-                      the expand-mode rows above (no stray icon). */}
-                  {hideInactiveProjects
-                    ? <Check className="h-5 w-5 shrink-0 text-[var(--color-accent)]" />
-                    : <span className="h-5 w-5 shrink-0" />}
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className={hideInactiveProjects ? "text-[var(--color-accent)] font-medium" : undefined}>{t("collapseInactive")}</span>
-                    <span className="text-[11px] leading-snug text-[var(--color-fg-dim)]">{t("collapseInactiveHint")}</span>
-                  </div>
-                </DropdownItem>
-                {/* Same check-row shape. Mirrored in Settings > Appearance >
-                    Sidebar, which writes the same pref. */}
-                <DropdownItem
-                  data-testid="sidebar-toggle-status-section"
-                  onSelect={() => setShowStatusSection(!showStatusSection)}
-                  className={showStatusSection
-                    ? "bg-[var(--color-sel)] data-[highlighted]:bg-[var(--color-sel)]"
-                    : undefined}
-                >
-                  {showStatusSection
-                    ? <Check className="h-5 w-5 shrink-0 text-[var(--color-accent)]" />
-                    : <span className="h-5 w-5 shrink-0" />}
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className={showStatusSection ? "text-[var(--color-accent)] font-medium" : undefined}>{t("showStatusSection")}</span>
-                    <span className="text-[11px] leading-snug text-[var(--color-fg-dim)]">{t("showStatusSectionHint")}</span>
-                  </div>
-                </DropdownItem>
-              </DropdownMenu>
-            </DropdownRoot>
-            )}
+        {compact && (
+          <div data-testid="projects-section-header" className="flex flex-col gap-1.5 py-1">
             {/* The ONE Add project button (GH #280 removed the footer copy):
                 it belongs next to the list it acts on. */}
             <Tip content={t("addProjectTip")}><Button size="icon" variant="icon" data-testid="sidebar-add-project" onClick={openNewProject}>
               <FolderPlus className={iconSize(compact)} /></Button></Tip>
           </div>
-        </div>
+        )}
 
+        {/* The STATUS view lists the buckets in the tree's place. */}
+        {statusView && !compact ? (
+          <StatusSection asView matchIds={queryMatchIds} />
+        ) : (
         <div className="flex flex-col gap-0.5">
           {(() => {
           const renderProject = (p: typeof projects[number]) => {
@@ -2492,6 +2545,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
           );
           })()}
         </div>
+        )}
       </div>
         {/* The compact rail scrolls with no visible bar (a 10px bar is a sixth
             of a 56px rail), so the fade is what says there is more below. */}
@@ -3898,6 +3952,26 @@ function TaskPrSamples({ value }: { value: "both" | "icon" | "number" | "none" }
       {value !== "icon" && <span className="text-[11px] tabular-nums leading-none after:content-['#12']" />}
     </span>
   );
+}
+
+/** A 24px icon button in the section header. `ownTip` false when a wrapping
+ *  trigger (a menu's) already draws the tooltip. */
+function HeaderButton({ testId, label, ownTip = true, children, ...rest }: {
+  testId: string; label: string; ownTip?: boolean; children: React.ReactNode;
+} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const button = (
+    <button
+      type="button"
+      data-testid={testId}
+      aria-label={label}
+      className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-[5px] text-[var(--sidebar-icon)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--sidebar-btn-hover-ink)] data-[state=open]:bg-[var(--sidebar-row-hover)] data-[state=open]:text-[var(--sidebar-btn-hover-ink)]"
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+
+  return ownTip ? <Tip content={label} side="bottom">{button}</Tip> : button;
 }
 
 /** One segment of the toolbar's recessed view switcher. The active one is a
