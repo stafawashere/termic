@@ -172,11 +172,12 @@ export function UnifiedBar() {
         <ProfileChip />
         <div className="ml-[6px] flex min-w-0 items-center gap-[6px]">
         {task && <SessionStrip taskId={task.id} />}
-        <UpdaterBanner />
         {/* Waiting-agents pill (issue #56): appears only when an agent needs
-            you, jumps to the next on click. Sits with the other status pills
-            so a live "N waiting" is glanceable from anywhere. */}
+            you, jumps to the next on click, across every task. The strip
+            beside it only speaks for the open one. */}
         <WaitingAgentsPill />
+        {/* Build badge (DEV / E2E / BETA) or the update button. */}
+        <UpdaterBanner />
         {/* YOLO is per-task only — controlled from the task's
             sidebar dropdown ("YOLO: on/off"), with a red ⚡ status badge
             on the sidebar row. No top-bar toggle (it had no global

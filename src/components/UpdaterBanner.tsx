@@ -51,7 +51,7 @@ export function UpdaterBanner() {
   // means the window is not on any branch, so it is probably not running
   // what you think it is.
   const branchLabel = branch ? (
-    <span className="max-w-[220px] truncate font-mono text-[10px] font-normal normal-case tracking-normal opacity-80">
+    <span className="titlebar-badge-branch titlebar-mono">
       {branch}
     </span>
   ) : null;
@@ -60,7 +60,8 @@ export function UpdaterBanner() {
     return isE2E ? (
       <span
         title={t("updaterBanner.e2eTitle", { branchSuffix: branchTitle })}
-        className="flex select-none items-center gap-1.5 rounded-full border border-[var(--color-err)]/50 bg-[var(--color-err)]/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-err)]"
+        data-tone="e2e"
+        className="titlebar-badge titlebar-ink select-none"
       >
         E2E
         {branchLabel}
@@ -68,7 +69,8 @@ export function UpdaterBanner() {
     ) : (
       <span
         title={t("updaterBanner.devTitle", { branchSuffix: branchTitle })}
-        className="flex select-none items-center gap-1.5 rounded-full border border-[var(--color-warn)]/40 bg-[var(--color-warn)]/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-warn)]"
+        data-tone="dev"
+        className="titlebar-badge titlebar-ink select-none"
       >
         DEV
         {branchLabel}
@@ -90,7 +92,8 @@ export function UpdaterBanner() {
             ? t("updaterBanner.betaBuilt", { info })
             : t("updaterBanner.betaLocal")
         }
-        className="flex select-none items-center rounded-full border border-[var(--color-info)]/40 bg-[var(--color-info)]/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-info)]"
+        data-tone="beta"
+        className="titlebar-badge titlebar-ink select-none"
       >
         BETA
       </span>
@@ -107,7 +110,7 @@ export function UpdaterBanner() {
       onClick={() => void install()}
       disabled={installing !== null}
       title={t("updaterBanner.updateTo", { version: update.version, current: update.currentVersion })}
-      className="flex items-center gap-1.5 rounded-full border border-[var(--color-accent-deep)] bg-[var(--color-accent-deep)] px-2.5 py-0.5 text-[12px] font-medium text-white hover:bg-[#8a3a1c] disabled:opacity-70"
+      className="flex h-[26px] shrink-0 items-center gap-1.5 rounded-[6px] bg-[var(--color-accent-deep)] px-[9px] text-[12px] font-medium text-white shadow-[var(--sidebar-chip-shadow)] transition-[filter] duration-[120ms] hover:brightness-110 disabled:opacity-70"
     >
       {installing === null && (
         <>

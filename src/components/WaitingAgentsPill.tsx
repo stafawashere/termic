@@ -12,7 +12,6 @@ import { Tip } from "@/components/ui/Tooltip";
 import { Bell } from "lucide-react";
 import { bindingGlyphs, bindingText } from "@/lib/shortcuts";
 import { waitingAttentionCount, waitingDoneCount, jumpToNextWaiting } from "@/lib/waitingAgents";
-import { cn } from "@/lib/utils";
 
 export function WaitingAgentsPill() {
   const { t } = useTranslation("chrome");
@@ -47,24 +46,20 @@ export function WaitingAgentsPill() {
         data-testid="waiting-agents-pill"
         data-attention={attention}
         data-done={done}
-        // Warn-toned only while something is BLOCKED. A pill that is amber
-        // because a turn finished cries wolf for the case that matters.
-        className={cn(
-          "flex select-none items-center gap-1.5 rounded-full border px-2 py-0.5 text-[12px] font-medium",
-          attention > 0
-            ? "border-[var(--color-warn)]/40 bg-[var(--color-warn)]/15 hover:bg-[var(--color-warn)]/25"
-            : "border-[var(--color-info)]/40 bg-[var(--color-info)]/15 hover:bg-[var(--color-info)]/25",
-        )}
+        // Only the bell is warn-toned, and only while something is BLOCKED.
+        // A pill that is amber because a turn finished cries wolf for the
+        // case that matters.
+        className="titlebar-well titlebar-waiting select-none"
       >
         {attention > 0 && (
-          <span className="flex items-center gap-1 text-[var(--color-warn)]">
+          <span className="titlebar-ink flex items-center gap-1 text-[var(--color-warn)]">
             <Bell className="h-3 w-3" />
             <span className="tabular-nums leading-none">{attention}</span>
           </span>
         )}
         {done > 0 && (
-          <span className="flex items-center gap-1 text-[var(--color-info)]">
-            <span className="h-2 w-2 rounded-full bg-current" />
+          <span className="titlebar-ink flex items-center gap-1 text-[var(--color-info)]">
+            <span className="h-[7px] w-[7px] rounded-full bg-current" />
             <span className="tabular-nums leading-none">{done}</span>
           </span>
         )}
