@@ -54,10 +54,8 @@ export default {
   },
   sessionStrip: {
     openAgent: "打开智能体",
-    idle: "没有运行中的智能体",
     running: "运行中",
     waiting: "等待中",
-    done: "已完成",
     allow: "允许",
     stop: "停止",
     stopAria: "停止 {{name}}",

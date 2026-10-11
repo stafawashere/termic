@@ -1,15 +1,16 @@
 // The title bar's session strip (docs/ui.md "Title bar"): which agent tab of
 // the open task it describes, and in what state. Pure and store-free.
 //
-// Picked from what the tab already carries: `workState` for running and done,
-// `unread.reason === "attention"` for an agent blocked on you. There is no
+// Picked from what the tab already carries: `workState` for running,
+// `unread.reason === "attention"` for an agent blocked on you. A finished or
+// idle agent is not picked, so the strip hides. There is no
 // live tool-call channel, so the only tool the strip can name is the one a
 // permission request reports (docs/agent-hooks.md, "claude's attention body
 // names the tool").
 
 import type { Tab, TerminalTab } from "./types";
 
-export type SessionStripState = "running" | "waiting" | "done";
+export type SessionStripState = "running" | "waiting";
 
 export interface SessionStripPick {
   tabId: string;
@@ -36,15 +37,14 @@ function isAgentTerminal(tab: Tab): tab is TerminalTab {
 function stateOf(tab: TerminalTab): SessionStripState | null {
   if (tab.unread?.reason === "attention") return "waiting";
   if (tab.workState === "working") return "running";
-  if (tab.workState === "done") return "done";
   return null;
 }
 
-/** Newest running agent, else newest waiting, else newest done. */
+/** Newest running agent, else newest waiting one. */
 export function pickSessionTab(tabs: readonly Tab[] | undefined): SessionStripPick | null {
   if (!tabs) return null;
 
-  const rank: Record<SessionStripState, number> = { running: 3, waiting: 2, done: 1 };
+  const rank: Record<SessionStripState, number> = { running: 2, waiting: 1 };
   let best: { tab: TerminalTab; state: SessionStripState; stamp: number } | null = null;
   let running = 0;
 
@@ -55,7 +55,7 @@ export function pickSessionTab(tabs: readonly Tab[] | undefined): SessionStripPi
     if (!state) continue;
     if (state === "running") running += 1;
 
-    const stamp = (state === "done" ? tab.workDoneAt : tab.workingSince) ?? 0;
+    const stamp = tab.workingSince ?? 0;
     const outranks = !best || rank[state] > rank[best.state];
     const newerSameRank = !!best && rank[state] === rank[best.state] && stamp > best.stamp;
 

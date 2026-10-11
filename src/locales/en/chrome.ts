@@ -54,10 +54,8 @@ export default {
   },
   sessionStrip: {
     openAgent: "Open agent",
-    idle: "No agent running",
     running: "running",
     waiting: "waiting",
-    done: "done",
     allow: "Allow",
     stop: "Stop",
     stopAria: "Stop {{name}}",

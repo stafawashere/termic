@@ -1711,16 +1711,12 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   font-weight: 600;
   color: var(--sidebar-ink-strong);
 }
-.titlebar-session-label {
-  min-width: 48px;
-}
 .titlebar-session-state {
   flex-shrink: 0;
   font-size: 11.5px;
 }
 .titlebar-session-state[data-state="running"] { color: var(--color-accent); }
 .titlebar-session-state[data-state="waiting"] { color: var(--sidebar-running); }
-.titlebar-session-state[data-state="done"] { color: var(--sidebar-settled); }
 .titlebar-session-meta {
   font-size: 11.5px;
   color: var(--sidebar-muted);

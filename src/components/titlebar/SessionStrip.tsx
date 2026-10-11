@@ -1,6 +1,7 @@
 // The title bar's session strip: what the open task's agent is doing right
 // now, in a recessed well (docs/ui.md "Title bar"). The well opens the agent,
-// the stop button past the groove ends it.
+// the stop button past the groove ends it. With no agent running or waiting
+// it renders nothing, so the left cluster closes up.
 //
 // One store subscription for the pick, packed into a string by
 // sessionStripKey, so output and live-title writes re-render nothing. The
@@ -90,19 +91,10 @@ export const SessionStrip = memo(function SessionStrip({ taskId }: { taskId: str
   });
   const visible = useDocumentVisible();
 
-  if (!pick) {
-    return (
-      <div data-testid="session-strip" data-state="idle" className="titlebar-well titlebar-session">
-        <div className="titlebar-session-main">
-          <SessionTrace running={false} />
-          <span className="titlebar-session-meta titlebar-session-label titlebar-trunc titlebar-ink">{t("sessionStrip.idle")}</span>
-        </div>
-      </div>
-    );
-  }
+  if (!pick) return null;
 
   const isRunning = pick.state === "running";
-  const showsClock = pick.since !== null && pick.state !== "done";
+  const showsClock = pick.since !== null;
   const hasMore = pick.otherRunning > 0;
 
   const stop = async () => {

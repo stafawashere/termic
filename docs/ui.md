@@ -1674,7 +1674,8 @@ window's centre until the switch.
 
 **The session strip** (`SessionStrip`, `lib/sessionStrip.ts`) speaks for the
 open task only: the newest running agent tab, else the newest one blocked on
-you, else the newest done one, as trace, tab name, state word, elapsed clock
+you. With neither it is not rendered at all, and the left cluster closes up.
+It draws a trace, tab name, state word, elapsed clock
 and a stop button past a groove (it kills that tab's PTY after a confirm). A
 `+N` chip switches to another running agent. Its data is what the tab
 already carries; there is no live tool-call channel, so the tool slot only
@@ -1742,7 +1743,7 @@ attributes, so its rows cannot carry a test id.
 
 ## Window chrome / drag
 
-macOS overlay title bar, hidden title, 84px reserved left for traffic lights. Their inset (`traffic_y` in `build_profile_window`, 16, or 21 on Tahoe) was tuned for the old 38.5px bar and has not been re-measured against the 50px one; `TERMIC_TRAFFIC_Y` overrides it for tuning. Windows and Linux have no native frame at all (`decorations(false)` in `build_profile_window`): the same bar drags the window through `startDragging()`, a double click maximizes (read off the mousedown's click count), and `WindowControls` draws minimize, maximize / restore and close at its right end, in each platform's own look (Windows' caption glyphs and red Close; GNOME's small round buttons on Linux). Linux dropped GTK's title bar because it spent ~58px on the word "Termic" above a bar that already says where you are. The window still resizes from its edges (tao hit-tests the outer 5px of an undecorated window), and `WindowResizeEdges` lays transparent strips over that same 5px purely for the resize CURSOR, which tao sets on the toplevel window and which never shows over the webview. On Linux the window has no shadow, and the title-bar context menu (Move, Always on Top) is gone with the bar; the compositor's own Super+drag still moves it. The Activity window keeps its native title bar everywhere. Three drag mechanisms (each fails differently):
+macOS overlay title bar, hidden title, 84px reserved left for traffic lights. Their inset (`traffic_y` in `build_profile_window`) is 27.5, which centres them on the 50px bar: checked by eye on a Darwin 27 Mac, not yet on one before Tahoe (the old 38.5px bar used 21 on Tahoe and 16 before it). `TERMIC_TRAFFIC_Y` overrides it for tuning. Windows and Linux have no native frame at all (`decorations(false)` in `build_profile_window`): the same bar drags the window through `startDragging()`, a double click maximizes (read off the mousedown's click count), and `WindowControls` draws minimize, maximize / restore and close at its right end, in each platform's own look (Windows' caption glyphs and red Close; GNOME's small round buttons on Linux). Linux dropped GTK's title bar because it spent ~58px on the word "Termic" above a bar that already says where you are. The window still resizes from its edges (tao hit-tests the outer 5px of an undecorated window), and `WindowResizeEdges` lays transparent strips over that same 5px purely for the resize CURSOR, which tao sets on the toplevel window and which never shows over the webview. On Linux the window has no shadow, and the title-bar context menu (Move, Always on Top) is gone with the bar; the compositor's own Super+drag still moves it. The Activity window keeps its native title bar everywhere. Three drag mechanisms (each fails differently):
 
 1. `data-tauri-drag-region` — primary (Tauri 2 JS handler)
 2. `WebkitAppRegion: "drag"` — backup (native AppKit hint)

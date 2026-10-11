@@ -10121,11 +10121,16 @@ fn build_profile_window(app: &AppHandle, id: &ProfileId) -> tauri::Result<tauri:
             format!("Termic - {name}")
         }
     };
+    // Centres the lights on the 50px title bar, checked by eye on a Tahoe
+    // and later Mac. Against the old 38.5px bar they were 21 there and 16
+    // before Tahoe; moving the pre-Tahoe 16 by twice the 5.75px the bar's
+    // centre moved also lands on 27.5, but nobody has looked at that one.
+    // TERMIC_TRAFFIC_Y overrides it for tuning.
     #[cfg(target_os = "macos")]
     let traffic_y: f64 = std::env::var("TERMIC_TRAFFIC_Y")
         .ok()
         .and_then(|v| v.trim().parse::<f64>().ok())
-        .unwrap_or_else(|| if is_macos_tahoe() { 21.0 } else { 16.0 });
+        .unwrap_or(27.5);
 
     #[allow(unused_mut)]
     let mut builder = tauri::WebviewWindowBuilder::new(

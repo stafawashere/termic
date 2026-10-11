@@ -27,14 +27,14 @@ describe("pickSessionTab", () => {
     expect(pickSessionTab(tabs)).toMatchObject({ tabId: "new", state: "running", since: 5_000, otherRunning: 2 });
   });
 
-  it("prefers a running agent over a waiting one, and waiting over done", () => {
+  it("prefers a running agent over a waiting one, and picks nothing once they are done", () => {
     const waiting = terminal("waiting", { workState: "working", workingSince: 9_000, unread: { reason: "attention" } });
     const done = terminal("done", { workState: "done", workDoneAt: 9_500 });
     const running = terminal("running", { workState: "working", workingSince: 1_000 });
 
     expect(pickSessionTab([done, waiting, running])?.tabId).toBe("running");
     expect(pickSessionTab([done, waiting])).toMatchObject({ tabId: "waiting", state: "waiting", otherRunning: 0 });
-    expect(pickSessionTab([done])).toMatchObject({ tabId: "done", state: "done" });
+    expect(pickSessionTab([done])).toBeNull();
   });
 
   it("names the tool a permission request is about, and only for a waiting agent", () => {
@@ -44,8 +44,8 @@ describe("pickSessionTab", () => {
     expect(pickSessionTab([asking])?.tool).toBe("mcp__github__create_pr");
     expect(pickSessionTab([vague])?.tool).toBeNull();
 
-    const finished = terminal("finished", { workState: "done", unread: { reason: "done", message: "needs your permission: Bash" } });
-    expect(pickSessionTab([finished])?.tool).toBeNull();
+    const running = terminal("running", { workState: "working", unread: { reason: "done", message: "needs your permission: Bash" } });
+    expect(pickSessionTab([running])?.tool).toBeNull();
   });
 
   it("ignores shells, run tabs and idle agents", () => {
