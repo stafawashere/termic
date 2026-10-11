@@ -55,6 +55,8 @@ import { TaskGroupBlock } from "./TaskGroupBlock";
 import { SubagentGroupToggle, SubagentRows, useSubagentHasRow } from "./SubagentRows";
 import { childRowCarriesSelection, subagentIdOfTab } from "./subagentTree";
 import { StatusChips } from "./StatusChips";
+import { AgentActivityReadout } from "./AgentActivityReadout";
+import { FolderGlyph, HistoryGlyph, KanbanGlyph, ScheduleGlyph } from "./sidebarIcons";
 import { StatusSection } from "./StatusSection";
 import { RollupMarks } from "./RollupMarks";
 import { BoardFilterBar } from "@/components/views/BoardFilterBar";
@@ -1227,37 +1229,65 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
       style={sidebarWash ? { "--sidebar-panel-wash": sidebarWash } as React.CSSProperties : undefined}
       className="sidebar-panel relative flex h-full min-w-0 flex-1 flex-col overflow-hidden"
     >
-      {/* The sidebar's head: nav, filter bar, chips. ONE gap spaces them, and
-          none of the three sets vertical padding of its own. Each used to
-          (12/8 on the nav, 8 over the bar, 6 over the chips), which is how
-          three rows ended up three different distances apart. */}
-      <div className={cn("flex shrink-0 flex-col", !compact && "gap-3 pt-3")}>
-      {/* Primary nav: Dashboard / History / Kanban / Scheduled. One strip of
-          icons in the full sidebar (docs/ui.md "One glyph per meaning"): four
-          full-width rows took the top of the sidebar before anything about
-          your work showed. The rail keeps its column. */}
-      <nav className={cn("flex gap-0.5", compact ? "flex-col p-1.5 pt-2" : "px-2")}>
-        <NavItem icon={<LayoutGrid className={iconSize(compact)} />} label={t("navDashboard")}
-          active={currentView === "dashboard" && !activeTask} compact={compact}
-          onClick={() => setView("dashboard")}
-        />
-        <NavItem icon={<History className={iconSize(compact)} />} label={t("navHistory")}
-          active={currentView === "history" && !activeTask} compact={compact}
-          onClick={() => setView("history")}
-        />
-        {showBoard && (
-          <NavItem icon={<Columns3 className={iconSize(compact)} />} label={t("navBoard")}
-            active={currentView === "board" && !activeTask} compact={compact}
-            onClick={() => setView("board")} testId="nav-board"
+      {/* The sidebar's head. Full mode: the toolbar (view switcher and the
+          agent readout), then the filter and the chips. The rail keeps a
+          column of view buttons. */}
+      <div className="flex shrink-0 flex-col">
+      {compact ? (
+        <nav className="flex flex-col gap-0.5 p-1.5 pt-2">
+          <NavItem icon={<LayoutGrid className={iconSize(compact)} />} label={t("navDashboard")}
+            active={currentView === "dashboard" && !activeTask} compact={compact}
+            onClick={() => setView("dashboard")}
           />
-        )}
-        {showScheduled && (
-          <NavItem icon={<CalendarClock className={iconSize(compact)} />} label={t("navScheduled")}
-            active={currentView === "scheduled" && !activeTask} compact={compact}
-            onClick={() => setView("scheduled")} testId="nav-scheduled"
+          <NavItem icon={<History className={iconSize(compact)} />} label={t("navHistory")}
+            active={currentView === "history" && !activeTask} compact={compact}
+            onClick={() => setView("history")}
           />
-        )}
-      </nav>
+          {showBoard && (
+            <NavItem icon={<Columns3 className={iconSize(compact)} />} label={t("navBoard")}
+              active={currentView === "board" && !activeTask} compact={compact}
+              onClick={() => setView("board")} testId="nav-board"
+            />
+          )}
+          {showScheduled && (
+            <NavItem icon={<CalendarClock className={iconSize(compact)} />} label={t("navScheduled")}
+              active={currentView === "scheduled" && !activeTask} compact={compact}
+              onClick={() => setView("scheduled")} testId="nav-scheduled"
+            />
+          )}
+        </nav>
+      ) : (
+        <div
+          data-testid="sidebar-toolbar"
+          className="flex h-[var(--sidebar-toolbar-h)] shrink-0 items-center gap-[8px] border-b border-[var(--sidebar-divider)] bg-[linear-gradient(180deg,var(--sidebar-sheen),transparent)] px-[10px]"
+        >
+          <nav data-testid="sidebar-view-switcher" className="flex gap-[2px] rounded-[8px] bg-[var(--sidebar-well-bg)] p-[3px] shadow-[var(--sidebar-well-shadow)]">
+            <ViewSegment icon={<FolderGlyph />} label={t("navDashboard")}
+              active={currentView === "dashboard" && !activeTask}
+              onClick={() => setView("dashboard")} testId="nav-dashboard"
+            />
+            <ViewSegment icon={<HistoryGlyph />} label={t("navHistory")}
+              active={currentView === "history" && !activeTask}
+              onClick={() => setView("history")} testId="nav-history"
+            />
+            {showBoard && (
+              <ViewSegment icon={<KanbanGlyph />} label={t("navBoard")}
+                active={currentView === "board" && !activeTask}
+                onClick={() => setView("board")} testId="nav-board"
+              />
+            )}
+            {showScheduled && (
+              <ViewSegment icon={<ScheduleGlyph />} label={t("navScheduled")}
+                active={currentView === "scheduled" && !activeTask}
+                onClick={() => setView("scheduled")} testId="nav-scheduled"
+              />
+            )}
+          </nav>
+          <div className="flex-1" />
+          <AgentActivityReadout />
+        </div>
+      )}
+      <div className={cn("flex flex-col", !compact && "gap-3 pt-3")}>
 
       {/* The filter bar: above STATUS and PROJECTS, outside their scroller,
           because it scopes both and must not scroll away from them. */}
@@ -1294,6 +1324,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
           )}
         </div>
       )}
+      </div>
       </div>
 
       {/* Projects section */}
@@ -3862,6 +3893,35 @@ function TaskPrSamples({ value }: { value: "both" | "icon" | "number" | "none" }
       {value !== "number" && <GitPullRequest className="h-3 w-3" />}
       {value !== "icon" && <span className="text-[11px] tabular-nums leading-none after:content-['#12']" />}
     </span>
+  );
+}
+
+/** One segment of the toolbar's recessed view switcher. The active one is a
+ *  raised chip; the label is the tooltip and stays in the DOM for screen
+ *  readers and for specs that find the view by name. */
+function ViewSegment({ icon, label, active, onClick, testId }: {
+  icon: React.ReactNode; label: string; active: boolean; onClick: () => void; testId: string;
+}) {
+  return (
+    <Tip content={label} side="bottom">
+      <button
+        type="button"
+        onClick={onClick}
+        data-testid={testId}
+        data-active={active || undefined}
+        aria-label={label}
+        aria-pressed={active}
+        className={cn(
+          "flex h-[26px] w-[34px] items-center justify-center rounded-[6px] transition-[color,background-color] duration-[120ms]",
+          active
+            ? "bg-[linear-gradient(180deg,var(--sidebar-chip-top),var(--sidebar-chip-bottom))] text-[var(--sidebar-icon-active)] shadow-[var(--sidebar-chip-shadow)]"
+            : "text-[var(--sidebar-icon)] hover:bg-[var(--sidebar-seg-hover)]",
+        )}
+      >
+        {icon}
+        <span className="sr-only">{label}</span>
+      </button>
+    </Tip>
   );
 }
 

@@ -1282,3 +1282,12 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 .sidebar-scroll:hover::-webkit-scrollbar-thumb { background-color: var(--sidebar-scroll-thumb-idle-hover); }
 .sidebar-scroll::-webkit-scrollbar-thumb:hover { background-color: var(--sidebar-scroll-thumb-hover); }
 .sidebar-scroll::-webkit-scrollbar-thumb:active { background-color: var(--sidebar-scroll-thumb-active); }
+
+/* The agent readout's pulse: a 12-unit dash running along the dim trace.
+   A retracted hover overlay (aria-hidden) and reduced motion hold it still. */
+@keyframes sidebar-trace { to { stroke-dashoffset: -48; } }
+.sidebar-trace-pulse { animation: sidebar-trace 1.4s linear infinite; }
+[aria-hidden="true"] .sidebar-trace-pulse { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-trace-pulse { animation: none; }
+}
