@@ -16,7 +16,7 @@ import { Tip } from "@/components/ui/Tooltip";
 import * as HoverCard from "@radix-ui/react-hover-card";
 import { Check } from "lucide-react";
 import {
-  PanelLeft, PanelRight, Archive,
+  PanelRight, Archive,
   Sun, Moon, Monitor, ArrowUpToLine, Sunrise, Droplet, Binary, Code2, Flower2,
   MessageSquareText, Library, Palette,
 } from "lucide-react";
@@ -43,6 +43,7 @@ import { CommandPaletteButton } from "@/components/CommandPaletteButton";
 import { cn } from "@/lib/utils";
 import { IS_MAC, DRAWS_WINDOW_CONTROLS, appRegionStyle } from "@/lib/platform";
 import { WindowControls } from "@/components/WindowControls";
+import { SidebarLeftGlyph } from "@/components/titlebar/titlebarIcons";
 
 // Reserve enough room for the 3 traffic lights + breathing room before the
 // first interactive control. 16 (x offset) + ~58 (3 buttons + gaps) + 10 pad.
@@ -159,11 +160,11 @@ export function UnifiedBar() {
       <div className="titlebar-side" data-side="left">
       <div
         data-tauri-drag-region="false"
-        className="flex items-center gap-2"
+        className="flex min-w-0 items-center"
         style={appRegionStyle("no-drag")}
       >
         <Tip content={compact ? t("unifiedBar.expandSidebar") : t("unifiedBar.collapseSidebar")} side="bottom">
-          <Button size="icon" variant="icon" onClick={() => {
+          <button type="button" className="titlebar-icon-btn" data-testid="titlebar-sidebar-toggle" onClick={() => {
             // Suppress the 220ms grid-template-columns transition for
             // this single toggle. Animating the column lerp makes the
             // toggle feel laggy — user clicked a button, they expect
@@ -176,16 +177,13 @@ export function UnifiedBar() {
               root.style.removeProperty("--cols-transition");
             }));
           }}>
-            <PanelLeft className="h-[18px] w-[18px]" />
-          </Button>
+            <SidebarLeftGlyph className="titlebar-ink" />
+          </button>
         </Tip>
-        {/* Self-update pill — only renders when an update is actually
-            available. Sits next to the theme picker so it's findable
-            but not intrusive. */}
-        {/* The profile, in the accent wash this bar already carries. Renders
-            nothing until profiles exist, so a dormant install sees the bar it
-            has always seen. */}
+        {/* Profiles: a bare icon until profiles exist, then the current one's
+            dot and name, in the accent wash this bar already carries. */}
         <ProfileChip />
+        <div className="ml-[6px] flex min-w-0 items-center gap-[6px]">
         <UpdaterBanner />
         {/* Waiting-agents pill (issue #56): appears only when an agent needs
             you, jumps to the next on click. Sits with the other status pills
@@ -195,6 +193,7 @@ export function UnifiedBar() {
             sidebar dropdown ("YOLO: on/off"), with a red ⚡ status badge
             on the sidebar row. No top-bar toggle (it had no global
             meaning and was redundant with the per-task control). */}
+        </div>
       </div>
 
       </div>

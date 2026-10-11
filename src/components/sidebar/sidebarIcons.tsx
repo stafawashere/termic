@@ -4,9 +4,9 @@
 
 import type { SVGProps } from "react";
 
-type GlyphProps = Omit<SVGProps<SVGSVGElement>, "children"> & { size?: number; strokeWidth?: number };
+export type GlyphProps = Omit<SVGProps<SVGSVGElement>, "children"> & { size?: number; strokeWidth?: number };
 
-function Glyph({ size = 16, strokeWidth = 1.8, children, ...rest }: GlyphProps & { children: React.ReactNode }) {
+export function Glyph({ size = 16, strokeWidth = 1.8, children, ...rest }: GlyphProps & { children: React.ReactNode }) {
   return (
     <svg
       width={size}

@@ -23,13 +23,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronDown, Settings2, UsersRound } from "lucide-react";
+import { Check, Settings2 } from "lucide-react";
+import { ChevronDownGlyph, PeopleGlyph } from "@/components/titlebar/titlebarIcons";
 import { useProfiles } from "@/store/profiles";
 import { useApp } from "@/store/app";
 import { profileOpen } from "@/lib/ipc";
 import { PopoverRoot, PopoverTrigger, PopoverContent } from "@/components/ui/Popover";
 import { ProfileDot } from "@/components/ui/AccentDots";
-import { Button } from "@/components/ui/Button";
 import { Tip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { appRegionStyle } from "@/lib/platform";
@@ -52,16 +52,16 @@ export function ProfileChip() {
   if (profiles.length === 0) {
     return (
       <Tip content={t("profileChip.profiles")} side="bottom">
-        <Button
-          size="icon"
-          variant="icon"
+        <button
+          type="button"
+          className="titlebar-icon-btn"
           data-testid="footer-profiles"
           data-no-drag
           style={appRegionStyle("no-drag")}
           onClick={() => openSettings("profiles")}
         >
-          <UsersRound className="h-[18px] w-[18px]" />
-        </Button>
+          <PeopleGlyph className="titlebar-ink" />
+        </button>
       </Tip>
     );
   }
@@ -88,10 +88,8 @@ export function ProfileChip() {
           // No background of its own: the bar's accent wash is already behind
           // it, and a second tinted surface inside a tinted one reads as a
           // rendering fault. Hover is the only fill.
-          className={cn(
-            "flex max-w-[220px] shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1",
-            "text-left hover:bg-[var(--color-bg-2)]",
-          )}
+          data-wide=""
+          className="titlebar-icon-btn max-w-[220px] text-left text-[var(--sidebar-ink)]"
           style={appRegionStyle("no-drag")}
         >
           {/* A DOT, not a lettered tile. The name is right beside it in full,
@@ -100,8 +98,8 @@ export function ProfileChip() {
           <span data-testid="profile-tile" className="flex shrink-0 items-center">
             <ProfileDot accent={me?.accent} />
           </span>
-          <span className="min-w-0 truncate text-[13px] font-medium">{name}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+          <span className="titlebar-ink min-w-0 truncate text-[12.5px] font-medium">{name}</span>
+          <ChevronDownGlyph size={11} className="titlebar-ink shrink-0 text-[var(--sidebar-icon)]" />
         </button>
       </PopoverTrigger>
 
