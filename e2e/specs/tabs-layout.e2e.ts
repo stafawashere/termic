@@ -1846,9 +1846,9 @@ describe("session bar", () => {
         .map(el => el.getAttribute("data-tab-id")), bar());
     expect(await underlined()).toEqual([shellTab]);
 
-    await $(pill(agentTab)).click();
+    await browser.execute((s) => (document.querySelector(s) as HTMLElement).click(), pill(agentTab));
     await browser.waitUntil(async () => (await underlined())[0] === agentTab, {
-      timeout: 5_000, timeoutMsg: "the underline never followed the click",
+      timeout: 5_000, timeoutMsg: `the underline never followed the click (on ${JSON.stringify(await underlined())})`,
     });
     expect(await underlined()).toEqual([agentTab]);
     await snap("session-bar.png");
@@ -1867,11 +1867,12 @@ describe("session bar", () => {
         return { opacity: style.opacity, pointerEvents: style.pointerEvents };
       }, `${pill(tab)} button[title="Close tab"]`);
 
-    await browser.execute((id, tab) => window.__termic!.useApp.getState().setActiveTabId(id, tab), taskId, shellTab);
-    await browser.waitUntil(
-      () => browser.execute((s) => document.querySelector(s)?.hasAttribute("data-active") ?? false, pill(shellTab)),
-      { timeout: 5_000, timeoutMsg: "the shell tab never became active" },
-    );
+    await ensureActiveTask(taskId);
+    await browser.execute((s) => (document.querySelector(s) as HTMLElement).click(), pill(shellTab));
+    const shellActive = () => browser.execute((s) => document.querySelector(s)?.hasAttribute("data-active") ?? null, pill(shellTab));
+    await browser.waitUntil(async () => (await shellActive()) === true, {
+      timeout: 5_000, timeoutMsg: `the shell tab never became active (data-active: ${await shellActive()})`,
+    });
     expect(await restingClose(shellTab)).toEqual({ opacity: "0", pointerEvents: "none" });
     expect(await restingClose(agentTab)).toEqual({ opacity: "0", pointerEvents: "none" });
 
@@ -1884,6 +1885,7 @@ describe("session bar", () => {
   });
 
   it("raises the broadcast button while the broadcast dialog is open", async () => {
+    await ensureActiveTask(taskId);
     const button = `${bar()} [data-testid="tab-strip-broadcast"]`;
     const pressed = () => browser.execute((s) => document.querySelector(s)?.getAttribute("aria-pressed"), button);
     expect(await pressed()).toBe("false");
