@@ -54,7 +54,6 @@ import { TaskGroupBlock } from "./TaskGroupBlock";
 import { SubagentGroupToggle, SubagentRows, useSubagentFold, useSubagentHasRow } from "./SubagentRows";
 import { childRowCarriesSelection, subagentIdOfTab } from "./subagentTree";
 import { StatusChips } from "./StatusChips";
-import { AgentActivityReadout } from "./AgentActivityReadout";
 import { BugGlyph, ChecklistGlyph, GearGlyph, KeyboardGlyph, MailGlyph, PulseGlyph, CritterGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
 import { STATUS_BUCKETS } from "@/lib/sidebarStatus";
 import { StatusSection, StatusViewCount } from "./StatusSection";
@@ -112,11 +111,8 @@ export const treeIndent = (depth: number) => 6 + depth * 18;
  *  owns it. */
 export const treeGuideLeft = (depth: number) => treeIndent(depth) + 4;
 
-export function Sidebar({ compact: compactProp, activityAnimates = true }: {
+export function Sidebar({ compact: compactProp }: {
   compact?: boolean;
-  /** The hover reveal mounts the rail and the overlay at once; only the one
-   *  on screen runs the readout's animation. */
-  activityAnimates?: boolean;
 } = {}) {
   const { t } = useTranslation("sidebar");
   const compactStore = useApp(s => s.compactSidebar);
@@ -1306,12 +1302,11 @@ export function Sidebar({ compact: compactProp, activityAnimates = true }: {
               />
             )}
           </nav>
-          <AgentActivityReadout compact animate={activityAnimates} />
         </div>
       ) : (
         <div
           data-testid="sidebar-toolbar"
-          className="flex shrink-0 items-center gap-[8px] border-b border-[var(--sidebar-head-rule)] bg-[linear-gradient(180deg,var(--sidebar-sheen),transparent)] px-[10px] pb-[var(--sidebar-head-pad)] pt-[var(--sidebar-toolbar-pad)]"
+          className="flex shrink-0 items-center justify-center border-b border-[var(--sidebar-head-rule)] bg-[linear-gradient(180deg,var(--sidebar-sheen),transparent)] px-[10px] pb-[var(--sidebar-head-pad)] pt-[var(--sidebar-toolbar-pad)]"
         >
           <nav data-testid="sidebar-view-switcher" className="flex gap-[2px] rounded-[8px] bg-[var(--sidebar-well-bg)] p-[3px] shadow-[var(--sidebar-well-shadow)]">
             <ViewSegment icon={<FolderGlyph />} label={t("navDashboard")}
@@ -1335,8 +1330,6 @@ export function Sidebar({ compact: compactProp, activityAnimates = true }: {
               />
             )}
           </nav>
-          <div className="flex-1" />
-          <AgentActivityReadout animate={activityAnimates} />
         </div>
       )}
       {/* The filter and the chips sit between two rules, the toolbar's and
