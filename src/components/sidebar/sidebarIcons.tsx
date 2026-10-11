@@ -94,8 +94,14 @@ export function ListOptionsGlyph(props: GlyphProps) {
   return <Glyph {...props}><path d="M4 6h16M4 12h16M4 18h10" /><circle cx="18" cy="18" r="2" /></Glyph>;
 }
 
-export function FilterLinesGlyph(props: GlyphProps) {
-  return <Glyph strokeWidth={2} {...props}><path d="M4 6h16M7 12h10M10 18h4" /></Glyph>;
+/** `slashed`: struck through, the way lucide draws its own -off icons. */
+export function FilterLinesGlyph({ slashed = false, ...props }: GlyphProps & { slashed?: boolean }) {
+  return (
+    <Glyph strokeWidth={2} {...props}>
+      <path d="M4 6h16M7 12h10M10 18h4" />
+      {slashed && <path d="m2 2 20 20" />}
+    </Glyph>
+  );
 }
 
 export function PlusGlyph(props: GlyphProps) {

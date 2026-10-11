@@ -1299,3 +1299,47 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .sidebar-trace-pulse { animation: none; }
 }
+
+/* Tree rows (Sidebar.tsx). The project tray fades on its own layer, so the
+   fade never repaints the row under it. */
+.sidebar-tray {
+  transform: translate3d(0, 0, 0);
+  transition: opacity 120ms;
+}
+.sidebar-tray-btn {
+  display: flex;
+  height: 20px;
+  width: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--sidebar-icon);
+  transition: color 120ms, background-color 120ms;
+}
+.sidebar-tray-btn:hover,
+.sidebar-tray-btn[data-state="open"] {
+  background-color: var(--sidebar-tray-hover);
+  color: var(--sidebar-btn-hover-ink);
+}
+/* A folded row's count gives way to its marks while a hidden task calls. */
+[data-kinds] + .sidebar-rest-count { display: none; }
+.sidebar-inline-input {
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--color-accent);
+  background-color: var(--sidebar-input-bg);
+  padding: 0 6px;
+  font-size: 13px;
+  color: var(--sidebar-input-ink);
+  outline: none;
+}
+.sidebar-badge {
+  flex-shrink: 0;
+  border-radius: 9px;
+  background-color: var(--sidebar-badge-bg);
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--sidebar-badge-ink);
+}

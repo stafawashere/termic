@@ -12,7 +12,7 @@ import { usePrefs, scheduledNavVisible, taskLocationIconShown } from "@/store/pr
 import { Button } from "@/components/ui/Button";
 import { Tip } from "@/components/ui/Tooltip";
 import { Spinner } from "@/components/ui/Spinner";
-import { LayoutGrid, History, Columns3, CalendarClock, FolderPlus, Settings, Plus, MoreHorizontal, Archive, Layers, Moon, Cog, MoreVertical, GitBranch, GitBranchPlus, FolderGit2, ChevronRight, ChevronDown, Bug, Mail, Zap, X, Pencil, Copy, ChevronsDownUp, ChevronsUpDown, Check, AudioWaveform, Radio, SquareChevronRight, CircleStop, Trash2, Folder, FolderMinus, FolderOpen, Megaphone, Keyboard, Activity, Waypoints, Square, Play, GitPullRequest } from "lucide-react";
+import { LayoutGrid, History, Columns3, CalendarClock, FolderPlus, Settings, Plus, Archive, Layers, Moon, Cog, MoreVertical, GitBranch, GitBranchPlus, FolderGit2, ChevronRight, ChevronDown, Bug, Mail, Zap, X, Pencil, Copy, ChevronsDownUp, ChevronsUpDown, Check, AudioWaveform, Radio, SquareChevronRight, CircleStop, Trash2, Folder, FolderMinus, FolderOpen, Megaphone, Keyboard, Activity, Waypoints, Square, Play, GitPullRequest } from "lucide-react";
 import { DropdownRoot, DropdownTrigger, DropdownMenu, DropdownItem, DropdownSeparator, DropdownLabel, DropdownSub, DropdownSubTrigger, DropdownSubContent } from "@/components/ui/Dropdown";
 import { ContextMenuRoot, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuLabel, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent } from "@/components/ui/ContextMenu";
 import { ProjectActionsMenuItems } from "./ProjectActionsMenuItems";
@@ -29,7 +29,7 @@ import { requestCloseTab } from "@/lib/closeTab";
 import { taskRename, taskReorder, taskGroupJoin, taskGroupLeave, taskGroupNew, projectRename, openPath, projectReorder, taskSetYolo, projectRemove, projectUpdate, projectSetGroup, procmonOpenWindow, ptyKill } from "@/lib/ipc";
 import { copyToClipboard } from "@/lib/clipboard";
 import { copyAgentBriefing } from "@/lib/agentBriefing";
-import { groupOf, projectSections } from "@/lib/projectGroups";
+import { groupDisplayName, groupOf, projectSections } from "@/lib/projectGroups";
 import { createQuickTask, derivedBranch, type NewTaskMode } from "@/lib/quickTask";
 import { withCreateLock } from "@/lib/createLock";
 import { confirmAndArchive } from "@/lib/archiveTask";
@@ -56,7 +56,7 @@ import { SubagentGroupToggle, SubagentRows, useSubagentFold, useSubagentHasRow }
 import { childRowCarriesSelection, subagentIdOfTab } from "./subagentTree";
 import { StatusChips } from "./StatusChips";
 import { AgentActivityReadout } from "./AgentActivityReadout";
-import { CollapseAllGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, ScheduleGlyph, SwapGlyph } from "./sidebarIcons";
+import { CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
 import { STATUS_BUCKETS } from "@/lib/sidebarStatus";
 import { StatusSection, StatusViewCount } from "./StatusSection";
 import { RollupMarks } from "./RollupMarks";
@@ -105,6 +105,14 @@ const groupColorCss = accentCss;
 // (App.tsx) renders TWO instances at once: the 56px icon rail (`compact`)
 // plus a full-width overlay (`compact={false}`) that slides in on hover. The
 // optional prop lets that overlay force full mode regardless of the store.
+/** Left padding of a tree row at `depth`: a 6px gutter, then 18px a level
+ *  (the design's grid: folder 6, project 24, task 42, session 60). */
+export const treeIndent = (depth: number) => 6 + depth * 18;
+
+/** Where a level's vertical guide runs: under the chevron of the row that
+ *  owns it. */
+export const treeGuideLeft = (depth: number) => treeIndent(depth) + 4;
+
 export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
   const { t } = useTranslation("sidebar");
   const compactStore = useApp(s => s.compactSidebar);
@@ -1196,7 +1204,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
     // inactive project renders no folder, which would strand the rename
     // state with no input to commit or escape it).
     if (ok && !compact && shownInline(p)) {
-      setRenaming({ kind: "group", id: name, value: name });
+      setRenaming({ kind: "group", id: name, value: groupDisplayName(name) });
     }
   };
 
@@ -1580,7 +1588,9 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
         ) : (
         <div className="flex flex-col gap-0.5">
           {(() => {
-          const renderProject = (p: typeof projects[number]) => {
+          // `depth`: 0 for a loose project, 1 inside a folder or the Inactive
+          // fold. Everything under the row indents from it on the 18px grid.
+          const renderProject = (p: typeof projects[number], depth = 0) => {
             const taskList = tasks.filter(w => w.project_id === p.id && !w.archived);
             const pendingForProject = pendingTaskList.filter(t => t.projectId === p.id);
             // Empty projects default to collapsed (no point pinning a blank
@@ -1630,11 +1640,25 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
             const projAttention = compact && collapsed && taskList.some(w => needsAttention(w.id));
             const projDone = compact && collapsed && !projAttention && taskList.some(w => isWorkDone(w.id));
             const isMulti = (p.type ?? "single") === "multi";
+            const hasRows = taskList.length > 0 || pendingForProject.length > 0;
+            const showsChevron = hasRows || !collapsed;
+            const isOpen = !collapsed && hasRows;
+            const trayPinned = menuOpenProjectId === p.id || filterBarOpen || filterPaused;
+            const rowIndent = treeIndent(depth);
             return (
               <div
                 key={p.id}
-                className="rounded-md"
+                className="relative rounded-md"
+                style={compact ? undefined : { "--sb-task-pad": `${treeIndent(depth + 1)}px` } as React.CSSProperties}
               >
+                {/* The project's guide, from under its row to its last child. */}
+                {!compact && isOpen && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute bottom-0 top-[var(--sidebar-row-h)] w-px bg-[var(--sidebar-guide)]"
+                    style={{ left: treeGuideLeft(depth) }}
+                  />
+                )}
                 <ContextMenuRoot>
                 <ContextMenuTrigger className="contents">
                 <Tip content={compact ? p.name : ""}>
@@ -1648,7 +1672,6 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                     // a single header's height to trigger a swap,
                     // matching what the user sees.
                     data-project-id={p.id}
-                    style={dragProjectId === p.id ? { transform: `translateY(${dragTy}px)`, position: "relative", zIndex: 20 } : undefined}
                     // Compact mode has no drag-to-reorder (the pointer
                     // handler below bails), so a plain click handles the
                     // collapse toggle the monogram represents.
@@ -1706,15 +1729,24 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                       document.addEventListener("pointerup", onUp);
                       document.addEventListener("pointercancel", onUp);
                     }}
+                    data-open={isOpen || undefined}
+                    style={dragProjectId === p.id
+                      ? { transform: `translateY(${dragTy}px)`, position: "relative", zIndex: 20, paddingLeft: compact ? undefined : rowIndent }
+                      : compact ? undefined : { paddingLeft: rowIndent }}
                     className={cn(
-                      "group flex items-center justify-between rounded-md text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer transition-colors",
-                      // Full mode highlights the whole row on hover; compact
-                      // mode hovers the centered monogram tile instead.
-                      !compact && "hover:bg-[var(--color-hover)]",
-                      taskList.length === 0 ? "text-[var(--color-fg-faint)]" : "text-[var(--color-fg)]",
-                      menuOpenProjectId === p.id && "bg-[var(--color-hover)]",
-                      compact ? "px-0 py-0.5 justify-center" : "pl-2 pr-0 py-1.5",
-                      dragProjectId === p.id && "bg-[var(--color-accent)]/15 text-[var(--color-accent)] shadow-lg",
+                      "group flex items-center cursor-pointer",
+                      compact
+                        ? cn(
+                          "rounded-md px-0 py-0.5 justify-center text-[12px] font-semibold uppercase tracking-[0.06em] transition-colors",
+                          taskList.length === 0 ? "text-[var(--color-fg-faint)]" : "text-[var(--color-fg)]",
+                        )
+                        : cn(
+                          // An open project keeps the hover fill, so its rows read as hung from it.
+                          "h-[var(--sidebar-row-h)] gap-[8px] rounded-[6px] pr-[6px] text-[13px] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)]",
+                          taskList.length === 0 ? "text-[var(--sidebar-muted)]" : "text-[var(--sidebar-ink)]",
+                          (isOpen || menuOpenProjectId === p.id) && "bg-[var(--sidebar-row-hover)]",
+                        ),
+                      dragProjectId === p.id && "bg-[var(--sidebar-drag-lift-bg)] shadow-[var(--sidebar-drag-lift-shadow)]",
                     )}
                   >
                     {compact ? (
@@ -1739,58 +1771,63 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                       </div>
                     ) : (
                       <>
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          {collapsed
-                            ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
-                            : <ChevronDown  className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
-                          }
-                          {renaming && renaming.kind === "proj" && renaming.id === p.id ? (
-                            <input
-                              ref={renameInputRef}
-                              autoFocus
-                              value={renaming.value}
-                              onChange={e => setRenaming({ ...renaming, value: e.target.value })}
-                              onBlur={commitRename}
-                              onKeyDown={e => {
-                                if (e.key === "Enter") commitRename();
-                                else if (e.key === "Escape") setRenaming(null);
-                              }}
-                              onClick={e => e.stopPropagation()}
-                              autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-                              className="rounded border border-[var(--color-accent)] bg-[var(--color-bg)] px-1.5 py-0.5 text-[13.5px] outline-none w-full"
-                            />
-                          ) : (
-                            <span className="truncate">{p.name}</span>
+                        {showsChevron
+                          ? <TreeChevron open={!collapsed} className="shrink-0 text-[var(--sidebar-chevron)]" />
+                          : <span aria-hidden className="w-[10px] shrink-0" />}
+                        <FolderGlyph className="shrink-0" />
+                        {renaming && renaming.kind === "proj" && renaming.id === p.id ? (
+                          <input
+                            ref={renameInputRef}
+                            autoFocus
+                            value={renaming.value}
+                            onChange={e => setRenaming({ ...renaming, value: e.target.value })}
+                            onBlur={commitRename}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") commitRename();
+                              else if (e.key === "Escape") setRenaming(null);
+                            }}
+                            onClick={e => e.stopPropagation()}
+                            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                            className="sidebar-inline-input min-w-0 flex-1"
+                          />
+                        ) : (
+                          <span className="min-w-0 truncate">{p.name}</span>
+                        )}
+                        {/* Multi-repo marker sits AFTER the name so
+                            project names stay vertically aligned
+                            regardless of type (no snake-indent). */}
+                        {isMulti && (
+                          <Tip content={t("multiRepoTip")}>
+                            <Layers className="h-3 w-3 shrink-0 text-[var(--color-accent)]" />
+                          </Tip>
+                        )}
+                        <div className="flex-1" />
+                        {/* Collapsed, the row carries its task count, unless a
+                            hidden task is calling for the user: then the
+                            marks its hidden rows would draw take the slot. */}
+                        {collapsed && taskList.length > 0 && (
+                          <RollupMarks ids={taskList.map(w => w.id).join(",")} testId="project-marks" />
+                        )}
+                        {collapsed && taskList.length > 0 && (
+                          <span data-testid={`project-count-${p.id}`} className="sidebar-rest-count shrink-0 text-[11px] tabular-nums text-[var(--sidebar-meta)]">{taskList.length}</span>
+                        )}
+                        {/* The hover tray: filter (GH #324), the menu and `+`
+                            (docs/ui.md "One glyph per meaning"). Hover or
+                            keyboard focus shows it; an open menu, an open
+                            filter bar or an active filter holds it. */}
+                        <div
+                          data-testid={`project-tray-${p.id}`}
+                          data-pinned={trayPinned || filterOn || undefined}
+                          className={cn(
+                            "sidebar-tray flex shrink-0 items-center gap-[2px] rounded-[5px] border border-[var(--sidebar-tray-border)] bg-[var(--sidebar-tray-bg)] p-px",
+                            trayPinned || filterOn ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
                           )}
-                          {/* Multi-repo marker sits AFTER the name so
-                              project names stay vertically aligned
-                              regardless of type (no snake-indent). */}
-                          {(p.type ?? "single") === "multi" && (
-                            <Tip content={t("multiRepoTip")}>
-                              <Layers className="h-3 w-3 shrink-0 text-[var(--color-accent)]" />
-                            </Tip>
-                          )}
-                          {/* Collapsed, the header carries what its hidden
-                              rows would draw, as a folded task group's
-                              caption does. After the name, not in the action
-                              cluster: its hover-only menu button holds its
-                              space while invisible, which would strand the
-                              marks away from the edge. */}
-                          {collapsed && taskList.length > 0 && (
-                            <RollupMarks ids={taskList.map(w => w.id).join(",")} testId="project-marks" />
-                          )}
-                        </div>
-                        {/* Hover shows the filter (GH #324), the menu and
-                            `+` (docs/ui.md "One glyph per meaning"). An
-                            active filter pins its icon so the user can see
-                            why rows are missing. `+` stays visible because
-                            it's the headline action. */}
-                        <div className="flex items-center gap-0.5">
+                        >
                           <ProjectFilterToggle
                             projectId={p.id}
                             active={filterOn}
                             paused={filterPaused}
-                            revealed={menuOpenProjectId === p.id || filterBarOpen || filterPaused}
+                            revealed={trayPinned}
                             // Open (or re-focus) the bar; an open bar with
                             // nothing filtering closes instead.
                             onToggle={() => {
@@ -1801,12 +1838,8 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                           <Tip content={t("projectMenuTip")}>
                             <button
                               data-testid={`project-menu-${p.id}`}
-                              className={cn(
-                                "rounded p-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)] transition-opacity",
-                                // Stays while the `+` dropdown is open, or it
-                                // vanishes the moment the user opens it.
-                                menuOpenProjectId === p.id ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                              )}
+                              aria-label={t("projectMenuTip")}
+                              className="sidebar-tray-btn"
                               // The row's right-click menu IS the project
                               // menu; open that one at the button rather
                               // than keeping a second copy of its items.
@@ -1817,7 +1850,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                                   bubbles: true, cancelable: true, clientX: r.left, clientY: r.bottom,
                                 }));
                               }}
-                            ><MoreHorizontal className="h-4 w-4" /></button>
+                            ><DotsHorizontalGlyph /></button>
                           </Tip>
                           {/* Single `+` trigger → instant dropdown with the
                               two project-level actions. Replaces the two
@@ -1836,8 +1869,9 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                                   // match on. Keyed by project id because the
                                   // sidebar renders one per project.
                                   data-testid={`project-new-task-${p.id}`}
-                                  className="rounded p-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)] data-[state=open]:bg-[var(--color-bg-3)] data-[state=open]:text-[var(--color-fg)]"
-                                ><Plus className="h-4 w-4" /></button>
+                                  aria-label={t("newTaskForProjectTip")}
+                                  className="sidebar-tray-btn"
+                                ><PlusGlyph size={13} /></button>
                               </DropdownTrigger>
                             </Tip>
                             {/* Don't hand focus back to the "+" on close, the
@@ -2046,18 +2080,16 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                     narrow widths. */}
                 {!collapsed && taskList.length === 0 && !compact && pendingRepoRoot?.projectId !== p.id && pendingForProject.length === 0 && (
                   <div
-                    className="ml-3 mr-1 mb-px"
+                    className="mb-[4px] ml-[var(--sb-task-pad)] mr-[8px] mt-[2px]"
                     onClick={e => e.stopPropagation()}
                   >
                     <DropdownRoot>
                       <DropdownTrigger asChild>
                         <button
                           data-testid={`project-empty-new-task-${p.id}`}
-                          // Same token as the task row it stands in for, so
-                          // the two cannot drift apart (see --task-row-h).
-                          className="flex h-[var(--task-row-h)] w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--color-border)] bg-transparent px-2 text-[13px] text-[var(--color-fg-dim)] hover:border-[var(--color-accent-soft)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)] data-[state=open]:border-[var(--color-accent-soft)] data-[state=open]:text-[var(--color-fg)]"
+                          className="flex h-[var(--sidebar-row-h)] w-full items-center justify-center gap-[6px] rounded-[6px] border border-[var(--sidebar-newtask-border)] bg-[var(--sidebar-newtask-bg)] px-2 text-[13px] text-[var(--sidebar-newtask-ink)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--sidebar-btn-hover-ink)] data-[state=open]:bg-[var(--sidebar-row-hover)] data-[state=open]:text-[var(--sidebar-btn-hover-ink)]"
                         >
-                          <Plus className="h-3.5 w-3.5 shrink-0" />
+                          <PlusGlyph size={12} className="shrink-0" />
                           <span>{t("ctxNewTask")}</span>
                         </button>
                       </DropdownTrigger>
@@ -2310,7 +2342,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                       )}
                     </button>
                   </Tip>
-                  {!collapsed && members.map(renderProject)}
+                  {!collapsed && members.map(member => renderProject(member, 1))}
                 </div>
               );
             }
@@ -2380,39 +2412,28 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                       // Accent yields to the drag/drop states below — their
                       // classes lose to an inline style, so skip it while
                       // this header is a drop target or being dragged.
-                      style={accent && dragOverGroup !== name && dragGroupName !== name
-                        ? { color: accent }
-                        : undefined}
                       className={cn(
-                        // Same size/weight as project rows (an 11.5px header
-                        // read weaker than its members), but the DEFAULT
-                        // color is the muted fg-faint of inactive projects —
-                        // folders are structure, not content, and only an
-                        // assigned accent should make one loud. Matches the
-                        // Default swatch in the color picker.
-                        "flex cursor-pointer items-center gap-1.5 rounded-md py-1 pl-2 pr-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-[var(--color-fg-faint)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
+                        // The name is always the group ink; the folder glyph
+                        // carries the folder's colour (its picked accent, or
+                        // the plain icon grey, the Default swatch).
+                        "flex h-[var(--sidebar-row-h)] cursor-pointer items-center gap-[8px] rounded-[6px] px-[6px] text-[13px] font-semibold text-[var(--sidebar-ink-group)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)]",
                         // Drop target while a project drag hovers this header.
-                        dragOverGroup === name && "bg-[var(--color-accent)]/15 text-[var(--color-accent)] ring-1 ring-inset ring-[var(--color-accent)]",
+                        dragOverGroup === name && "bg-[var(--sidebar-row-hover)] shadow-[inset_0_0_0_1px_var(--sidebar-drop-ring)]",
                         // The folder itself is being dragged.
-                        dragGroupName === name && "bg-[var(--color-accent)]/15 text-[var(--color-accent)] shadow-lg",
+                        dragGroupName === name && "bg-[var(--sidebar-drag-lift-bg)] shadow-[var(--sidebar-drag-lift-shadow)]",
                       )}
                     >
-                      {collapsed
-                        ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
-                        : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />}
-                      {/* No own color class when accented — inherits the
-                          header's currentColor so glyph + name match. */}
-                      <Folder className={cn("h-3.5 w-3.5 shrink-0", !accent && "text-[var(--color-fg-faint)]")} />
+                      <TreeChevron open={!collapsed} className="shrink-0 text-[var(--sidebar-chevron)]" />
+                      <TintedFolderGlyph size={15} color={accent ?? "var(--sidebar-icon)"} className="shrink-0" />
                       {renaming?.kind === "group" && renaming.id === name ? (
                         <input
                           ref={renameInputRef}
                           autoFocus
                           value={renaming.value}
-                          // Group names are ALL-CAPS at the data layer (they
-                          // key collapse/color state and must render the same
-                          // everywhere), so uppercase as typed — covers paste
-                          // too, since it runs on the resulting value.
-                          onChange={e => setRenaming({ ...renaming, value: e.target.value.toUpperCase() })}
+                          // Edited in the sentence case it is shown in;
+                          // commitRename uppercases it for the data layer,
+                          // which keys collapse and colour state by it.
+                          onChange={e => setRenaming({ ...renaming, value: e.target.value })}
                           onBlur={commitRename}
                           onKeyDown={e => {
                             if (e.key === "Enter") commitRename();
@@ -2424,11 +2445,12 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                           onClick={e => e.stopPropagation()}
                           onPointerDown={e => e.stopPropagation()}
                           autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-                          className="w-full min-w-0 flex-1 rounded border border-[var(--color-accent)] bg-[var(--color-bg)] px-1.5 py-0.5 text-[12px] normal-case tracking-normal outline-none"
+                          className="sidebar-inline-input min-w-0 flex-1 font-normal"
                         />
                       ) : (
-                        <span className="truncate">{name}</span>
+                        <span className="min-w-0 truncate">{groupDisplayName(name)}</span>
                       )}
+                      <div className="flex-1" />
                       {/* One of each mark its hidden rows would draw, the
                           collapsed project's own rule. It used to be one dot
                           (attention, else done), which said nothing about an
@@ -2437,7 +2459,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                         <RollupMarks ids={grpWs.map(w => w.id).join(",")} testId="folder-marks" />
                       )}
                       {!isGroupRenaming && (
-                        <span className="ml-auto shrink-0 tabular-nums text-[11px] text-[var(--color-fg-faint)]">{totalCount}</span>
+                        <span data-testid="group-count" className="sidebar-badge">{totalCount}</span>
                       )}
                     </div>
                   </ContextMenuTrigger>
@@ -2447,22 +2469,20 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                       accent={accent}
                       onSetColor={key => setGroupColor(name, key)}
                       onUngroup={() => dissolveGroup(name)}
-                      onRename={() => setRenaming({ kind: "group", id: name, value: name })}
+                      onRename={() => setRenaming({ kind: "group", id: name, value: groupDisplayName(name) })}
                     />
                   </ContextMenuContent>
                 </ContextMenuRoot>
                 {/* Indented members with a tree guide line — reads as
                     "inside the folder" without stealing much width. */}
                 {!collapsed && (
-                  <div
-                    // Tint the guide line toward the group's accent so a
-                    // long member list stays attributable mid-scroll. If
-                    // color-mix is unavailable the invalid value is dropped
-                    // and the class's border color applies.
-                    style={accent ? { borderColor: `color-mix(in srgb, ${accent} 45%, transparent)` } : undefined}
-                    className="ml-[13px] flex flex-col gap-0.5 border-l border-[var(--color-border-soft)] pl-1"
-                  >
-                    {members.map(renderProject)}
+                  <div className="relative flex flex-col">
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute bottom-0 top-0 w-px bg-[var(--sidebar-guide)]"
+                      style={{ left: treeGuideLeft(0) }}
+                    />
+                    {members.map(member => renderProject(member, 1))}
                   </div>
                 )}
               </div>
@@ -2478,20 +2498,24 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
           return (
             <>
               {/* Active projects render in place (original order). */}
-              {sections.map(s => s.kind === "loose" ? renderProject(s.p) : renderGroup(s.name, s.members))}
-              {/* "INACTIVE PROJECTS" section header — same type treatment as
-                  the PROJECTS header above. Clicking it toggles the fold; the
-                  inactive group renders BELOW it so revealing never reshuffles
-                  the active rows. */}
+              {sections.map(s => s.kind === "loose" ? renderProject(s.p, 0) : renderGroup(s.name, s.members))}
+              {/* The Inactive fold's row, under a rule at the foot of the
+                  tree. Clicking it toggles the fold; the inactive projects
+                  render BELOW it so revealing never reshuffles the active
+                  rows. */}
               {!queryOn && hideInactiveProjects && inactiveCount > 0 && (
                 <button
                   key="inactive-header"
                   type="button"
+                  data-testid="sidebar-inactive-header"
+                  aria-expanded={showInactive}
                   onClick={() => setShowInactive(v => !v)}
                   title={compact ? t(inactiveCount === 1 ? "inactiveTipOne" : "inactiveTipMany", { count: inactiveCount }) : undefined}
                   className={cn(
-                    "flex items-center text-[12px] uppercase tracking-wider text-[var(--color-fg-dim)] hover:text-[var(--color-fg)] transition-colors",
-                    compact ? "flex-col gap-1 py-1" : "justify-between px-2 py-1 mt-1",
+                    "flex items-center",
+                    compact
+                      ? "flex-col gap-1 py-1 text-[12px] text-[var(--color-fg-dim)] transition-colors hover:text-[var(--color-fg)]"
+                      : "mt-[6px] h-[var(--sidebar-row-h)] gap-[8px] rounded-[6px] border-t border-[var(--sidebar-divider)] px-[6px] text-[13px] text-[var(--sidebar-muted)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)]",
                   )}
                 >
                   {compact ? (
@@ -2503,13 +2527,11 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                     </>
                   ) : (
                     <>
-                      <span className="flex items-center gap-1">
-                        {showInactive
-                          ? <ChevronDown className="h-3 w-3 shrink-0" />
-                          : <ChevronRight className="h-3 w-3 shrink-0" />}
-                        {t("inactiveHeader")}
-                      </span>
-                      <span className="tabular-nums">{inactiveCount}</span>
+                      <TreeChevron open={showInactive} className="shrink-0 text-[var(--sidebar-chevron)]" />
+                      <DashedFolderGlyph size={15} className="shrink-0 text-[var(--sidebar-faint)]" />
+                      <span className="truncate">{t("inactiveHeader")}</span>
+                      <div className="flex-1" />
+                      <span className="sidebar-badge">{inactiveCount}</span>
                     </>
                   )}
                 </button>
@@ -2518,8 +2540,15 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                   rows here are ungrouped inactive projects, so drags across
                   the fold reorder only and never touch group labels. */}
               {!queryOn && hideInactiveProjects && showInactive && (
-                <div data-inactive-fold className="flex flex-col gap-0.5">
-                  {inactiveProjects.map(renderProject)}
+                <div data-inactive-fold className="relative flex flex-col">
+                  {!compact && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute bottom-0 top-0 w-px bg-[var(--sidebar-guide)]"
+                      style={{ left: treeGuideLeft(0) }}
+                    />
+                  )}
+                  {inactiveProjects.map(inactive => renderProject(inactive, 1))}
                 </div>
               )}
               {/* What the filter took away, said once at the bottom instead

@@ -13,6 +13,14 @@ import type { Project } from "./types";
  *  label written before that rule). */
 export const groupOf = (p: Project): string => (p.group ?? "").trim().toUpperCase();
 
+/** A group label as the sidebar shows it: sentence case ("NEW GROUP 2" reads
+ *  "New group 2"). Display only; the stored label and every key stay
+ *  uppercase. */
+export function groupDisplayName(label: string): string {
+  const lower = label.toLocaleLowerCase();
+  return lower.charAt(0).toLocaleUpperCase() + lower.slice(1);
+}
+
 export type ProjectSection =
   | { kind: "loose"; p: Project }
   | { kind: "group"; name: string; members: Project[] };

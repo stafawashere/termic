@@ -89,7 +89,7 @@ export default {
   removeProjectMessage: "所有任务将被归档，其工作树将从磁盘删除。仓库文件夹会保留。此操作无法在 Termic 内撤销。",
   removingBusy: "正在移除「{{name}}」…",
   removeProject: "移除项目",
-  inactiveHeader: "不活跃项目",
+  inactiveHeader: "不活跃",
   inactiveTipOne: "{{count}} 个不活跃项目",
   inactiveTipMany: "{{count}} 个不活跃项目",
   reportBug: "报告问题",

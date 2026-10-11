@@ -89,7 +89,7 @@ export default {
   removeProjectMessage: "All tasks will be archived and their worktrees removed from disk. The repo folder is kept. This cannot be undone from inside Termic.",
   removingBusy: "Removing \"{{name}}\"…",
   removeProject: "Remove project",
-  inactiveHeader: "Inactive Projects",
+  inactiveHeader: "Inactive",
   inactiveTipOne: "{{count}} inactive project",
   inactiveTipMany: "{{count}} inactive projects",
   reportBug: "Report a bug",
