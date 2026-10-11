@@ -133,6 +133,31 @@
   --sidebar-focus-ring:     color-mix(in srgb, var(--color-accent) 55%, transparent);
   --sidebar-card-bg:        #1e1e1e;
   --sidebar-card-border:    #2e2e2e;
+  /* Title bar ("Focus title", docs/themes.md "Title bar tokens"). Only the
+     values the sidebar has no token for: wells, raised chips, hover ink and
+     menu rows reuse the --sidebar-* family. Dark+ values here; the other
+     themes derive theirs from --color-* below, as the sidebar's do. */
+  --titlebar-bg-top:        #1d1d1d;
+  --titlebar-bg-bottom:     #1a1a1a;
+  --titlebar-border:        #262626;
+  --titlebar-shadow:        inset 0 1px 0 rgba(255, 255, 255, 0.045), inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  --titlebar-sheen:         rgba(255, 255, 255, 0.028);
+  --titlebar-grain-opacity: 0.5;
+  --titlebar-well-shadow:   inset 0 1px 2px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.25), 0 1px 0 rgba(255, 255, 255, 0.03);
+  --titlebar-chip-hover-top: #343434;
+  --titlebar-chip-hover-bottom: #2a2a2a;
+  --titlebar-pressed-bg:    #1a1a1a;
+  --titlebar-pressed-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  --titlebar-divider:       #262626;
+  --titlebar-title-divider: #2e2e2e;
+  --titlebar-groove:        #0e0e0e;
+  --titlebar-title-hover-bg: #202020;
+  --titlebar-title-hover-border: #2a2a2a;
+  --titlebar-title-hover-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --titlebar-title-text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+  --titlebar-menu-top:      #202020;
+  --titlebar-menu-bottom:   #1c1c1c;
+  --titlebar-menu-shadow:   0 18px 40px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.045);
   --color-bg:        #0c0c0c;
   --color-bg-1:      #141414;
   --color-bg-2:      #1c1c1c;
@@ -658,6 +683,27 @@
     --sidebar-drag-lift-bg:   color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
     --sidebar-card-bg:        color-mix(in srgb, var(--color-bg-1) 95%, var(--color-fg));
     --sidebar-card-border:    color-mix(in srgb, var(--color-bg-1) 88%, var(--color-fg));
+    --titlebar-bg-top:        color-mix(in srgb, var(--color-bg-1) 96%, var(--color-fg));
+    --titlebar-bg-bottom:     color-mix(in srgb, var(--color-bg-1) 97.5%, var(--color-fg));
+    --titlebar-border:        color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
+    --titlebar-shadow:        inset 0 1px 0 rgba(255, 255, 255, 0.045), inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+    --titlebar-sheen:         rgba(255, 255, 255, 0.028);
+    --titlebar-grain-opacity: 0.5;
+    --titlebar-well-shadow:   inset 0 1px 2px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.25), 0 1px 0 rgba(255, 255, 255, 0.03);
+    --titlebar-chip-hover-top: color-mix(in srgb, var(--color-bg-1) 85%, var(--color-fg));
+    --titlebar-chip-hover-bottom: color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --titlebar-pressed-bg:    color-mix(in srgb, var(--color-bg-1) 97%, var(--color-fg));
+    --titlebar-pressed-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+    --titlebar-divider:       color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
+    --titlebar-title-divider: color-mix(in srgb, var(--color-bg-1) 88%, var(--color-fg));
+    --titlebar-groove:        color-mix(in srgb, var(--color-bg-1) 70%, rgb(0, 0, 0));
+    --titlebar-title-hover-bg: color-mix(in srgb, var(--color-bg-1) 94%, var(--color-fg));
+    --titlebar-title-hover-border: color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
+    --titlebar-title-hover-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --titlebar-title-text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+    --titlebar-menu-top:      color-mix(in srgb, var(--color-bg-1) 94%, var(--color-fg));
+    --titlebar-menu-bottom:   color-mix(in srgb, var(--color-bg-1) 96%, var(--color-fg));
+    --titlebar-menu-shadow:   0 18px 40px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.045);
   }
 
   /* Light: the same relationships turned over. Wells are a shade darker
@@ -735,6 +781,27 @@
     --sidebar-drag-lift-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
     --sidebar-card-bg:        var(--color-bg);
     --sidebar-card-border:    var(--color-border);
+    --titlebar-bg-top:        var(--color-bg-1);
+    --titlebar-bg-bottom:     color-mix(in srgb, var(--color-bg-1) 97%, var(--color-fg));
+    --titlebar-border:        var(--color-border);
+    --titlebar-shadow:        inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+    --titlebar-sheen:         rgba(255, 255, 255, 0.35);
+    --titlebar-grain-opacity: 0;
+    --titlebar-well-shadow:   inset 0 1px 2px rgba(0, 0, 0, 0.12), inset 0 0 0 1px rgba(0, 0, 0, 0.04), 0 1px 0 rgba(255, 255, 255, 0.8);
+    --titlebar-chip-hover-top: color-mix(in srgb, var(--sidebar-chip-top) 96%, var(--color-fg));
+    --titlebar-chip-hover-bottom: color-mix(in srgb, var(--sidebar-chip-bottom) 94%, var(--color-fg));
+    --titlebar-pressed-bg:    color-mix(in srgb, var(--color-bg-1) 88%, var(--color-fg));
+    --titlebar-pressed-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+    --titlebar-divider:       var(--color-border-soft);
+    --titlebar-title-divider: var(--color-border);
+    --titlebar-groove:        color-mix(in srgb, var(--color-bg-1) 80%, var(--color-fg));
+    --titlebar-title-hover-bg: color-mix(in srgb, var(--color-bg-1) 94%, var(--color-fg));
+    --titlebar-title-hover-border: var(--color-border);
+    --titlebar-title-hover-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(0, 0, 0, 0.08);
+    --titlebar-title-text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+    --titlebar-menu-top:      var(--color-bg);
+    --titlebar-menu-bottom:   color-mix(in srgb, var(--color-bg) 96%, var(--color-fg));
+    --titlebar-menu-shadow:   0 18px 40px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   }
 
   ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -1496,4 +1563,57 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
    highlight. */
 .sidebar-panel {
   --focus-ring: var(--sidebar-focus-ring);
+}
+
+/* The title bar ("Focus title", docs/ui.md "Title bar"). Three columns:
+   the side clusters share flex:1, so the task title sits on the window's
+   centre whatever the clusters hold. The sheen and grain are pseudo layers
+   so nothing has to be excluded from the drag region. */
+.titlebar {
+  --focus-ring: var(--sidebar-focus-ring);
+  position: relative;
+  display: flex;
+  height: 50px;
+  flex-shrink: 0;
+  align-items: center;
+  border-bottom: 1px solid var(--titlebar-border);
+  background-image: var(--titlebar-wash, none), linear-gradient(180deg, var(--titlebar-bg-top), var(--titlebar-bg-bottom));
+  box-shadow: var(--titlebar-shadow);
+  font-size: 13px;
+  color: var(--sidebar-ink);
+  white-space: nowrap;
+}
+.titlebar::before,
+.titlebar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.titlebar::before {
+  background: radial-gradient(60% 140% at 50% 0%, var(--titlebar-sheen), transparent 70%);
+}
+/* A static tile, painted once: fractal noise tinted white at 3.5%, at half
+   opacity. Nothing animates it, so it costs one raster and no frames. */
+.titlebar::after {
+  opacity: var(--titlebar-grain-opacity);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .035 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+}
+.titlebar > * {
+  position: relative;
+  z-index: 1;
+}
+.titlebar-side {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  align-items: center;
+}
+.titlebar-side[data-side="right"] {
+  justify-content: flex-end;
+  gap: 8px;
+}
+/* Window in the background: text and glyphs fade, wells and chips do not. */
+.titlebar[data-inactive] .titlebar-ink {
+  opacity: 0.55;
 }

@@ -85,6 +85,7 @@ export function UnifiedBar() {
   // The old Monitor/computer icon felt too generic ("display settings")
   // and didn't communicate the resolved theme at a glance.
   const isFullscreen = useIsFullscreen();
+  const windowFocused = useUI(s => s.windowFocused);
   // Tooltips that name a shortcut read it from the LIVE bindings, never a
   // hard-coded "⌥⌘P": every one of these is rebindable in settings, and a
   // tooltip naming a key that no longer does anything is worse than a
@@ -137,30 +138,25 @@ export function UnifiedBar() {
         // macOS convention: double-click title bar zooms the window.
         getCurrentWindow().toggleMaximize().catch(() => {});
       }}
-      className="relative flex h-11 shrink-0 items-center gap-1 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-1)] px-2"
+      data-inactive={windowFocused ? undefined : ""}
+      className="titlebar"
       style={{
-        // px-2 (8px) already pads the left in full-screen; only reserve the
-        // wide traffic-light gap when the lights are actually there.
-        // No traffic lights off macOS at all.
-        paddingLeft: IS_MAC && !isFullscreen ? TRAFFIC_LIGHT_WIDTH : undefined,
+        // Reserve the traffic lights only while they are there: full-screen
+        // hides them, and nothing off macOS draws them at all.
+        paddingLeft: IS_MAC && !isFullscreen ? TRAFFIC_LIGHT_WIDTH : 12,
+        paddingRight: DRAWS_WINDOW_CONTROLS ? 0 : 12,
         ...appRegionStyle("drag"),
         // The profile's accent, washed in from the left and gone by the first
-        // third (GH #280). Backed by a real product: JetBrains tints this
-        // exact strip per project, and it works because the bar is the one
-        // surface always on screen in EVERY window, so "which profile is this"
-        // is answered by peripheral vision rather than by reading a name.
-        //
-        // A gradient rather than a fill: the bar carries the breadcrumb and
-        // the toolbar, and a solid accent behind them fights the text. The
-        // fade also puts the colour where the eye already goes on a window
-        // (top-left, next to the traffic lights).
-        //
-        // Painted here rather than as an overlay child so nothing has to be
-        // excluded from the drag region.
-        backgroundImage: profileWash,
+        // third (GH #280). JetBrains tints this exact strip per project: the
+        // bar is the one surface on screen in every window, so "which profile
+        // is this" is answered by peripheral vision. A gradient rather than a
+        // fill so the title and the toolbar keep their contrast. It rides a
+        // custom property under the bar's own gradient (.titlebar), so the
+        // shell and the wash are one background.
+        "--titlebar-wash": profileWash,
       } as any}
     >
-      {/* Sidebar toggle + theme cycler */}
+      <div className="titlebar-side" data-side="left">
       <div
         data-tauri-drag-region="false"
         className="flex items-center gap-2"
@@ -201,8 +197,10 @@ export function UnifiedBar() {
             meaning and was redundant with the per-task control). */}
       </div>
 
+      </div>
+
       {/* Breadcrumbs / title — text doesn't select on drag (matches AppKit title bar). */}
-      <div data-testid="task-breadcrumb" className="ml-2 flex min-w-0 flex-1 select-none items-baseline gap-2 text-[14px]">
+      <div data-testid="task-breadcrumb" className="ml-2 flex min-w-0 max-w-[560px] shrink-0 select-none items-baseline gap-2 text-[14px]">
         {task && proj ? (
           <>
             <span className="text-[var(--color-fg-faint)]">{proj.name}</span>
@@ -254,6 +252,7 @@ export function UnifiedBar() {
         )}
       </div>
 
+      <div className="titlebar-side" data-side="right">
       {/* Right-aligned actions */}
       <div
         data-tauri-drag-region="false"
@@ -399,7 +398,8 @@ export function UnifiedBar() {
       {/* Windows and Linux: minimize / maximize / close, flush with the
           window's top-right corner (the bar's own right padding is undone).
           Nothing on macOS, where the system draws the traffic lights. */}
-      <div className="-mr-2 ml-1 flex self-stretch">
+      </div>
+      <div className="ml-1 flex self-stretch">
         <WindowControls />
       </div>
     </header>
