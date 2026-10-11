@@ -590,6 +590,13 @@ terminal tabs are durable.
   so before every earlier page is loaded they cover the newest part only;
   times come from the transcript's own timestamps when entry 0 is held,
   else from the record.
+- **Bottom bar.** Under the agent list, one dim row two cells in holds the
+  view's settings as clickable toggles (`subagentView/BottomBar.tsx`):
+  verbose (ctrl+o's state, this pane only), thinking, tool inputs, tool
+  outputs, the output cap (stepping 20, 40, 100, off through
+  `nextTruncateLines`) and follow. Each writes the same pref as Settings,
+  so the two never disagree, and an "on" value is in claude's suggestion
+  colour.
 - **Windowed by hand.** Only rows near the viewport are mounted, measured in
   a layout effect so a corrected height lands before paint. Row keys are
   entry indices in the whole transcript, so a page loaded above keeps every

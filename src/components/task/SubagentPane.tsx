@@ -36,6 +36,7 @@ import { EntryRow, GroupRow, type EntryRowOptions } from "./subagentView/EntryRo
 import { useTerminalCell } from "./subagentView/useTerminalCell";
 import { Footer, type FooterState } from "./subagentView/Footer";
 import { Header } from "./subagentView/Header";
+import { BottomBar } from "./subagentView/BottomBar";
 import { GLYPH } from "./subagentView/glyphs";
 
 const ESTIMATED_ROW_PX = 28;
@@ -310,12 +311,16 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
 
   // ctrl+o, as in Claude Code: every group unfolds into its calls, or folds
   // back to its summary line.
+  const toggleVerbose = useCallback(() => {
+    setVerbose(current => !current);
+    setUnfoldedGroups(new Set());
+  }, []);
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!isSubagentVerboseChord(event)) return;
 
     event.preventDefault();
-    setVerbose(current => !current);
-    setUnfoldedGroups(new Set());
+    toggleVerbose();
   };
 
   const bindRow = (index: number) => (element: HTMLElement | null) => {
@@ -497,6 +502,10 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
           />
         </div>
       )}
+
+      <div className="shrink-0 w-[var(--content)]">
+        <BottomBar verbose={verbose} onToggleVerbose={toggleVerbose} t={t} />
+      </div>
 
       {!following && rows.length > 0 && (
         <button

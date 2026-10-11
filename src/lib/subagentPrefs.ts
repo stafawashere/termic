@@ -73,6 +73,18 @@ export function parseTruncateLines(raw: string | null): number {
   return isWholeCount ? lines : DEFAULT_SUBAGENT_VIEW_TRUNCATE_LINES;
 }
 
+const TRUNCATE_STEPS: readonly number[] = [20, 40, 100, 0];
+
+/** The next output cap the view's bottom bar steps to: 20, 40, 100, then
+ *  none, and round again. A custom cap from Settings steps to the next
+ *  larger one, or to none past 100. */
+export function nextTruncateLines(current: number): number {
+  const isOff = current === 0;
+  if (isOff) return TRUNCATE_STEPS[0];
+
+  return TRUNCATE_STEPS.find(step => step > current) ?? 0;
+}
+
 /** Each kind falls back on its own, so one bad field does not reset the
  *  others. */
 export function parseSubagentTypeFilter(raw: string | null): SubagentTypeFilter {
