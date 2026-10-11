@@ -1771,10 +1771,13 @@ button on the end, and the bottom shell strip reuses the same `TabPill`.
   40% into `--sessionbar-glyph-dim`, so every agent keeps its own hue.
   The accent underline is drawn only on the active tab of the FOCUSED
   pane, so across a split one tab reads as current.
+- **Name**: centred on the whole tab, with the glyph and the trailing slot
+  at its edges. The glyph sits in a 30px box so both sides are 40px; a tab
+  with run controls or a queue marker is off centre by their width.
 - **Trailing slot**: one 24x20 cell holding two stacked layers, the state
-  indicator and the close button. Only the tab's right end (a 40px hit
-  area) swaps them, so hovering the name never hides the state and the
-  name's tooltip stays reachable. Indicators in priority order: failed
+  indicator and the close button (a plain red-tinted ×, no pill). Only the
+  tab's right end (a 40px hit area) swaps them, so hovering the name never
+  hides the state and the name's tooltip stays reachable. Indicators in priority order: failed
   (warning), attention (bell), partial (green ring), done (green dot),
   working (the ECG trace, `TabTrace`), delegated (background ring), then
   the unseen pad ring and the dirty dot. A pinned tab has a neutral unpin

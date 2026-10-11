@@ -1019,15 +1019,17 @@
   min-width: 0;
   flex: 1 1 auto;
   align-items: center;
-  gap: 7px;
 }
+/* 30px, glyph at its start: with the tab's 10px left padding that is the
+   same 40px as the 12px gap, 24px slot and 4px padding on the right, so the
+   name centres on the whole tab and not just on the room between. */
 .sessionbar-tab-glyph {
   display: flex;
   height: 14px;
-  width: 14px;
+  width: 30px;
   flex-shrink: 0;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
 }
 .sessionbar-tab-glyph > :is(svg, img) {
   height: 14px;
@@ -1041,10 +1043,13 @@
 .sessionbar-tab[data-active] .sessionbar-tab-glyph[data-brand] > svg {
   filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 45%, transparent));
 }
+/* The name centres on the tab; the glyph and the slot stay at the edges. */
 .sessionbar-tab-name {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   overflow: hidden;
 }
@@ -1159,24 +1164,19 @@
   width: 20px;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  background-color: color-mix(in srgb, var(--sessionbar-close-ink) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sessionbar-close-ink) 22%, transparent);
-  color: var(--sessionbar-close-ink);
+  color: color-mix(in srgb, var(--sessionbar-close-ink) 75%, transparent);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms, background-color 120ms;
+  transition: opacity 120ms, color 120ms;
 }
 .sessionbar-close:hover {
-  background-color: color-mix(in srgb, var(--sessionbar-close-ink) 24%, transparent);
+  color: var(--sessionbar-close-ink);
 }
+/* Unpinning loses nothing, so the pin is not tinted red. */
 .sessionbar-close[data-kind="unpin"] {
-  background-color: transparent;
-  box-shadow: none;
   color: var(--sidebar-muted);
 }
 .sessionbar-close[data-kind="unpin"]:hover {
-  background-color: var(--sidebar-row-hover);
   color: var(--sidebar-ink);
 }
 .sessionbar-slot:hover .sessionbar-close,

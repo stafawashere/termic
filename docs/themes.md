@@ -178,11 +178,11 @@ keys in a theme file.
 
 The session bar (docs/ui.md "Session bar") reuses the sidebar's and the
 title bar's tokens for its wells, raised chips, hover inks, divider and
-settled green, and adds `--sessionbar-*` only for its own shell and two
-tab details: `bg-top`, `bg-bottom`, `border`, `shadow`, `grain` (the
-title bar's noise tile with its opacity baked in, `none` in light),
-`glyph-dim` (what an idle tab's agent glyph is mixed toward) and
-`close-ink` (the red close button, `--color-err` outside Dark+). Dark+
+settled green, and adds `--sessionbar-*` only for its own shell
+(`bg-top`, `bg-bottom`, `border`, `shadow`, and `grain`, the title bar's
+noise tile with its opacity baked in, `none` in light) and two tab
+details, `glyph-dim` (what an idle tab's agent glyph is mixed toward) and
+`close-ink` (the red tint of the close ×, `--color-err` outside Dark+). Dark+
 literals live in their own `@theme` block, the other dark themes and
 custom themes derive theirs from `--color-*`, and light has its own block.
 The underline, the trace and the broadcast toggle take `--color-accent`.

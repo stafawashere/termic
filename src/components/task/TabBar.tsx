@@ -491,7 +491,7 @@ export function TabPill({ task, tab, active, paneFocused, compact, onSelect, onC
         )}
         {/* Running message queue (ralph loop): subtle accent marker. */}
         {queueRunning && (
-          <Repeat className="h-3 w-3 shrink-0 text-[var(--color-accent)]" aria-label={t("tabBar.queueRunningAria")} />
+          <Repeat className="mr-1.5 h-3 w-3 shrink-0 text-[var(--color-accent)]" aria-label={t("tabBar.queueRunningAria")} />
         )}
         {isRenaming ? (
           <input

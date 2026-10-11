@@ -36,7 +36,7 @@ const shadowTokens = [...defaults].filter(([, value]) => value.includes("rgba(")
 describe("session bar tokens", () => {
   it("declares its family in its own @theme block", () => {
     expect(sectionStart).toBeGreaterThan(-1);
-    expect(hexTokens.length).toBeGreaterThan(4);
+    expect(hexTokens).toEqual(expect.arrayContaining(["--sessionbar-bg-top", "--sessionbar-bg-bottom", "--sessionbar-border", "--sessionbar-glyph-dim", "--sessionbar-close-ink"]));
   });
 
   it("redeclares every hex default for the derived dark themes", () => {
