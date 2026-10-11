@@ -475,7 +475,7 @@ export function DiffPane({ task, tab }: { task: Task; tab: DiffTab }) {
           </button>
         </div>
       )}
-      <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-soft)] bg-[var(--color-bg-1)] px-3">
+      <div className="flex h-10 shrink-0 items-center justify-between border-b border-[var(--sidebar-border)] bg-[linear-gradient(180deg,var(--sidebar-bg-top),var(--sidebar-bg-bottom))] px-3">
         {/* Selectable + right-clickable so the path can be copied (GH #44).
             `select-text` overrides the pane's default non-selectable chrome. */}
         <ContextMenuRoot>
@@ -495,7 +495,7 @@ export function DiffPane({ task, tab }: { task: Task; tab: DiffTab }) {
           <span
             data-testid="diff-commit-chip"
             title={tr("diff.comparingWithParent", { sha: commitSha })}
-            className="ml-2 shrink-0 rounded bg-[var(--color-bg-3)] px-1.5 font-mono text-[11px] leading-[18px] text-[var(--color-fg-faint)]"
+            className="ui-keycap ml-2 shrink-0 font-mono"
           >
             {commitSha.slice(0, 7)}
           </span>
@@ -505,32 +505,23 @@ export function DiffPane({ task, tab }: { task: Task; tab: DiffTab }) {
               so the user's preference sticks across launches. Hidden for an
               image/binary diff: both modes are line-based. */}
           <div className={cn(
-            "mr-1 inline-flex items-stretch rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-[2px]",
+            "ui-well mr-1",
             binary && "hidden",
           )}>
             <button
               type="button"
               title={tr("diff.unifiedTip")}
               onClick={() => setModeAndPersist("unified")}
-              className={cn(
-                "h-6 rounded-[5px] px-1.5 text-[11.5px] transition-colors",
-                effectiveMode === "unified"
-                  ? "bg-[var(--color-bg-3)] text-[var(--color-fg)]"
-                  : "text-[var(--color-fg-dim)] hover:text-[var(--color-fg)]",
-              )}
+              data-active={effectiveMode === "unified" ? "true" : "false"}
+              className="ui-seg h-[22px] px-1.5"
             ><AlignJustify className="h-3.5 w-3.5" /></button>
             <button
               type="button"
               title={oneSided ? tr("diff.sideBySideUnavailable") : tr("diff.sideBySideTip")}
               disabled={oneSided}
               onClick={() => setModeAndPersist("side")}
-              className={cn(
-                "h-6 rounded-[5px] px-1.5 text-[11.5px] transition-colors",
-                effectiveMode === "side"
-                  ? "bg-[var(--color-bg-3)] text-[var(--color-fg)]"
-                  : "text-[var(--color-fg-dim)] hover:text-[var(--color-fg)]",
-                oneSided && "cursor-not-allowed opacity-40 hover:text-[var(--color-fg-dim)]",
-              )}
+              data-active={effectiveMode === "side" ? "true" : "false"}
+              className={cn("ui-seg h-[22px] px-1.5", oneSided && "cursor-not-allowed opacity-40")}
             ><Columns2 className="h-3.5 w-3.5" /></button>
           </div>
           {/* Whole-file comment. Targets the modified pane: the `b` editor in

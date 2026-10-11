@@ -19,7 +19,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ResizeHandle } from "@/components/ui/ResizeHandle";
-import { cn } from "@/lib/utils";
 import { FileCode2, Eye, Columns2 } from "lucide-react";
 
 export type SourceView = "source" | "preview" | "split";
@@ -34,12 +33,8 @@ function ToolbarButton({ mode, active, onClick, children }: {
       // button. e2e targets this attribute; see the e2e skill's selector rule.
       data-view-btn={mode}
       onClick={onClick}
-      className={cn(
-        "inline-flex h-6 items-center gap-1.5 rounded px-2.5 text-[12px] font-medium transition-colors",
-        active
-          ? "bg-[var(--color-bg-3)] text-[var(--color-fg)]"
-          : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
-      )}
+      data-active={active ? "true" : "false"}
+      className="ui-seg h-[22px] gap-1.5 px-2.5 text-[12px]"
     >{children}</button>
   );
 }
@@ -100,12 +95,14 @@ export function SourcePreviewShell(
   return (
     <div className="flex h-full flex-col bg-[var(--color-bg)]" data-testid="source-preview-shell" data-view={view}>
       {/* Mode toolbar — right-aligned, matches the bottom-split strip geometry. */}
-      <div className="flex h-8 shrink-0 items-center justify-end gap-0.5 border-b border-[var(--color-border-soft)] px-2">
+      <div className="flex h-9 shrink-0 items-center justify-end gap-0.5 border-b border-[var(--sidebar-divider)] px-2">
         {actions}
-        {actions && <div className="mx-1 h-3.5 w-px bg-[var(--color-border-soft)]" />}
-        <ToolbarButton mode="source"  active={view === "source"}  onClick={() => setView("source")}><FileCode2 className="h-3.5 w-3.5" />{t("sourcePreview.editor")}</ToolbarButton>
-        <ToolbarButton mode="preview" active={view === "preview"} onClick={() => setView("preview")}><Eye className="h-3.5 w-3.5" />{t("sourcePreview.preview")}</ToolbarButton>
-        <ToolbarButton mode="split"   active={view === "split"}   onClick={() => setView("split")}><Columns2 className="h-3.5 w-3.5" />{t("sourcePreview.split")}</ToolbarButton>
+        {actions && <div className="mx-1 h-3.5 w-px bg-[var(--sidebar-divider)]" />}
+        <div className="ui-well">
+          <ToolbarButton mode="source"  active={view === "source"}  onClick={() => setView("source")}><FileCode2 className="h-3.5 w-3.5" />{t("sourcePreview.editor")}</ToolbarButton>
+          <ToolbarButton mode="preview" active={view === "preview"} onClick={() => setView("preview")}><Eye className="h-3.5 w-3.5" />{t("sourcePreview.preview")}</ToolbarButton>
+          <ToolbarButton mode="split"   active={view === "split"}   onClick={() => setView("split")}><Columns2 className="h-3.5 w-3.5" />{t("sourcePreview.split")}</ToolbarButton>
+        </div>
       </div>
 
       <div ref={containerRef} className="relative flex min-h-0 flex-1">
