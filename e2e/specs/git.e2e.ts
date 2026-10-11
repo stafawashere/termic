@@ -2001,9 +2001,12 @@ describe("git branch bar layout", () => {
       if (!chip) throw new Error("the branch chip is not on screen");
       const base = document.querySelector('[data-testid="compare-base"]') as HTMLElement | null;
       const target = document.querySelector('[data-testid="compare-target"]') as HTMLElement | null;
-      const filter = document.querySelector(
+      // The visible filter box is the ui-field around the input, which also
+      // holds the magnifier glyph, so that is the box that owes its 30%.
+      const filterInput = document.querySelector(
         'input[placeholder="Filter"], input[placeholder="Search messages"]',
       ) as HTMLElement | null;
+      const filter = (filterInput?.closest(".ui-field") as HTMLElement | null) ?? filterInput;
       return {
         branchRow: rowBox(chip),
         chip: box(chip),

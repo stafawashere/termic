@@ -1247,13 +1247,14 @@ describe("pin folders for quick access", () => {
     await browser.waitUntil(() => rowExists("e2e-pins/outer/inner"), {
       timeout: 8_000, timeoutMsg: "clicking the section row never re-expanded the path",
     });
-    // The reveal ring is the visible "you are here": box-shadow, while it
-    // lasts (1.6s), so poll rather than assert once.
+    // The reveal ring is the visible "you are here": a box-shadow on the
+    // row's ::after layer, while it lasts (1.6s), so poll rather than assert
+    // once.
     await browser.waitUntil(
       () =>
         browser.execute((sel) => {
           const el = document.querySelector(sel) as HTMLElement | null;
-          return !!el && getComputedStyle(el).boxShadow !== "none";
+          return !!el && getComputedStyle(el, "::after").boxShadow !== "none";
         }, `[data-path="e2e-pins/outer/inner"]`),
       { timeout: 8_000, timeoutMsg: "the revealed folder never got the reveal highlight" },
     );
