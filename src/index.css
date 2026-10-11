@@ -292,7 +292,7 @@
     a[href], button, summary, input, select, textarea,
     [role="button"], [tabindex]:not([tabindex="-1"])
   ):focus-visible {
-    outline: 2px solid var(--color-accent-soft);
+    outline: 2px solid var(--focus-ring, var(--color-accent-soft));
     outline-offset: -2px;
   }
   /* Subpixel anti-aliasing — macOS WKWebView's default. Renders UI text
@@ -1490,10 +1490,10 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   background-color: var(--sidebar-row-hover);
   color: var(--sidebar-btn-hover-ink);
 }
-/* One keyboard focus ring for the sidebar's controls, inset so a row flush
-   with the panel edge keeps all four sides of it. Inputs keep their accent
-   border and menus their highlight. */
-.sidebar-panel :is(button, [role="button"], [tabindex]):not(input):focus-visible {
-  outline: 2px solid var(--sidebar-focus-ring);
-  outline-offset: -2px;
+/* The sidebar recolours the app's one focus ring rather than defining a
+   second one. It is already inset, so a row flush with the panel edge keeps
+   all four sides of it. Inputs keep their accent border and menus their
+   highlight. */
+.sidebar-panel {
+  --focus-ring: var(--sidebar-focus-ring);
 }
