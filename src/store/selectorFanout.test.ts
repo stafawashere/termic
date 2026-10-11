@@ -42,8 +42,11 @@ vi.mock("@/lib/tabFocus", () => ({
 import { useApp, selectTaskTabs, selectActiveTabId, EMPTY_TABS } from "@/store/app";
 import { useAgentUsage, usageKey } from "@/store/agentUsage";
 import { useSubagents, selectTabSubagents } from "@/store/subagents";
+import { WORKFLOW_AGENT_TYPE } from "@/lib/subagentKind";
 import { usePrefs } from "@/store/prefs";
-import { createSubagentStructureSelector, hasSubagentRow, selectSubagentRecord } from "@/components/sidebar/subagentTree";
+import {
+  createSubagentStructureSelector, createWorkflowRunCountsSelector, hasSubagentRow, selectSubagentRecord,
+} from "@/components/sidebar/subagentTree";
 import {
   createSidebarFactsSelector, createRowTabsSelector, tabRenderEqual, tabListRenderEqual,
   createStatusFactsSelector, createBoardFilterFactsSelector, selectStatusRowBadge, selectStatusRowDelegated,
@@ -52,7 +55,7 @@ import {
 import { parseBoardQuery } from "@/lib/boardFilter";
 import { taskQueryNeeds } from "@/hooks/useTaskQuery";
 import type { AppState } from "@/store/app";
-import type { Tab, Task, TerminalTab } from "@/lib/types";
+import type { SubagentSummary, Tab, Task, TerminalTab } from "@/lib/types";
 
 /** Mounted subscribers to simulate. A busy window is a handful of panes, not
  *  2500 — but the budget should hold with two orders of magnitude of slack. */
@@ -1149,6 +1152,123 @@ describe("subagent rows (bear traps 5, 8)", () => {
       }]));
 
     expect(changed.sort()).toEqual([`row ${child}`, `structure ${tabIds[3]}`].sort());
+  });
+});
+
+// -- Workflow runs -----------------------------------------------------------
+//
+// A workflow run can start hundreds of agents into one tab. Collapsed, the
+// run is one segment of its tab's structure key and one row with its own
+// counts selector, so an agent starting or stopping inside it may move that
+// run's counts and nothing else: no structure key, no agent row, no header,
+// no other tab.
+describe("workflow runs (bear traps 5, 8)", () => {
+  const SESSION = "11111111-2222-4333-8444-555555555555";
+  const TABS = 16;
+  const AGENTS_PER_TAB = 8;
+  const RUN_AGENTS = 300;
+  const RUN = "wf_acme1";
+  const RUN_TAB = 5;
+  const tabIds = Array.from({ length: TABS }, (_, i) => `task-${i}-a`);
+  const taskOf = (tabId: string) => tabId.slice(0, -2);
+  const agentId = (tab: number, n: number) => `a${tab}x${n}`;
+  const runAgentId = (n: number) => `w${n}`;
+  const runTabId = tabIds[RUN_TAB];
+
+  type SubagentSelector = (s: ReturnType<typeof useSubagents.getState>) => unknown;
+
+  interface Mounted {
+    label: string;
+    select: SubagentSelector;
+  }
+
+  const placed = (id: string): SubagentSummary => ({
+    agentId: id, isWorkflow: true, workflowRunId: RUN, mtimeMs: 1, outcome: "none",
+    agentType: WORKFLOW_AGENT_TYPE, description: null, model: null, toolUseId: null, spawnDepth: 1,
+    parentAgentId: null, requestShape: null, requestNonInteractive: null, workflowPhase: "Build",
+  });
+
+  /** The 16 by 8 sidebar of the rows block, plus the run's counts and the
+   *  header boolean of one of its agents. The run stays collapsed. */
+  function mountRows(): Mounted[] {
+    const mounted: Mounted[] = [];
+    tabIds.forEach((tabId, t) => {
+      mounted.push({ label: `structure ${tabId}`, select: createSubagentStructureSelector(tabId) });
+      mounted.push({ label: `header ${tabId}`, select: s => hasSubagentRow(s.byTab, [tabId], agentId(t, 0)) });
+      for (let n = 0; n < AGENTS_PER_TAB; n++) {
+        mounted.push({ label: `row ${agentId(t, n)}`, select: selectSubagentRecord(tabId, agentId(t, n)) });
+      }
+    });
+    mounted.push({ label: `run ${RUN}`, select: createWorkflowRunCountsSelector(runTabId, RUN) });
+    mounted.push({
+      label: `header ${runAgentId(0)}`,
+      select: s => hasSubagentRow(s.byTab, [runTabId], runAgentId(0)),
+    });
+    return mounted;
+  }
+
+  function changedBy(mounted: Mounted[], write: () => void): string[] {
+    const snap = mounted.map(m => m.select(useSubagents.getState()));
+    const changed: string[] = [];
+    const unsub = useSubagents.subscribe(state => {
+      mounted.forEach((m, i) => {
+        const next = m.select(state);
+        if (!Object.is(next, snap[i])) { changed.push(m.label); snap[i] = next; }
+      });
+    });
+
+    write();
+    unsub();
+    return changed;
+  }
+
+  beforeEach(() => {
+    useSubagents.setState({ byTab: {} });
+    useApp.setState({ tabs: Object.fromEntries(tabIds.map(id => [taskOf(id), [tab(id)]])) });
+    tabIds.forEach((tabId, t) => {
+      for (let n = 0; n < AGENTS_PER_TAB; n++) {
+        useSubagents.getState().start(taskOf(tabId), tabId, SESSION, agentId(t, n), "Explore");
+      }
+    });
+
+    const runIds = Array.from({ length: RUN_AGENTS }, (_, n) => runAgentId(n));
+    for (const id of runIds) {
+      useSubagents.getState().start(taskOf(runTabId), runTabId, SESSION, id, WORKFLOW_AGENT_TYPE);
+    }
+    useSubagents.getState().applySummaries(runTabId, SESSION, runIds.map(placed));
+  });
+
+  it("the run is drawn as one collapsed segment of its tab's key", () => {
+    const key = createSubagentStructureSelector(runTabId)(useSubagents.getState());
+
+    expect(key.endsWith(`run:${RUN};`)).toBe(true);
+    expect(key).not.toContain(runAgentId(0));
+    expect(createWorkflowRunCountsSelector(runTabId, RUN)(useSubagents.getState())).toBe(`${RUN_AGENTS}/${RUN_AGENTS}/0`);
+  });
+
+  it("an agent starting in a collapsed run reaches only that run's counts", () => {
+    const late = runAgentId(RUN_AGENTS);
+    const changed = changedBy(mountRows(), () => {
+      useSubagents.getState().start(taskOf(runTabId), runTabId, SESSION, late, WORKFLOW_AGENT_TYPE);
+      useSubagents.getState().applySummaries(runTabId, SESSION, [placed(late)]);
+    });
+
+    expect(changed).toEqual([`run ${RUN}`]);
+  });
+
+  it("an agent stopping in a collapsed run reaches only that run's counts", () => {
+    const changed = changedBy(mountRows(), () =>
+      useSubagents.getState().stop(runTabId, runAgentId(42), "unknown"));
+
+    expect(changed).toEqual([`run ${RUN}`]);
+    expect(useSubagents.getState().byTab[runTabId].agents[runAgentId(42)].state).toBe("unknown");
+  });
+
+  it("a plain agent finishing beside the run still reaches only its own row", () => {
+    const changed = changedBy(mountRows(), () =>
+      useSubagents.getState().stop(runTabId, agentId(RUN_TAB, 3), "done"));
+
+    expect(changed).toEqual([`row ${agentId(RUN_TAB, 3)}`]);
   });
 });
 

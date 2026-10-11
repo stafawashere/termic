@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
-  buildSubagentTree, childRowCarriesSelection, createSubagentStructureSelector, hasSubagentRow,
-  isPastRetention, nextRetentionExpiry, parseSubagentStructureKey, subagentGroupStartsCollapsed,
-  subagentStructureKey, EMPTY_SUBAGENT_TREE, MAX_SUBAGENT_INDENT_DEPTH,
-  type SubagentLink, type SubagentRowRules,
+  buildSubagentTree, childRowCarriesSelection, createSubagentStructureSelector, createWorkflowRunCountsSelector,
+  hasSubagentRow, isPastRetention, nextRetentionExpiry, parseSubagentStructureKey, subagentGroupStartsCollapsed,
+  subagentStructureKey, workflowRunName, EMPTY_SUBAGENT_TREE, MAX_SUBAGENT_INDENT_DEPTH,
+  type SubagentLink, type SubagentRowRules, type SubagentTreeRow,
 } from "./subagentTree";
 import { DEFAULT_SUBAGENT_TYPE_FILTER } from "@/lib/subagentPrefs";
 import type { SubagentRecord, TabSubagents } from "@/store/subagents";
@@ -11,7 +11,7 @@ import type { SubagentRecord, TabSubagents } from "@/store/subagents";
 const NONE: ReadonlySet<string> = new Set();
 
 function link(agentId: string, parentAgentId: string | null = null): SubagentLink {
-  return { agentId, parentAgentId };
+  return { kind: "agent", agentId, parentAgentId };
 }
 
 function record(agentId: string, extra: Partial<SubagentRecord> = {}): SubagentRecord {
@@ -39,7 +39,8 @@ function entry(records: SubagentRecord[]): TabSubagents {
   };
 }
 
-const ids = (rows: readonly { agentId: string }[]) => rows.map(row => row.agentId);
+const ids = (rows: readonly SubagentTreeRow[]) => rows.map(row => row.key);
+const hasKids = (row: SubagentTreeRow) => row.kind === "agent" && row.hasChildren;
 const depths = (rows: readonly { depth: number }[]) => rows.map(row => row.depth);
 
 describe("buildSubagentTree", () => {
@@ -52,7 +53,7 @@ describe("buildSubagentTree", () => {
 
     expect(ids(rows)).toEqual(["a", "b", "c"]);
     expect(depths(rows)).toEqual([1, 1, 1]);
-    expect(rows.every(row => !row.hasChildren)).toBe(true);
+    expect(rows.every(row => !hasKids(row))).toBe(true);
   });
 
   it("nests a child right after its parent, one level deeper", () => {
@@ -60,8 +61,8 @@ describe("buildSubagentTree", () => {
 
     expect(ids(rows)).toEqual(["p", "c", "x"]);
     expect(depths(rows)).toEqual([1, 2, 1]);
-    expect(rows[0].hasChildren).toBe(true);
-    expect(rows[1].hasChildren).toBe(false);
+    expect(hasKids(rows[0])).toBe(true);
+    expect(hasKids(rows[1])).toBe(false);
   });
 
   it("keeps siblings in spawn order under their parent", () => {
@@ -92,8 +93,8 @@ describe("buildSubagentTree", () => {
 
     expect(ids(before)).toEqual(["p", "x", "c"]);
     expect(ids(after)).toEqual(["p", "c", "x"]);
-    expect(after.find(row => row.agentId === "c")?.depth).toBe(2);
-    expect(after.find(row => row.agentId === "x")?.depth).toBe(1);
+    expect(after.find(row => row.key === "c")?.depth).toBe(2);
+    expect(after.find(row => row.key === "x")?.depth).toBe(1);
   });
 
   it("leaves out the subtree of a folded agent but keeps the agent itself", () => {
@@ -101,7 +102,7 @@ describe("buildSubagentTree", () => {
     const rows = buildSubagentTree(links, new Set(["p"]));
 
     expect(ids(rows)).toEqual(["p", "x"]);
-    expect(rows[0].hasChildren).toBe(true);
+    expect(hasKids(rows[0])).toBe(true);
   });
 
   it("folding a middle agent hides only below it", () => {
@@ -119,7 +120,7 @@ describe("buildSubagentTree", () => {
 });
 
 describe("structure key", () => {
-  it("skips workflow agents, so they never get a row", () => {
+  it("leaves out a workflow agent no listing has placed in a run yet", () => {
     const tab = entry([
       record("a"),
       record("wf1", { agentType: "workflow-subagent", isWorkflow: true }),
@@ -208,7 +209,7 @@ describe("hasSubagentRow", () => {
     expect(hasSubagentRow(byTab, ["tab-shell", "tab-main"], "a1")).toBe(true);
   });
 
-  it("does not count a workflow agent, an unknown agent, another task's tab, or no agent", () => {
+  it("does not count an unplaced workflow agent, an unknown agent, another task's tab, or no agent", () => {
     expect(hasSubagentRow(byTab, ["tab-main"], "wf1")).toBe(false);
     expect(hasSubagentRow(byTab, ["tab-main"], "nobody")).toBe(false);
     expect(hasSubagentRow(byTab, ["tab-other"], "a1")).toBe(false);
@@ -223,7 +224,7 @@ describe("rows under the Settings rules", () => {
     return { typeFilter: DEFAULT_SUBAGENT_TYPE_FILTER, retentionMs: null, now: 10 * HOUR, ...patch };
   }
 
-  const keyIds = (key: string) => parseSubagentStructureKey(key).map(l => l.agentId);
+  const keyIds = (key: string) => parseSubagentStructureKey(key).map(item => ("agentId" in item ? item.agentId : item.kind));
 
   it("hides the agents whose kind is filtered out, and only those", () => {
     const tab = entry([
@@ -239,11 +240,30 @@ describe("rows under the Settings rules", () => {
     expect(keyIds(subagentStructureKey(tab, noCustom))).toEqual(["a", "c"]);
   });
 
-  it("never gives a workflow agent a row, whatever its filter says", () => {
-    const tab = entry([record("w", { agentType: "workflow-subagent", isWorkflow: true })]);
+  it("draws a workflow run only while the workflow filter is on", () => {
+    const tab = entry([record("w", { agentType: "workflow-subagent", isWorkflow: true, workflowRunId: "wf_r1" })]);
     const workflowOn = rules({ typeFilter: { ...DEFAULT_SUBAGENT_TYPE_FILTER, workflow: true } });
+    const workflowOff = rules({ typeFilter: { ...DEFAULT_SUBAGENT_TYPE_FILTER, workflow: false } });
 
-    expect(subagentStructureKey(tab, workflowOn)).toBe("");
+    expect(subagentStructureKey(tab, workflowOn)).toBe("run:wf_r1;");
+    expect(subagentStructureKey(tab, workflowOff)).toBe("");
+  });
+
+  it("flipping the workflow filter off and on takes the run segment out and puts it back", () => {
+    const tab = entry([
+      record("a"),
+      record("w", { agentType: "workflow-subagent", isWorkflow: true, workflowRunId: "wf_r1" }),
+    ]);
+    const workflowOn = rules({ typeFilter: { ...DEFAULT_SUBAGENT_TYPE_FILTER, workflow: true } });
+    const workflowOff = rules({ typeFilter: { ...DEFAULT_SUBAGENT_TYPE_FILTER, workflow: false } });
+
+    const before = subagentStructureKey(tab, workflowOn);
+    const off = subagentStructureKey(tab, workflowOff);
+    const back = subagentStructureKey(tab, workflowOn);
+
+    expect(before).toBe("a>;run:wf_r1;");
+    expect(off).toBe("a>;");
+    expect(back).toBe(before);
   });
 
   it("re-roots a child under the tab when its parent is filtered out", () => {
@@ -338,12 +358,185 @@ describe("subagentGroupStartsCollapsed", () => {
     expect(subagentGroupStartsCollapsed(allEnded, "allFinished")).toBe(true);
   });
 
-  it("does not count workflow agents, and stays open with no agent at all", () => {
-    const onlyWorkflow = entry([record("w", { isWorkflow: true, state: "done" })]);
-    const runningWorkflow = entry([record("a", { state: "done" }), record("w", { isWorkflow: true })]);
+  it("counts the agents of a run, and stays open with no agent at all", () => {
+    const finishedRun = entry([record("w", { isWorkflow: true, workflowRunId: "wf_r1", state: "done" })]);
+    const runningRun = entry([
+      record("a", { state: "done" }),
+      record("w", { isWorkflow: true, workflowRunId: "wf_r1" }),
+    ]);
 
     expect(subagentGroupStartsCollapsed(undefined, "allFinished")).toBe(false);
-    expect(subagentGroupStartsCollapsed(onlyWorkflow, "allFinished")).toBe(false);
-    expect(subagentGroupStartsCollapsed(runningWorkflow, "allFinished")).toBe(true);
+    expect(subagentGroupStartsCollapsed(finishedRun, "allFinished")).toBe(true);
+    expect(subagentGroupStartsCollapsed(runningRun, "allFinished")).toBe(false);
+  });
+
+  it("does not count an unplaced workflow agent", () => {
+    const unplacedRunning = entry([record("a", { state: "done" }), record("w", { isWorkflow: true })]);
+
+    expect(subagentGroupStartsCollapsed(unplacedRunning, "allFinished")).toBe(true);
+  });
+
+  it("counts only the agents the type filters show", () => {
+    const tab = entry([
+      record("r", { agentType: "reviewer", state: "running" }),
+      record("w1", { isWorkflow: true, workflowRunId: "wf_r1", state: "done", endedAt: 1 }),
+      record("w2", { isWorkflow: true, workflowRunId: "wf_r1", state: "failed", endedAt: 1 }),
+    ]);
+    const typeFilter = { builtIn: true, custom: false, fork: true, workflow: true };
+    const noCustom = { typeFilter, retentionMs: null, now: 0 };
+
+    expect(subagentGroupStartsCollapsed(tab, "allFinished")).toBe(false);
+    expect(subagentGroupStartsCollapsed(tab, "allFinished", noCustom)).toBe(true);
+  });
+});
+
+describe("workflow runs", () => {
+  const RUN = "wf_r1";
+  const ALL_KINDS = { builtIn: true, custom: true, fork: true, workflow: true };
+
+  function wf(agentId: string, phase: string | null, extra: Partial<SubagentRecord> = {}): SubagentRecord {
+    return record(agentId, {
+      agentType: "workflow-subagent", isWorkflow: true, workflowRunId: RUN, workflowPhase: phase, ...extra,
+    });
+  }
+
+  function rowsOf(tab: TabSubagents, open: readonly string[] = [], folded: ReadonlySet<string> = NONE) {
+    return buildSubagentTree(parseSubagentStructureKey(subagentStructureKey(tab, undefined, new Set(open))), folded);
+  }
+
+  const shape = (rows: readonly SubagentTreeRow[]) => rows.map(row => `${row.kind} ${row.key} ${row.depth}`);
+
+  it("draws a collapsed run as one run row at depth 0, keyed apart from its agents", () => {
+    const tab = entry([wf("w1", "Build"), wf("w2", "Build"), wf("w3", null)]);
+    const rows = rowsOf(tab);
+
+    expect(subagentStructureKey(tab)).toBe(`run:${RUN};`);
+    expect(shape(rows)).toEqual([`run run:${RUN} 0`]);
+    expect(rows[0]).toMatchObject({ kind: "run", runId: RUN, open: false });
+  });
+
+  it("opens to its phases with their agents, then the agents with no phase", () => {
+    const tab = entry([
+      wf("w1", "Build", { startedAt: 1 }),
+      wf("w2", null, { startedAt: 2 }),
+      wf("w3", "Plan", { startedAt: 3 }),
+      wf("w4", "Build", { startedAt: 4 }),
+    ]);
+    tab.runs[RUN] = { name: "acme-release", phases: ["Plan", "Build"] };
+
+    expect(shape(rowsOf(tab, [RUN]))).toEqual([
+      `run run:${RUN} 0`,
+      `phase phase:${RUN}:0 1`,
+      "agent w3 2",
+      `phase phase:${RUN}:1 1`,
+      "agent w1 2",
+      "agent w4 2",
+      "agent w2 1",
+    ]);
+  });
+
+  it("orders phases the run file does not list by their earliest agent's start", () => {
+    const tab = entry([
+      wf("late-review", "Review", { startedAt: 30 }),
+      wf("early-build", "Build", { startedAt: 10 }),
+      wf("mid-review", "Review", { startedAt: 20 }),
+    ]);
+
+    const phases = rowsOf(tab, [RUN]).filter(row => row.kind === "phase");
+    expect(phases.map(row => row.kind === "phase" && row.title)).toEqual(["Build", "Review"]);
+  });
+
+  it("puts declared phases before undeclared ones, whatever started first", () => {
+    const tab = entry([wf("x", "Extra", { startedAt: 1 }), wf("p", "Plan", { startedAt: 5 })]);
+    tab.runs[RUN] = { name: null, phases: ["Plan"] };
+
+    const phases = rowsOf(tab, [RUN]).filter(row => row.kind === "phase");
+    expect(phases.map(row => row.key)).toEqual([`phase:${RUN}:0`, `phase:${RUN}:1`]);
+    expect(phases.map(row => row.kind === "phase" && row.title)).toEqual(["Plan", "Extra"]);
+  });
+
+  it("keeps a phase title with key characters in it intact", () => {
+    const title = "Build: a;b>c";
+    const tab = entry([wf("w1", title)]);
+
+    const phase = rowsOf(tab, [RUN]).find(row => row.kind === "phase");
+    expect(phase).toMatchObject({ title });
+  });
+
+  it("a folded phase hides its agents but not the run's agents with no phase", () => {
+    const tab = entry([wf("w1", "Build"), wf("w2", null)]);
+    const rows = rowsOf(tab, [RUN], new Set([`phase:${RUN}:0`]));
+
+    expect(shape(rows)).toEqual([`run run:${RUN} 0`, `phase phase:${RUN}:0 1`, "agent w2 1"]);
+  });
+
+  it("sits where its first agent started among the plain agents", () => {
+    const tab = entry([record("a"), wf("w1", "Build"), record("b"), wf("w2", "Build")]);
+
+    expect(ids(rowsOf(tab))).toEqual(["a", `run:${RUN}`, "b"]);
+  });
+
+  it("keeps the key identical while agents of a 300-agent collapsed run start, stop and move", () => {
+    const agents = Array.from({ length: 300 }, (_, i) => wf(`w${i}`, i % 2 ? "Build" : "Plan", { startedAt: i }));
+    const base = entry(agents);
+    const key = subagentStructureKey(base, undefined, new Set());
+
+    const started = entry([...agents, wf("w300", "Plan", { startedAt: 300 })]);
+    const stopped = entry(agents.map(a => (a.agentId === "w7" ? { ...a, state: "done" as const, endedAt: 9 } : a)));
+    const moved = entry(agents.map(a => (a.agentId === "w8" ? { ...a, workflowPhase: "Review" } : a)));
+
+    expect(key).toBe(`run:${RUN};`);
+    expect(subagentStructureKey(started, undefined, new Set())).toBe(key);
+    expect(subagentStructureKey(stopped, undefined, new Set())).toBe(key);
+    expect(subagentStructureKey(moved, undefined, new Set())).toBe(key);
+
+    // The same start and move reach the key once the run is open.
+    const open = new Set([RUN]);
+    const openKey = subagentStructureKey(base, undefined, open);
+    expect(subagentStructureKey(started, undefined, open)).not.toBe(openKey);
+    expect(subagentStructureKey(moved, undefined, open)).not.toBe(openKey);
+  });
+
+  it("draws no run row when every agent is filtered out or past retention", () => {
+    const tab = entry([wf("w1", "Build", { state: "done", endedAt: 1 }), wf("w2", "Build", { state: "failed", endedAt: 1 })]);
+    const noWorkflow = { typeFilter: { ...ALL_KINDS, workflow: false }, retentionMs: null, now: 10 };
+    const finishedGone = { typeFilter: ALL_KINDS, retentionMs: 0, now: 10 };
+
+    expect(subagentStructureKey(tab, noWorkflow)).toBe("");
+    expect(subagentStructureKey(tab, finishedGone)).toBe("");
+    expect(subagentStructureKey(tab, { typeFilter: ALL_KINDS, retentionMs: null, now: 10 })).toBe(`run:${RUN};`);
+  });
+
+  it("is named by its run file, or by its id with the wf_ prefix kept", () => {
+    const tab = entry([wf("w1", null)]);
+
+    expect(workflowRunName(tab, RUN)).toBe(RUN);
+    tab.runs[RUN] = { name: "acme-release", phases: null };
+    expect(workflowRunName(tab, RUN)).toBe("acme-release");
+  });
+
+  it("a workflow agent has a header row while its run is drawn, collapsed or not", () => {
+    const byTab = { "tab-main": entry([wf("w1", "Build"), wf("w2", "Build", { state: "done", endedAt: 1 })]) };
+    const workflowOn = { typeFilter: ALL_KINDS, retentionMs: 0, now: 10 };
+    const workflowOff = { typeFilter: { ...ALL_KINDS, workflow: false }, retentionMs: null, now: 10 };
+
+    expect(hasSubagentRow(byTab, ["tab-main"], "w1")).toBe(true);
+    // w2 is past retention, but its run still draws for w1.
+    expect(hasSubagentRow(byTab, ["tab-main"], "w2", workflowOn)).toBe(true);
+    expect(hasSubagentRow(byTab, ["tab-main"], "w1", workflowOff)).toBe(false);
+  });
+
+  it("counts a run's agents as one string that moves only when a count does", () => {
+    const tab = entry([wf("w1", "Build"), wf("w2", "Build"), record("plain")]);
+    const select = createWorkflowRunCountsSelector("tab-1", RUN);
+
+    const first = select({ byTab: { "tab-1": tab } });
+    expect(first).toBe("2/2/0");
+
+    const renamed = entry([wf("w1", "Build", { description: "x" }), wf("w2", "Build"), record("plain")]);
+    expect(select({ byTab: { "tab-1": renamed } })).toBe(first);
+
+    const failed = entry([wf("w1", "Build", { state: "failed", endedAt: 1 }), wf("w2", "Build"), record("plain")]);
+    expect(select({ byTab: { "tab-1": failed } })).toBe("1/2/1");
   });
 });

@@ -6,6 +6,9 @@
 // that list, and React moves the same DOM node rather than unmounting one
 // subtree and mounting another. A nested tree of components would remount,
 // which is a frame without the row.
+//
+// A workflow run is one row of its own, with its phases and agents after it
+// in the same list, and starts collapsed: a run can hold hundreds of agents.
 
 import type { SubagentRecord, SubagentState, TabSubagents } from "@/store/subagents";
 import { subagentKind } from "@/lib/subagentKind";
@@ -15,38 +18,98 @@ import type { SubagentAutoCollapse, SubagentTypeFilter } from "@/lib/subagentPre
 export const MAX_SUBAGENT_INDENT_DEPTH = 3;
 
 export interface SubagentLink {
+  kind: "agent";
   agentId: string;
   parentAgentId: string | null;
 }
 
-export interface SubagentTreeRow {
+/** A workflow run. Only an open run lists its phases and agents. */
+export interface SubagentRunItem {
+  kind: "run";
+  runId: string;
+  open: boolean;
+}
+
+export interface SubagentPhaseItem {
+  kind: "phase";
+  runId: string;
+  index: number;
+  title: string;
+}
+
+/** An agent of an open run. A null phase index is an agent whose sidecar
+ *  names no phase, which sits under the run after its phases. */
+export interface SubagentRunAgentItem {
+  kind: "runAgent";
+  runId: string;
+  phaseIndex: number | null;
   agentId: string;
+}
+
+export type SubagentStructureItem = SubagentLink | SubagentRunItem | SubagentPhaseItem | SubagentRunAgentItem;
+
+export interface SubagentAgentRow {
+  kind: "agent";
+  /** The agent id, which no run or phase key can equal. */
+  key: string;
+  agentId: string;
+  /** Null for a plain agent. */
+  runId: string | null;
   /** 1 is directly under the tab row, clamped to MAX_SUBAGENT_INDENT_DEPTH. */
   depth: number;
   hasChildren: boolean;
 }
 
+export interface SubagentRunRow {
+  kind: "run";
+  key: string;
+  runId: string;
+  depth: 0;
+  open: boolean;
+}
+
+export interface SubagentPhaseRow {
+  kind: "phase";
+  key: string;
+  runId: string;
+  index: number;
+  title: string;
+  depth: 1;
+}
+
+export type SubagentTreeRow = SubagentAgentRow | SubagentRunRow | SubagentPhaseRow;
+
 export const EMPTY_SUBAGENT_TREE: readonly SubagentTreeRow[] = Object.freeze([]);
 
+export function runRowKey(runId: string): string {
+  return `run:${runId}`;
+}
+
+/** The fold id of a phase, in the same list as the agents' fold ids. */
+export function phaseRowKey(runId: string, index: number): string {
+  return `phase:${runId}:${index}`;
+}
+
 /** The rows to draw, in spawn order with each child right after its parent.
- *  `links` is in spawn order and already excludes workflow agents. An agent
- *  whose parent has no row (unknown, or a workflow agent) sits under the tab.
- *  The subtree of an agent in `folded` is left out. */
+ *  A run sits where its first shown agent started. An agent whose parent has
+ *  no row (unknown, or a workflow agent) sits under the tab. The subtree of
+ *  an agent in `folded`, and the agents of a phase in it, are left out. */
 export function buildSubagentTree(
-  links: readonly SubagentLink[],
+  items: readonly SubagentStructureItem[],
   folded: ReadonlySet<string>,
 ): readonly SubagentTreeRow[] {
-  if (links.length === 0) return EMPTY_SUBAGENT_TREE;
+  if (items.length === 0) return EMPTY_SUBAGENT_TREE;
 
+  const links = items.filter((item): item is SubagentLink => item.kind === "agent");
   const known = new Set(links.map(link => link.agentId));
   const children = new Map<string, string[]>();
-  const roots: string[] = [];
+  const roots = new Set<string>();
 
   for (const link of links) {
     const parent = link.parentAgentId;
     const hasKnownParent = parent !== null && parent !== link.agentId && known.has(parent);
     if (!hasKnownParent) {
-      roots.push(link.agentId);
+      roots.add(link.agentId);
       continue;
     }
 
@@ -65,7 +128,10 @@ export function buildSubagentTree(
     const kids = children.get(agentId) ?? [];
     if (!hidden) {
       rows.push({
+        kind: "agent",
+        key: agentId,
         agentId,
+        runId: null,
         depth: Math.min(depth, MAX_SUBAGENT_INDENT_DEPTH),
         hasChildren: kids.length > 0,
       });
@@ -75,7 +141,38 @@ export function buildSubagentTree(
     for (const kid of kids) place(kid, depth + 1, kidsHidden);
   };
 
-  for (const root of roots) place(root, 1, false);
+  let phaseHidden = false;
+  for (const item of items) {
+    switch (item.kind) {
+      case "agent":
+        if (roots.has(item.agentId)) place(item.agentId, 1, false);
+        break;
+      case "run":
+        phaseHidden = false;
+        rows.push({ kind: "run", key: runRowKey(item.runId), runId: item.runId, depth: 0, open: item.open });
+        break;
+      case "phase": {
+        const key = phaseRowKey(item.runId, item.index);
+        phaseHidden = folded.has(key);
+        rows.push({ kind: "phase", key, runId: item.runId, index: item.index, title: item.title, depth: 1 });
+        break;
+      }
+      case "runAgent": {
+        const hasPhase = item.phaseIndex !== null;
+        if (hasPhase && phaseHidden) break;
+
+        rows.push({
+          kind: "agent",
+          key: item.agentId,
+          agentId: item.agentId,
+          runId: item.runId,
+          depth: hasPhase ? 2 : 1,
+          hasChildren: false,
+        });
+        break;
+      }
+    }
+  }
 
   // Agents whose parent chain loops back on itself never hang off a root.
   // Bad metadata should not cost them their row.
@@ -116,8 +213,6 @@ export function isPastRetention(record: SubagentRecord, retentionMs: number | nu
 }
 
 export function isSubagentRowShown(record: SubagentRecord, rules: SubagentRowRules): boolean {
-  if (record.isWorkflow) return false;
-
   const kind = subagentKind(record.agentType, { isWorkflow: record.isWorkflow });
   if (!rules.typeFilter[kind]) return false;
 
@@ -133,7 +228,7 @@ export function nextRetentionExpiry(entry: TabSubagents | undefined, rules: Suba
   let next: number | null = null;
   for (const agentId of entry.order) {
     const record = entry.agents[agentId];
-    const isWaiting = !!record && ENDED_STATES.has(record.state) && isSubagentRowShown(record, rules);
+    const isWaiting = !!record && ENDED_STATES.has(record.state) && isDrawn(record, rules);
     if (!isWaiting) continue;
 
     const expiry = endedAt(record) + (rules.retentionMs as number);
@@ -142,42 +237,182 @@ export function nextRetentionExpiry(entry: TabSubagents | undefined, rules: Suba
   return next;
 }
 
+/** A workflow agent a hook reported before any listing named its run. It
+ *  has nowhere to sit until the next listing places it, and drawing it
+ *  loose in the meantime would make it jump into its run a moment later. */
+function isUnplacedWorkflow(record: SubagentRecord): boolean {
+  return record.isWorkflow && record.workflowRunId === null;
+}
+
+/** Whether a record is drawn, inside a run or not. Without `rules` every
+ *  placed agent counts. */
+function isDrawn(record: SubagentRecord, rules: SubagentRowRules | undefined): boolean {
+  if (isUnplacedWorkflow(record)) return false;
+
+  return !rules || isSubagentRowShown(record, rules);
+}
+
+const NO_OPEN_RUNS: ReadonlySet<string> = new Set();
+
+interface RunGroup {
+  runId: string;
+  agents: SubagentRecord[];
+}
+
+function encodeKeyPart(value: string): string {
+  return encodeURIComponent(value);
+}
+
+/** A run's phases in the order the run declares them, then any phase the
+ *  run file does not name, by when its earliest agent started. Each title
+ *  maps to its index in that order, which is its fold id. */
+function phaseIndexes(group: RunGroup, declared: readonly string[] | null | undefined): Map<string, number> {
+  const indexes = new Map<string, number>();
+  for (const title of declared ?? []) {
+    if (!indexes.has(title)) indexes.set(title, indexes.size);
+  }
+
+  const firstSeen = new Map<string, number>();
+  for (const record of group.agents) {
+    const title = record.workflowPhase;
+    const isUndeclared = title !== null && !indexes.has(title);
+    if (!isUndeclared) continue;
+
+    const seen = firstSeen.get(title);
+    if (seen === undefined || record.startedAt < seen) firstSeen.set(title, record.startedAt);
+  }
+
+  const undeclared = [...firstSeen.keys()].sort((a, b) => (firstSeen.get(a) as number) - (firstSeen.get(b) as number));
+  for (const title of undeclared) indexes.set(title, indexes.size);
+
+  return indexes;
+}
+
+/** An open run's segments: the run, then each phase with its agents, then
+ *  the agents with no phase. */
+function openRunKey(group: RunGroup, entry: TabSubagents): string {
+  const runPart = encodeKeyPart(group.runId);
+  const indexes = phaseIndexes(group, entry.runs[group.runId]?.phases);
+
+  const byPhase = new Map<number, string[]>();
+  const unphased: string[] = [];
+  for (const record of group.agents) {
+    const index = record.workflowPhase === null ? undefined : indexes.get(record.workflowPhase);
+    if (index === undefined) {
+      unphased.push(record.agentId);
+      continue;
+    }
+
+    const agents = byPhase.get(index);
+    if (agents) agents.push(record.agentId);
+    else byPhase.set(index, [record.agentId]);
+  }
+
+  let key = `run:${runPart}:open;`;
+  for (const [title, index] of indexes) {
+    const agents = byPhase.get(index);
+    if (!agents) continue;
+
+    key += `phase:${runPart}:${index}:${encodeKeyPart(title)};`;
+    for (const agentId of agents) key += `wf:${runPart}:${index}:${agentId};`;
+  }
+  for (const agentId of unphased) key += `wf:${runPart}::${agentId};`;
+
+  return key;
+}
+
 /** One string per tab that changes only when a row is added, removed, or
  *  moves to another parent. A running agent finishing leaves it as it was,
  *  which is what keeps a state change off the list component, unless
- *  `rules` hide finished rows. Without `rules` every non-workflow agent
- *  counts. */
-export function subagentStructureKey(entry: TabSubagents | undefined, rules?: SubagentRowRules): string {
+ *  `rules` hide finished rows. Without `rules` every placed agent counts.
+ *
+ *  A run not in `openRuns` is one `run:<id>` segment however many agents it
+ *  has, so its agents starting and stopping never reach the list. A run
+ *  sits where its first shown agent started, and a run whose agents are all
+ *  hidden has no segment. */
+export function subagentStructureKey(
+  entry: TabSubagents | undefined,
+  rules?: SubagentRowRules,
+  openRuns: ReadonlySet<string> = NO_OPEN_RUNS,
+): string {
   if (!entry) return "";
 
-  let key = "";
+  const parts: (string | RunGroup)[] = [];
+  const groups = new Map<string, RunGroup>();
   for (const agentId of entry.order) {
     const record = entry.agents[agentId];
-    if (!record || record.isWorkflow) continue;
+    if (!record || !isDrawn(record, rules)) continue;
 
-    const isHidden = !!rules && !isSubagentRowShown(record, rules);
-    if (isHidden) continue;
+    if (!record.isWorkflow) {
+      parts.push(`${agentId}>${record.parentAgentId ?? ""};`);
+      continue;
+    }
 
-    key += `${agentId}>${record.parentAgentId ?? ""};`;
+    const runId = record.workflowRunId as string;
+    const group = groups.get(runId);
+    if (group) {
+      group.agents.push(record);
+      continue;
+    }
+
+    const created: RunGroup = { runId, agents: [record] };
+    groups.set(runId, created);
+    parts.push(created);
+  }
+
+  let key = "";
+  for (const part of parts) {
+    if (typeof part === "string") {
+      key += part;
+      continue;
+    }
+
+    const isOpen = openRuns.has(part.runId);
+    key += isOpen ? openRunKey(part, entry) : `run:${encodeKeyPart(part.runId)};`;
   }
   return key;
 }
 
-export function parseSubagentStructureKey(key: string): readonly SubagentLink[] {
+function parseKeyPart(part: string): SubagentStructureItem {
+  const fields = part.split(":");
+  switch (fields[0]) {
+    case "run":
+      return { kind: "run", runId: decodeURIComponent(fields[1]), open: fields[2] === "open" };
+    case "phase":
+      return {
+        kind: "phase",
+        runId: decodeURIComponent(fields[1]),
+        index: Number(fields[2]),
+        title: decodeURIComponent(fields[3]),
+      };
+    case "wf":
+      return {
+        kind: "runAgent",
+        runId: decodeURIComponent(fields[1]),
+        phaseIndex: fields[2] === "" ? null : Number(fields[2]),
+        agentId: fields[3],
+      };
+  }
+
+  const [agentId, parent] = part.split(">");
+  return { kind: "agent", agentId, parentAgentId: parent || null };
+}
+
+/** Agent ids never hold a `:`, so a run, phase or run agent segment cannot
+ *  be read as a plain agent. */
+export function parseSubagentStructureKey(key: string): readonly SubagentStructureItem[] {
   if (!key) return [];
 
-  return key
-    .split(";")
-    .filter(Boolean)
-    .map(part => {
-      const [agentId, parent] = part.split(">");
-      return { agentId, parentAgentId: parent || null };
-    });
+  return key.split(";").filter(Boolean).map(parseKeyPart);
 }
 
 /** A selector for one tab's structure key, cached on the tab's entry so
  *  a write to any other tab returns at once. */
-export function createSubagentStructureSelector(tabId: string, rules?: SubagentRowRules) {
+export function createSubagentStructureSelector(
+  tabId: string,
+  rules?: SubagentRowRules,
+  openRuns?: ReadonlySet<string>,
+) {
   let lastEntry: TabSubagents | undefined;
   let lastKey = "";
 
@@ -186,7 +421,7 @@ export function createSubagentStructureSelector(tabId: string, rules?: SubagentR
     if (entry === lastEntry) return lastKey;
 
     lastEntry = entry;
-    lastKey = subagentStructureKey(entry, rules);
+    lastKey = subagentStructureKey(entry, rules, openRuns);
     return lastKey;
   };
 }
@@ -197,10 +432,11 @@ export function createRetentionExpirySelector(tabId: string, rules: SubagentRowR
 }
 
 /** Whether a tab's subagent group starts collapsed, before the user folds
- *  it by hand. */
+ *  it by hand. Only the agents `rules` show count, run agents included. */
 export function subagentGroupStartsCollapsed(
   entry: TabSubagents | undefined,
   mode: SubagentAutoCollapse,
+  rules?: SubagentRowRules,
 ): boolean {
   if (mode === "never") return false;
   if (mode === "always") return true;
@@ -209,11 +445,58 @@ export function subagentGroupStartsCollapsed(
   let agentCount = 0;
   for (const agentId of entry.order) {
     const record = entry.agents[agentId];
-    if (!record || record.isWorkflow) continue;
+    if (!record || !isDrawn(record, rules)) continue;
     if (record.state === "running") return false;
     agentCount++;
   }
   return agentCount > 0;
+}
+
+/** A run row's counts as `running/total/failed`, over the agents `rules`
+ *  show. A string, so the row re-renders only when a count moves and not on
+ *  every write to its tab. */
+export function workflowRunCounts(
+  entry: TabSubagents | undefined,
+  runId: string,
+  rules?: SubagentRowRules,
+): string {
+  let running = 0;
+  let total = 0;
+  let failed = 0;
+  for (const agentId of entry?.order ?? []) {
+    const record = entry?.agents[agentId];
+    const isInRun = !!record && record.workflowRunId === runId && isDrawn(record, rules);
+    if (!isInRun) continue;
+
+    total++;
+    if (record.state === "running") running++;
+    if (record.state === "failed") failed++;
+  }
+  return `${running}/${total}/${failed}`;
+}
+
+export function createWorkflowRunCountsSelector(tabId: string, runId: string, rules?: SubagentRowRules) {
+  let lastEntry: TabSubagents | undefined;
+  let lastCounts = workflowRunCounts(undefined, runId, rules);
+
+  return (s: { byTab: Record<string, TabSubagents> }): string => {
+    const entry = s.byTab[tabId];
+    if (entry === lastEntry) return lastCounts;
+
+    lastEntry = entry;
+    lastCounts = workflowRunCounts(entry, runId, rules);
+    return lastCounts;
+  };
+}
+
+/** The run's name from its state file, or its id (with the `wf_` prefix
+ *  kept) until that is read, so a run row is never blank. */
+export function workflowRunName(entry: TabSubagents | undefined, runId: string): string {
+  return entry?.runs[runId]?.name || runId;
+}
+
+export function selectWorkflowRunName(tabId: string, runId: string) {
+  return (s: { byTab: Record<string, TabSubagents> }): string => workflowRunName(s.byTab[tabId], runId);
 }
 
 /** One row's own record, or null. Another agent's state change hands back
@@ -238,18 +521,34 @@ export function subagentIdOfTab(tab: SelectableTab | null | undefined): string |
   return tab.subagentAgentId ?? null;
 }
 
-/** True when `agentId` has a row under one of `tabIds`. Workflow agents
- *  never get one. */
+/** Whether the run `runId` draws a row: some agent of it is shown. */
+function isRunDrawn(entry: Pick<TabSubagents, "agents">, runId: string, rules: SubagentRowRules): boolean {
+  for (const record of Object.values(entry.agents)) {
+    const isShownInRun = record.workflowRunId === runId && isSubagentRowShown(record, rules);
+    if (isShownInRun) return true;
+  }
+  return false;
+}
+
+/** True when `agentId` is drawn under one of `tabIds`. A workflow agent
+ *  counts while its run is drawn, collapsed or not, since the run row is
+ *  where the selection shows. Without `rules` every placed agent counts. */
 export function hasSubagentRow(
   byTab: Record<string, Pick<TabSubagents, "agents"> | undefined>,
   tabIds: readonly string[],
   agentId: string | null,
+  rules?: SubagentRowRules,
 ): boolean {
   if (agentId === null) return false;
 
   return tabIds.some(tabId => {
-    const record = byTab[tabId]?.agents[agentId];
-    return !!record && !record.isWorkflow;
+    const entry = byTab[tabId];
+    const record = entry?.agents[agentId];
+    if (!entry || !record || isUnplacedWorkflow(record)) return false;
+    if (!rules) return true;
+
+    if (!record.isWorkflow) return isSubagentRowShown(record, rules);
+    return isRunDrawn(entry, record.workflowRunId as string, rules);
   });
 }
 

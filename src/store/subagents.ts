@@ -16,7 +16,8 @@ import { create } from "zustand";
 import * as ipc from "@/lib/ipc";
 import type { SubagentSummary, WorkflowRunInfo } from "@/lib/types";
 import { subagentsEnabled } from "@/lib/subagentGate";
-import { WORKFLOW_AGENT_TYPE } from "@/lib/subagentKind";
+import { WORKFLOW_AGENT_TYPE, subagentKind } from "@/lib/subagentKind";
+import type { SubagentTypeFilter } from "@/lib/subagentPrefs";
 import {
   normalizeAgentId, sessionMatches, setSubagentEventSink,
   type SubagentEventOrigin, type SubagentHookEvent,
@@ -404,10 +405,17 @@ export function selectTabSubagents(tabId: string) {
   return createTabSelector(tabId, () => true);
 }
 
-/** What the sidebar draws as rows: workflow agents are grouped under their
- *  run instead, so they never get a plain row. */
-export function selectTabSubagentRows(tabId: string) {
-  return createTabSelector(tabId, record => !record.isWorkflow);
+/** The agents the sidebar draws, plain or inside a workflow run, of the
+ *  kinds `typeFilter` lets through. A workflow agent no listing has placed
+ *  in a run yet has nowhere to sit, so it is left out until one does. */
+export function selectTabSubagentRows(tabId: string, typeFilter?: SubagentTypeFilter) {
+  return createTabSelector(tabId, record => {
+    const isUnplacedWorkflow = record.isWorkflow && record.workflowRunId === null;
+    if (isUnplacedWorkflow) return false;
+    if (!typeFilter) return true;
+
+    return typeFilter[subagentKind(record.agentType, { isWorkflow: record.isWorkflow })];
+  });
 }
 
 function hasWorkflowAgent(entry: TabSubagents): boolean {

@@ -27,7 +27,7 @@ import { useSubagents, type SubagentState } from "@/store/subagents";
 import { openSubagentPreview } from "@/store/subagentPreview";
 import {
   buildSubagentTree, createRetentionExpirySelector, createSubagentStructureSelector, parseSubagentStructureKey,
-  selectSubagentRecord, subagentGroupStartsCollapsed, type SubagentRowRules,
+  selectSubagentRecord, subagentGroupStartsCollapsed, type SubagentAgentRow, type SubagentRowRules,
 } from "./subagentTree";
 
 const EMPTY_FOLD: readonly string[] = Object.freeze([]);
@@ -40,23 +40,36 @@ interface GroupFold {
 }
 
 interface SubagentFoldState {
-  /** Per tab, the agents whose children are hidden. */
+  /** Per tab, the agents whose children are hidden, and the phases (by
+   *  phase row key) whose agents are. A phase starts open. */
   byTab: Record<string, readonly string[]>;
+  /** Per tab, the workflow runs opened by hand. A run starts collapsed
+   *  whatever the auto-collapse setting, since it can hold hundreds of
+   *  agents. */
+  openRunsByTab: Record<string, readonly string[]>;
   groupByTab: Record<string, GroupFold>;
-  toggle: (tabId: string, agentId: string) => void;
+  toggle: (tabId: string, foldId: string) => void;
+  toggleRun: (tabId: string, runId: string) => void;
   setGroupCollapsed: (tabId: string, sessionId: string, collapsed: boolean) => void;
+}
+
+function toggled(list: readonly string[], id: string): readonly string[] {
+  const has = list.includes(id);
+  return Object.freeze(has ? list.filter(item => item !== id) : [...list, id]);
 }
 
 export const useSubagentFold = create<SubagentFoldState>((set, get) => ({
   byTab: {},
+  openRunsByTab: {},
   groupByTab: {},
 
-  toggle: (tabId, agentId) => set(s => {
-    const current = s.byTab[tabId] ?? EMPTY_FOLD;
-    const isFolded = current.includes(agentId);
-    const next = isFolded ? current.filter(id => id !== agentId) : [...current, agentId];
-    return { byTab: { ...s.byTab, [tabId]: Object.freeze(next) } };
-  }),
+  toggle: (tabId, foldId) => set(s => ({
+    byTab: { ...s.byTab, [tabId]: toggled(s.byTab[tabId] ?? EMPTY_FOLD, foldId) },
+  })),
+
+  toggleRun: (tabId, runId) => set(s => ({
+    openRunsByTab: { ...s.openRunsByTab, [tabId]: toggled(s.openRunsByTab[tabId] ?? EMPTY_FOLD, runId) },
+  })),
 
   setGroupCollapsed: (tabId, sessionId, collapsed) => {
     const current = get().groupByTab[tabId];
@@ -68,17 +81,21 @@ export const useSubagentFold = create<SubagentFoldState>((set, get) => ({
 }));
 
 /** The structure key of the rows a tab shows under the current settings,
- *  re-evaluated when retention next takes a row away. */
-function useVisibleSubagentStructure(tabId: string): string {
+ *  and those settings, re-evaluated when retention next takes a row away. */
+function useVisibleSubagentStructure(tabId: string): { structureKey: string; rules: SubagentRowRules } {
   const typeFilter = usePrefs(s => s.subagentTypeFilter);
   const retention = usePrefs(s => s.subagentRetention);
+  const openRunIds = useSubagentFold(s => s.openRunsByTab[tabId] ?? EMPTY_FOLD);
   const [now, setNow] = useState(() => Date.now());
 
   const rules = useMemo<SubagentRowRules>(
     () => ({ typeFilter, retentionMs: retentionWindowMs(retention), now }),
     [typeFilter, retention, now],
   );
-  const selectStructure = useMemo(() => createSubagentStructureSelector(tabId, rules), [tabId, rules]);
+  const selectStructure = useMemo(
+    () => createSubagentStructureSelector(tabId, rules, new Set(openRunIds)),
+    [tabId, rules, openRunIds],
+  );
   const selectExpiry = useMemo(() => createRetentionExpirySelector(tabId, rules), [tabId, rules]);
   const structureKey = useSubagents(selectStructure);
   const nextExpiry = useSubagents(selectExpiry);
@@ -91,15 +108,18 @@ function useVisibleSubagentStructure(tabId: string): string {
     return () => window.clearTimeout(timer);
   }, [nextExpiry]);
 
-  return structureKey;
+  return { structureKey, rules };
 }
 
 /** Whether a tab's subagent group is folded, and the session that answer
  *  belongs to (null before the tab has any subagent). */
-function useSubagentGroupFold(tabId: string): { collapsed: boolean; sessionId: string | null } {
+function useSubagentGroupFold(
+  tabId: string,
+  rules: SubagentRowRules,
+): { collapsed: boolean; sessionId: string | null } {
   const mode = usePrefs(s => s.subagentAutoCollapse);
   const sessionId = useSubagents(s => s.byTab[tabId]?.sessionId ?? null);
-  const startsCollapsed = useSubagents(s => subagentGroupStartsCollapsed(s.byTab[tabId], mode));
+  const startsCollapsed = useSubagents(s => subagentGroupStartsCollapsed(s.byTab[tabId], mode, rules));
   const manual = useSubagentFold(s => s.groupByTab[tabId]);
 
   const manualHolds = !!manual && manual.sessionId === sessionId;
@@ -111,8 +131,8 @@ function useSubagentGroupFold(tabId: string): { collapsed: boolean; sessionId: s
  *  nothing while the tab shows no subagent row. */
 export const SubagentGroupToggle = memo(function SubagentGroupToggle({ tabId }: { tabId: string }) {
   const { t } = useTranslation("sidebar");
-  const structureKey = useVisibleSubagentStructure(tabId);
-  const { collapsed, sessionId } = useSubagentGroupFold(tabId);
+  const { structureKey, rules } = useVisibleSubagentStructure(tabId);
+  const { collapsed, sessionId } = useSubagentGroupFold(tabId, rules);
   const setGroupCollapsed = useSubagentFold(s => s.setGroupCollapsed);
 
   const hasRows = structureKey !== "";
@@ -259,12 +279,13 @@ export const SubagentRows = memo(function SubagentRows({ taskId, tabId, selected
   /** The agent whose tab is the active one, when that is in this task. */
   selectedAgentId: string | null;
 }) {
-  const structureKey = useVisibleSubagentStructure(tabId);
-  const { collapsed } = useSubagentGroupFold(tabId);
+  const { structureKey, rules } = useVisibleSubagentStructure(tabId);
+  const { collapsed } = useSubagentGroupFold(tabId, rules);
   const foldedIds = useSubagentFold(s => s.byTab[tabId] ?? EMPTY_FOLD);
 
   const rows = useMemo(
-    () => buildSubagentTree(parseSubagentStructureKey(structureKey), new Set(foldedIds)),
+    () => buildSubagentTree(parseSubagentStructureKey(structureKey), new Set(foldedIds))
+      .filter((row): row is SubagentAgentRow => row.kind === "agent"),
     [structureKey, foldedIds],
   );
 
@@ -274,7 +295,7 @@ export const SubagentRows = memo(function SubagentRows({ taskId, tabId, selected
     <>
       {rows.map(row => (
         <SubagentRow
-          key={row.agentId}
+          key={row.key}
           taskId={taskId}
           tabId={tabId}
           agentId={row.agentId}

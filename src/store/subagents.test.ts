@@ -222,7 +222,7 @@ describe("selectors", () => {
     expect(select(useSubagents.getState())).toBe(first);
   });
 
-  it("workflow agents are recorded but kept off the rows", () => {
+  it("a workflow agent no listing has placed yet is recorded but kept off the rows", () => {
     startA(AGENT_A, WORKFLOW_AGENT_TYPE);
     startA(AGENT_B, "Explore");
 
@@ -233,7 +233,24 @@ describe("selectors", () => {
     expect(rows.map(r => r.agentId)).toEqual([AGENT_B]);
   });
 
-  it("a workflow agent changing leaves the rows list identical", () => {
+  it("a workflow agent placed in a run is one of the rows", () => {
+    const placed = summary(AGENT_A, { agentType: WORKFLOW_AGENT_TYPE, isWorkflow: true, workflowRunId: "wf_run1" });
+    useSubagents.getState().mergeScanned(TASK, TAB, SESSION, [placed, summary(AGENT_B, { mtimeMs: 1 })], true);
+
+    const rows = selectTabSubagentRows(TAB)(useSubagents.getState());
+    expect(rows.map(r => r.agentId)).toEqual([AGENT_A, AGENT_B]);
+  });
+
+  it("the workflow type filter takes run agents off the rows", () => {
+    const placed = summary(AGENT_A, { agentType: WORKFLOW_AGENT_TYPE, isWorkflow: true, workflowRunId: "wf_run1" });
+    useSubagents.getState().mergeScanned(TASK, TAB, SESSION, [placed, summary(AGENT_B, { mtimeMs: 1 })], true);
+    const noWorkflow = { builtIn: true, custom: true, fork: true, workflow: false };
+
+    const rows = selectTabSubagentRows(TAB, noWorkflow)(useSubagents.getState());
+    expect(rows.map(r => r.agentId)).toEqual([AGENT_B]);
+  });
+
+  it("an unplaced workflow agent changing leaves the rows list identical", () => {
     startA(AGENT_A, WORKFLOW_AGENT_TYPE);
     startA(AGENT_B, "Explore");
     const select = selectTabSubagentRows(TAB);
@@ -243,7 +260,7 @@ describe("selectors", () => {
     expect(select(useSubagents.getState())).toBe(first);
   });
 
-  it("a tab of only workflow agents has no rows", () => {
+  it("a tab of only unplaced workflow agents has no rows", () => {
     startA(AGENT_A, WORKFLOW_AGENT_TYPE);
     expect(selectTabSubagentRows(TAB)(useSubagents.getState())).toBe(EMPTY_SUBAGENTS);
   });
