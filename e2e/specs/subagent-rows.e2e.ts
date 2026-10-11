@@ -114,7 +114,7 @@ describe("subagent rows", () => {
     return browser.execute((task, sel) => {
       const scope = document.querySelector(`[data-sidebar-task-row="${task}"]`)!;
       const tabRow = scope.querySelector<HTMLElement>("[data-sidebar-tab-id]")!;
-      const brandMark = tabRow.querySelector("svg")!.getBoundingClientRect();
+      const brandMark = tabRow.querySelector('[data-testid="session-agent-mark"]')!.getBoundingClientRect();
       const rows = [...scope.querySelectorAll<HTMLElement>(sel)].map(row => {
         const icon = row.querySelector<HTMLElement>('[data-testid="subagent-row-icon"]');
         const iconBox = icon?.getBoundingClientRect();

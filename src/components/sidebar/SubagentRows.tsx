@@ -153,7 +153,7 @@ export const SubagentGroupToggle = memo(function SubagentGroupToggle({ tabId }: 
       aria-expanded={!collapsed}
       title={label}
       onClick={(e) => { e.stopPropagation(); setGroupCollapsed(tabId, sessionId, !collapsed); }}
-      className="flex h-[20px] w-[14px] shrink-0 items-center justify-center text-[var(--sidebar-chevron)]"
+      className="flex h-[20px] w-[10px] shrink-0 items-center justify-center text-[var(--sidebar-chevron)]"
     >
       <TreeChevron open={!collapsed} />
     </button>

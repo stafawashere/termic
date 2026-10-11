@@ -56,7 +56,7 @@ import { SubagentGroupToggle, SubagentRows, useSubagentFold, useSubagentHasRow }
 import { childRowCarriesSelection, subagentIdOfTab } from "./subagentTree";
 import { StatusChips } from "./StatusChips";
 import { AgentActivityReadout } from "./AgentActivityReadout";
-import { BranchGlyph, ChecklistGlyph, CritterGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, DotsVerticalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
+import { ChecklistGlyph, CritterGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, DotsVerticalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
 import { STATUS_BUCKETS } from "@/lib/sidebarStatus";
 import { StatusSection, StatusViewCount } from "./StatusSection";
 import { RollupMarks } from "./RollupMarks";
@@ -1570,9 +1570,6 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
             sidebar's status section"). Not on the icon rail: the hover
             overlay is a full sidebar and shows it there instead. */}
         {!statusView && !compact && showStatusSection && <StatusSection matchIds={queryMatchIds} />}
-        {!statusView && !compact && showStatusSection && (
-          <div data-testid="sidebar-section-divider" className="my-2 border-t border-[var(--color-border-soft)]" />
-        )}
         {compact && (
           <div data-testid="projects-section-header" className="flex flex-col gap-1.5 py-1">
             {/* The ONE Add project button (GH #280 removed the footer copy):
@@ -3128,6 +3125,8 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
   // every other aggregate here works.
   const hasDelegated = !hasAttention && !hasDone && !hasWorking
     && taskDelegated(tabs, workPrefs);
+  const restBadgeShown = collapsed && (hasAttention || hasDone || hasWorking || hasDelegated);
+  const trailingSlotTaken = restBadgeShown || isSelectedRow;
   const rowDelegated = (tabs.find(
     t => t.type === "terminal" && !!(t as TerminalTab).delegatedWork,
   ) as TerminalTab | undefined)?.delegatedWork;
@@ -3292,11 +3291,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
         )}
       >
         {terminalTabs.length === 0
-          ? (
-            <span className="flex w-[10px] shrink-0 items-center justify-center">
-              <Moon className={cn("h-3 w-3 opacity-60", isSelectedRow ? "text-[var(--sidebar-sel-chevron)]" : "text-[var(--sidebar-chevron)]")} />
-            </span>
-          )
+          ? <span aria-hidden className="w-[10px] shrink-0" />
           : <button
               type="button"
               aria-label={collapsed ? t("expandTask") : t("collapseTask")}
@@ -3341,13 +3336,12 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                 title={labelIsBranch ? t("taskNameTitle", { name: w.name }) : undefined}
                 className={cn("font-medium", labelIsBranch && "font-mono text-[12px]")}
               />
-              {/* Which locations get a glyph is the taskLocationIcon pref
-                  (docs/ui.md "One glyph per meaning"). */}
-              {showLocation && (
-                <TaskLocationIcon
-                  isMainCheckout={w.is_main_checkout}
-                  size="h-[13px] w-[13px]"
-                  className={isSelectedRow ? "text-[var(--sidebar-sel-meta)]" : "text-[var(--sidebar-meta)]"}
+              {/* Asleep: no terminal this session. After the name, so the
+                  chevron column stays the fold's alone. */}
+              {terminalTabs.length === 0 && (
+                <Moon
+                  data-testid="task-asleep-mark"
+                  className={cn("h-3 w-3 shrink-0 opacity-60", isSelectedRow ? "text-[var(--sidebar-sel-chevron)]" : "text-[var(--sidebar-chevron)]")}
                 />
               )}
               {w.spawned_by && <SpawnedFromMark task={w} />}
@@ -3409,21 +3403,6 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
           <TaskPrBadge task={w} showNumber={prBadgeMode !== "icon"} showIcon={prBadgeMode !== "number"} />
         )}
 
-        {/* The branch, right-aligned in mono, when the git icon is on. Not
-            when the label already is the branch. */}
-        {!taskRenaming && showLocation && !labelIsBranch && w.branch && (
-          <span
-            data-testid="task-branch-chip"
-            className={cn(
-              "flex min-w-0 max-w-[40%] shrink items-center gap-[4px] font-mono text-[11px]",
-              isSelectedRow ? "text-[var(--sidebar-sel-meta)]" : "text-[var(--sidebar-meta)]",
-            )}
-          >
-            <BranchGlyph size={11} className="shrink-0" />
-            <span className="truncate">{w.branch}</span>
-          </span>
-        )}
-
         {/* Two trailing slots (docs/ui.md "One glyph per meaning"): mode
             (sandbox, docker, dangerous YOLO; absent when there is none), then
             ONE fixed slot that is work state at rest (the badge while
@@ -3450,6 +3429,25 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
             <span data-testid="task-mode-slot" className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">{mark}</span>
           );
         })()}
+        {/* Where the task lives, rightmost: the location glyph the
+            taskLocationIcon pref picks (docs/ui.md "One glyph per meaning")
+            and the branch in mono, unless the label already is the branch.
+            While the slot after it is empty it runs over that slot to the
+            row's edge, and it fades on hover to give the menu its place. */}
+        {!taskRenaming && showLocation && (
+          <span
+            data-testid="task-branch-chip"
+            className={cn(
+              "flex min-w-0 max-w-[40%] shrink items-center gap-[4px] font-mono text-[11px] transition-opacity duration-[120ms] group-hover/wsrow:opacity-0",
+              isSelectedRow ? "text-[var(--sidebar-sel-meta)]" : "text-[var(--sidebar-meta)]",
+              !trailingSlotTaken && "-mr-[28px]",
+              menuOpen && "opacity-0",
+            )}
+          >
+            <TaskLocationIcon isMainCheckout={w.is_main_checkout} size="h-[11px] w-[11px]" className="text-current" />
+            {!labelIsBranch && w.branch && <span className="truncate">{w.branch}</span>}
+          </span>
+        )}
         <span className="relative flex h-[20px] w-[20px] shrink-0 items-center justify-center">
           <DropdownRoot open={menuOpen} onOpenChange={setMenuOpen}>
             <Tip content={t("taskMenu")}>
@@ -3915,13 +3913,19 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                 className="pointer-events-none absolute top-[14px] h-px w-[9px] bg-[var(--sidebar-connector)]"
                 style={{ left: "calc(var(--sb-task-pad, 42px) + 4px)" }}
               />
-              {/* The agent's mark leads; the work state trails at the end of
-                  the row, iTerm2's tab-bullet placement. Claude draws the
-                  critter in the accent, every other agent its own icon. */}
+              {/* The subagent fold leads, in the chevron column a task row
+                  has, and holds its width when there is nothing to fold so
+                  the marks line up. Then the agent's mark; the work state
+                  trails at the end of the row, iTerm2's tab-bullet placement.
+                  Claude draws the critter in the accent, every other agent
+                  its own icon. */}
+              <span className="flex w-[10px] shrink-0 items-center justify-center">
+                {isClaudeTab && !isTabRenaming && <SubagentGroupToggle tabId={tab.id} />}
+              </span>
               {isClaudeTab ? (
-                <CritterGlyph size={16} className="shrink-0 text-[var(--color-accent)]" />
+                <CritterGlyph data-testid="session-agent-mark" size={16} className="shrink-0 text-[var(--color-accent)]" />
               ) : (
-                <span className={cn("shrink-0", CLI_BRAND_COLOR[resolveIconId(tab.cli, agents)] || "text-[var(--sidebar-icon)]")}>
+                <span data-testid="session-agent-mark" className={cn("shrink-0", CLI_BRAND_COLOR[resolveIconId(tab.cli, agents)] || "text-[var(--sidebar-icon)]")}>
                   <CliIcon cli={resolveIconId(tab.cli, agents)} className="h-[15px] w-[15px]" />
                 </span>
               )}
@@ -3956,7 +3960,6 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                   title={tab.delegatedWork ? delegatedTitle(tab.delegatedWork, tChrome) : undefined}
                 >{title}</span>
               )}
-              {isClaudeTab && !isTabRenaming && <SubagentGroupToggle tabId={tab.id} />}
               {/* This tab's own properties (GH #358), so it is visible which
                   agent set what; the task row above shows them collected. */}
               {!isTabRenaming && !!tab.props?.length && (
