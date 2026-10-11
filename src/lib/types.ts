@@ -2176,6 +2176,15 @@ export interface TranscriptEntry {
   name: string | null;
   isError: boolean;
   timestamp: string | null;
+  /** The call's id on `toolUse`, the id it answers on `toolResult`. Optional
+   *  so an entry from an older host still reads. */
+  toolUseId?: string | null;
+  /** How long the model thought, on `thinking` entries. */
+  durationMs?: number | null;
+  /** The assistant message's model and output tokens, on the first entry of
+   *  that message only. */
+  model?: string | null;
+  outputTokens?: number | null;
 }
 
 /** What a live transcript watch sends on `subagent-watch://<sessionId>/<agentId>`.

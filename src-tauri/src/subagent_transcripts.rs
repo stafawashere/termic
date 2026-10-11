@@ -103,6 +103,16 @@ pub struct TranscriptEntry {
     pub name: Option<String>,
     pub is_error: bool,
     pub timestamp: Option<String>,
+    /// The `tool_use` block's id on a `toolUse` entry, and the id a
+    /// `toolResult` answers, so the view can hang a result under its call.
+    pub tool_use_id: Option<String>,
+    /// From the line's `thinkingDurationMs`, on `thinking` entries only.
+    pub duration_ms: Option<u64>,
+    /// The assistant message's model and `usage.output_tokens`, on the first
+    /// entry an assistant line produces and nowhere else, so summing them
+    /// counts each message once.
+    pub model: Option<String>,
+    pub output_tokens: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -351,7 +361,18 @@ fn cap_body(raw: &str) -> (String, bool) {
 
 fn entry(kind: EntryKind, body: &str, timestamp: &Option<String>) -> TranscriptEntry {
     let (text, truncated) = cap_body(body);
-    TranscriptEntry { kind, text, truncated, name: None, is_error: false, timestamp: timestamp.clone() }
+    TranscriptEntry {
+        kind,
+        text,
+        truncated,
+        name: None,
+        is_error: false,
+        timestamp: timestamp.clone(),
+        tool_use_id: None,
+        duration_ms: None,
+        model: None,
+        output_tokens: None,
+    }
 }
 
 fn block_text(content: &serde_json::Value) -> String {
@@ -395,6 +416,7 @@ fn parse_user(message: &serde_json::Value, timestamp: &Option<String>) -> Vec<Tr
                 let body = block.get("content").map(block_text).unwrap_or_default();
                 let mut result = entry(EntryKind::ToolResult, &body, timestamp);
                 result.is_error = block.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
+                result.tool_use_id = string_field(block, "tool_use_id");
                 out.push(result);
             }
             _ => {}
@@ -403,10 +425,31 @@ fn parse_user(message: &serde_json::Value, timestamp: &Option<String>) -> Vec<Tr
     out
 }
 
-fn parse_assistant(message: &serde_json::Value, timestamp: &Option<String>) -> Vec<TranscriptEntry> {
+fn string_field(value: &serde_json::Value, key: &str) -> Option<String> {
+    value.get(key).and_then(|v| v.as_str()).map(str::to_string)
+}
+
+/// Stamps the message's model and output token count on its first entry.
+fn with_message_usage(mut entries: Vec<TranscriptEntry>, message: &serde_json::Value) -> Vec<TranscriptEntry> {
+    if let Some(first) = entries.first_mut() {
+        first.model = string_field(message, "model");
+        first.output_tokens = message
+            .get("usage")
+            .and_then(|usage| usage.get("output_tokens"))
+            .and_then(|tokens| tokens.as_u64());
+    }
+    entries
+}
+
+fn parse_assistant(
+    message: &serde_json::Value,
+    thinking_duration_ms: Option<u64>,
+    timestamp: &Option<String>,
+) -> Vec<TranscriptEntry> {
     let Some(content) = message.get("content") else { return Vec::new() };
     if let Some(s) = content.as_str() {
-        return vec![entry(EntryKind::AssistantText, s, timestamp)];
+        let entries = vec![entry(EntryKind::AssistantText, s, timestamp)];
+        return with_message_usage(entries, message);
     }
 
     let Some(blocks) = content.as_array() else { return Vec::new() };
@@ -419,7 +462,9 @@ fn parse_assistant(message: &serde_json::Value, timestamp: &Option<String>) -> V
             }
             Some("thinking") => {
                 let text = block.get("thinking").and_then(|t| t.as_str()).unwrap_or_default();
-                out.push(entry(EntryKind::Thinking, text, timestamp));
+                let mut thinking = entry(EntryKind::Thinking, text, timestamp);
+                thinking.duration_ms = thinking_duration_ms;
+                out.push(thinking);
             }
             Some("redacted_thinking") => {
                 out.push(entry(EntryKind::RedactedThinking, "", timestamp));
@@ -427,13 +472,14 @@ fn parse_assistant(message: &serde_json::Value, timestamp: &Option<String>) -> V
             Some("tool_use") => {
                 let input = block.get("input").map(|i| i.to_string()).unwrap_or_default();
                 let mut call = entry(EntryKind::ToolUse, &input, timestamp);
-                call.name = block.get("name").and_then(|n| n.as_str()).map(str::to_string);
+                call.name = string_field(block, "name");
+                call.tool_use_id = string_field(block, "id");
                 out.push(call);
             }
             _ => {}
         }
     }
-    out
+    with_message_usage(out, message)
 }
 
 fn assistant_outcome(message: &serde_json::Value, entries: &[TranscriptEntry]) -> Outcome {
@@ -470,7 +516,8 @@ fn parse_line(line: &str) -> Option<ParsedLine> {
                 return Some(ParsedLine { entries, outcome: Outcome::Failed });
             }
 
-            let entries = parse_assistant(message, &timestamp);
+            let thinking_duration_ms = v.get("thinkingDurationMs").and_then(|d| d.as_u64());
+            let entries = parse_assistant(message, thinking_duration_ms, &timestamp);
             let outcome = assistant_outcome(message, &entries);
             Some(ParsedLine { entries, outcome })
         }
@@ -1228,6 +1275,79 @@ mod tests {
         let json = serde_json::to_value(&parsed.entries[5]).unwrap();
         assert_eq!(json["kind"], "toolResult");
         assert_eq!(json["isError"], true);
+    }
+
+    #[test]
+    fn tool_calls_and_results_carry_the_tool_use_id() {
+        let parsed = parse_transcript(&jsonl(&[tool_call("Read"), tool_result("ok", false)]));
+
+        assert_eq!(parsed.entries[0].tool_use_id.as_deref(), Some("toolu_x"));
+        assert_eq!(parsed.entries[1].tool_use_id.as_deref(), Some("toolu_x"));
+
+        let json = serde_json::to_value(&parsed.entries[1]).unwrap();
+        assert_eq!(json["toolUseId"], "toolu_x");
+    }
+
+    #[test]
+    fn thinking_takes_the_line_duration() {
+        let timed = serde_json::json!({
+            "type": "assistant",
+            "thinkingDurationMs": 4200,
+            "message": { "content": [
+                { "type": "thinking", "thinking": "weighing it" },
+                { "type": "text", "text": "done" },
+            ]},
+        })
+        .to_string();
+        let untimed = serde_json::json!({
+            "type": "assistant",
+            "message": { "content": [{ "type": "thinking", "thinking": "again" }] },
+        })
+        .to_string();
+
+        let parsed = parse_transcript(&jsonl(&[timed, untimed]));
+
+        assert_eq!(parsed.entries[0].duration_ms, Some(4200));
+        assert_eq!(parsed.entries[1].duration_ms, None);
+        assert_eq!(parsed.entries[2].duration_ms, None);
+        assert_eq!(serde_json::to_value(&parsed.entries[0]).unwrap()["durationMs"], 4200);
+    }
+
+    #[test]
+    fn model_and_output_tokens_sit_on_the_first_entry_of_an_assistant_line() {
+        let with_usage = serde_json::json!({
+            "type": "assistant",
+            "message": {
+                "model": "claude-test-model",
+                "usage": { "input_tokens": 10, "output_tokens": 321 },
+                "content": [
+                    { "type": "text", "text": "reading" },
+                    { "type": "tool_use", "id": "toolu_y", "name": "Read", "input": {} },
+                ],
+            },
+        })
+        .to_string();
+        let malformed_usage = serde_json::json!({
+            "type": "assistant",
+            "message": { "model": 7, "usage": { "output_tokens": "lots" }, "content": "plain" },
+        })
+        .to_string();
+
+        let parsed = parse_transcript(&jsonl(&[with_usage, malformed_usage, user_text("next")]));
+
+        assert_eq!(parsed.entries[0].model.as_deref(), Some("claude-test-model"));
+        assert_eq!(parsed.entries[0].output_tokens, Some(321));
+        assert_eq!(parsed.entries[1].model, None);
+        assert_eq!(parsed.entries[1].output_tokens, None);
+        assert_eq!(parsed.entries[2].kind, EntryKind::AssistantText);
+        assert_eq!(parsed.entries[2].model, None);
+        assert_eq!(parsed.entries[2].output_tokens, None);
+        assert_eq!(parsed.entries[3].model, None);
+
+        let json = serde_json::to_value(&parsed.entries[0]).unwrap();
+        assert_eq!(json["outputTokens"], 321);
+        assert_eq!(json["model"], "claude-test-model");
+        assert!(serde_json::to_value(&parsed.entries[3]).unwrap()["outputTokens"].is_null());
     }
 
     #[test]
