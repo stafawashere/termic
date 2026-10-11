@@ -1788,7 +1788,8 @@ describe("agent notifications", () => {
         weekText: week.innerText,
         fiveHFill: fiveH.dataset.usageFill,
         weekFill: week.dataset.usageFill,
-        weekBg: getComputedStyle(week).backgroundImage,
+        weekFillImage: getComputedStyle(week.querySelector(".footer-meter-fill")!).backgroundImage,
+        weekFillStyle: (week.querySelector(".footer-meter-fill") as HTMLElement).style.width,
       };
     });
     // The numbers the USER reads, not the store field behind them.
@@ -1798,8 +1799,8 @@ describe("agent notifications", () => {
     expect(seen.level).toBe("critical");
     expect(seen.text).toContain("30%");
     expect(seen.text).toContain("95%");
-    // One gauge per window, and each one is the BACKGROUND of its own number,
-    // so the 5h figure can never be sitting next to the week's bar. Assert the
+    // One gauge per window, each beside its own number and naming its window
+    // in words, so the 5h figure can never be read against the week's bar. Assert the
     // value each gauge was drawn to rather than counting elements: a gauge
     // pointed at the wrong window is the bug this readout exists to prevent,
     // and two elements of any kind would satisfy a count.
@@ -1808,11 +1809,11 @@ describe("agent notifications", () => {
     expect(seen.weekText).toContain("95%");
     expect(seen.fiveHFill).toBe("30");
     expect(seen.weekFill).toBe("95");
-    // The fill is a gradient with a hard stop at the percentage, so the stop
-    // is the thing that has to be there: a background that lost its gradient
-    // (a dropped inline style, a theme token that resolved to nothing) still
-    // renders a perfectly plausible chip.
-    expect(seen.weekBg).toContain("gradient");
+    // Each window draws its own meter, filled to its own percentage: a fill
+    // that lost its gradient (a theme token that resolved to nothing) or its
+    // width (a dropped inline style) still renders a perfectly plausible chip.
+    expect(seen.weekFillImage).toContain("gradient");
+    expect(seen.weekFillStyle).toBe("95%");
   });
 
   // A task runs as many agents as it has tabs. The footer's original rule was
@@ -1909,8 +1910,8 @@ describe("agent notifications", () => {
   // here and this costs one render plus two captures.
   //
   // Screenshots only. Nothing is asserted from a pixel (see the e2e skill);
-  // these exist so a person can check that a gauge which is a BACKGROUND still
-  // renders as one, which is the class of thing no assertion catches and which
+  // these exist so a person can check that each level's meter colour actually
+  // paints, which is the class of thing no assertion catches and which
   // this footer has already been burned by once (`transition-colors` never
   // repaints a themed colour in WKWebView, docs/gotchas.md).
   it("draws a gauge at each level for a human to look at", async () => {

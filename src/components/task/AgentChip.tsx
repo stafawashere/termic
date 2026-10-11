@@ -344,17 +344,13 @@ export function AgentChip({ taskId, agentId, cwd, docker, accounts, visible, cla
                     : t("agentChip.planTitle", { agent: agentDisplayName(agentId, agents) })
           }
           data-usage-dismissed={quiet ? "1" : ""}
-          className={cn(
-            "flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 tabular-nums",
-            "hover:bg-[var(--color-bg-2)] hover:text-[var(--color-fg)]",
-            // Deliberately NOT `transition-colors`: a themed colour set from
-            // React state never repaints under that shorthand in WKWebView
-            // (docs/gotchas.md), which is how this would light up amber
-            // everywhere except the machine it ships on.
-            sw.alert ? "text-[var(--color-warn)]"
-              : stale || quiet ? "text-[var(--color-fg-faint)]" : "text-[var(--color-fg-dim)]",
-            className,
-          )}
+          // The recessed well from the footer design. Colour comes from data
+          // attributes in index.css, never `transition-colors`: a themed
+          // colour set from React state never repaints under that shorthand
+          // in WKWebView (docs/gotchas.md).
+          data-alert={sw.alert ? "" : undefined}
+          data-quiet={!sw.alert && (stale || quiet) ? "" : undefined}
+          className={cn("footer-usage", className)}
         >
           {/* The agent's own brand icon, not a generic gauge. Two DIFFERENT
               agents are told apart right here without reading a word, which a
@@ -365,10 +361,10 @@ export function AgentChip({ taskId, agentId, cwd, docker, accounts, visible, cla
           {quiet ? (
             // Same faint ink as the footer's idle Terminal button: present,
             // clickable, not asking for anything.
-            <UsageRisingIcon data-testid="usage-dismissed-icon" className="h-3.5 w-3.5 shrink-0" />
+            <UsageRisingIcon data-testid="usage-dismissed-icon" className="footer-ink h-3.5 w-3.5 shrink-0" />
           ) : (
-            <span className={cn("shrink-0", CLI_BRAND_COLOR[iconId] || "text-[var(--color-fg-dim)]")}>
-              <CliIcon cli={iconId} className="h-4 w-4" />
+            <span className={cn("footer-usage-glyph footer-ink", CLI_BRAND_COLOR[iconId] || "text-[var(--color-fg-dim)]")}>
+              <CliIcon cli={iconId} className="h-[14px] w-[14px]" />
             </span>
           )}
           {/* The account, when there is one to name. A key glyph only while
@@ -377,9 +373,9 @@ export function AgentChip({ taskId, agentId, cwd, docker, accounts, visible, cla
               on nothing. */}
           {hasAccounts && (
             <>
-              {sw.alert && <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" />}
-              <span className="max-w-[14ch] truncate">{sw.shown.now}</span>
-              {(hasNumbers || hasContext || (unknown && !quiet)) && <span className="text-[var(--color-fg-faint)]">·</span>}
+              {sw.alert && <ArrowRightLeft className="footer-ink h-3.5 w-3.5 shrink-0" />}
+              <span className="footer-ink max-w-[14ch] truncate">{sw.shown.now}</span>
+              {(hasNumbers || hasContext || (unknown && !quiet)) && <span className="footer-usage-sep footer-ink">·</span>}
             </>
           )}
           {/* ONE GAUGE PER WINDOW, and each one IS its number's background.
@@ -414,16 +410,19 @@ export function AgentChip({ taskId, agentId, cwd, docker, accounts, visible, cla
               of figures rather than two different widgets. */}
           {ctx && <ContextReadout entry={ctx} />}
           {unknown && !quiet && (
-            <span data-testid="usage-unknown" className="text-[var(--color-fg-faint)]">{t("agentChip.usageUnknown")}</span>
+            <>
+              <span aria-hidden data-unknown="" className="footer-meter" />
+              <span data-testid="usage-unknown" className="footer-usage-unknown footer-ink">{t("agentChip.usageUnknown")}</span>
+            </>
           )}
           {entry?.session && (
             <UsageWindowReadout
-              window={entry.session} unit={words.chip} stale={stale} testid="5h"
+              window={entry.session} unit={sessionUnit(words)} stale={stale} testid="5h"
             />
           )}
           {entry?.weekly && (
             <UsageWindowReadout
-              window={entry.weekly} unit="wk" stale={stale} testid="wk"
+              window={entry.weekly} unit={t("agentChip.weeklyUnit")} stale={stale} testid="wk"
             />
           )}
           {/* Spend since launch, and ONLY for an account with no plan, which
@@ -436,12 +435,12 @@ export function AgentChip({ taskId, agentId, cwd, docker, accounts, visible, cla
               billing period, as a plain count. No bar and no warn colour,
               because there is no limit for it to approach. */}
           {entry?.consumed && !entry.session && !entry.weekly && (
-            <span data-testid="usage-consumed" className="tabular-nums">{formatConsumed(entry.consumed)}</span>
+            <span data-testid="usage-consumed" className="footer-ink tabular-nums">{formatConsumed(entry.consumed)}</span>
           )}
           {costChipVisible(entry, spend) && (
             <>
-              {(entry?.session || entry?.weekly) && <span className="text-[var(--color-fg-faint)]">·</span>}
-              <span data-usage-spend={spend.toFixed(4)}>{formatUsd(spend)}</span>
+              {(entry?.session || entry?.weekly) && <span className="footer-usage-sep footer-ink">·</span>}
+              <span data-usage-spend={spend.toFixed(4)} className="footer-ink">{formatUsd(spend)}</span>
             </>
           )}
         </button>
@@ -966,133 +965,65 @@ const LEVEL_FILL: Record<UsageLevel, string> = {
   critical: "bg-[var(--color-err)]",
 };
 
-/** The CHIP's gauge is the number's own background, so these are the same
- *  three hues mixed into whatever the footer's ground is rather than painted
- *  solid. Raw tokens (not Tailwind classes) because they go through
- *  `color-mix` in a computed gradient. */
-const LEVEL_TINT: Record<UsageLevel, string> = {
-  normal:   "var(--color-fg-dim)",
-  warn:     "var(--color-warn)",
-  critical: "var(--color-err)",
-};
-
-/** How much of that hue the fill carries, as a percentage mixed over the
- *  track. Not taste: these are the strongest values at which the number on
- *  top still clears 4.5:1 in BOTH themes, computed against every
- *  level/theme/track pairing rather than eyeballed on this machine's screen.
- *
- *    dark   normal 4.91  warn 5.87  critical 7.22
- *    light  normal 4.78  warn 9.20  critical 7.73
- *
- *  Push `critical` past ~40 and the red number starts to disappear into its
- *  own fill, which is the one reading that must never be hard to take. */
-const FILL_MIX: Record<UsageLevel, number> = { normal: 18, warn: 34, critical: 40 };
-
-/** The unused part of the gauge. A gauge has to show its EMPTY part too, or
- *  the fill has nothing to be a fraction of. Kept neutral at every level: the
- *  track is the same at 3% and 97%, only the fill says anything. */
-const TRACK_MIX = 10;
-
-/** Ink for the number sitting ON the fill.
- *
- *  Warn and critical go NEUTRAL-BRIGHT rather than taking their own hue, and
- *  that is the trade this design makes on purpose. Amber text on an amber
- *  fill measures 3.3:1 in dark mode, i.e. the number gets hardest to read
- *  exactly when it matters most, and no amount of tuning the mix fixes it
- *  (22% still only reaches 4.08). So the BOX carries the severity and the
- *  text carries the reading: a red-filled box is louder than red text ever
- *  was, and the figure inside it stays legible at 7:1.
- *
- *  `normal` stays dim, because a quiet reading brightening to full `fg` would
- *  make every calm chip in the footer shout. */
-const LEVEL_INK: Record<UsageLevel, string> = {
-  normal:   "text-[var(--color-fg-dim)]",
-  warn:     "text-[var(--color-fg)]",
-  critical: "text-[var(--color-fg)]",
-};
-
 /** Text colour by level, for the POPOVER: its header and its per-window rows,
  *  which have room for a coloured figure beside a full-width bar. `normal` is
- *  undefined so it inherits, which is what keeps the quiet case quiet.
- *
- *  The CHIP no longer uses this. Its figure sits ON the gauge, where taking
- *  the level's own hue costs it half its contrast; see `LEVEL_INK`. */
+ *  undefined so it inherits, which is what keeps the quiet case quiet. The
+ *  chip colours its label from `data-level` in index.css instead. */
 const LEVEL_TEXT: Record<UsageLevel, string | undefined> = {
   normal:   undefined,
   warn:     "text-[var(--color-warn)]",
   critical: "text-[var(--color-err)]",
 };
 
-/** One window's gauge, which IS its number's background.
+/** "5h" for claude's rolling session, the plain word for a window whose
+ *  short name would not read inside "of ... limit" (copilot's "mo"). */
+function sessionUnit(words: ReturnType<typeof shortWindowWords>): string {
+  return words.chip === "5h" ? words.chip : words.limit;
+}
+
+/** One window's reading: a 64px meter, then "42% of 5h limit".
  *
- *  There used to be a 24x10 pill in FRONT of each percentage. Two of them in a
- *  row read as instrumentation rather than as a reading, and they cost 56px of
- *  a bar that starts hiding chips at 780px: the same chip measures 264px with
- *  the pills and 219px without them. Reported by someone looking straight at
- *  it, which is the only evidence that counts for a footer meant to be taken
- *  at a glance.
+ *  A window used to be a filled background behind its own figure, after a
+ *  single bar beside the 5h number was read as that number's gauge while it
+ *  was drawing the week's. The footer design puts the bar back, so each
+ *  window gets its own meter AND names its window in words: nothing on this
+ *  row can be read as belonging to the other one.
  *
- *  So the gauge moved BEHIND the number: a hard-stop gradient across the
- *  readout's own box, filled to the percentage, with the unused part left as a
- *  visible track. Nothing sits beside the number that could belong to the
- *  other window, which is the failure the two pills were themselves a fix for.
- *
- *  A hard stop, not a fade. A gradient that eases out has no readable edge, so
- *  the one thing the shape is for (where does the fill end) becomes a guess.
- *
- *  No transition, for the same reason the old bar had none: the value changes
- *  about once per turn, seconds apart, so an animation has nothing to smooth
- *  and would only ever be caught mid-flight. `transition-colors` would be
- *  worse than useless here, since it never repaints a themed colour in
- *  WKWebView at all (docs/gotchas.md).
- *
- *  The BOX is fixed-content, not fixed-width: it is exactly as wide as
- *  "85% wk", so the footer does not reflow as the fill moves. Only the stop
- *  position changes. */
+ *  The meter's width eases over 300ms; its colour comes from `data-level` in
+ *  index.css (accent, then warn, then err), never from `transition-colors`,
+ *  which never repaints a themed colour in WKWebView (docs/gotchas.md). */
 function UsageWindowReadout({ window: w, unit, stale, testid }: {
   window: UsageWindow; unit: string; stale: boolean; testid: string;
 }) {
+  const { t } = useTranslation("task");
   const level = usageLevel(w.usedPercent);
-  // Floored at 2% so a barely-used account still shows a sliver of fill: a
-  // box with no fill at all is indistinguishable from one that failed to
-  // render, and the exact figure is spelled out in words on top of it.
-  // Clamped to 0-100 on the way in, and never a string from the payload.
+  // Floored at 2% so a barely-used account still shows a sliver of fill: an
+  // empty meter is indistinguishable from one that failed to render, and the
+  // exact figure is spelled out beside it. Clamped on the way in.
   const fill = Math.max(2, Math.round(w.usedPercent));
-  // A stale reading gets a fainter gauge rather than a dimmer number: the
-  // figure is still the figure, it is the confidence that has dropped. Half
-  // the mix, not a flat value, so a stale critical still reads as critical.
-  const mix = stale ? Math.round(FILL_MIX[level] / 2) : FILL_MIX[level];
   return (
     <span
       data-usage-window={testid}
       data-testid="usage-gauge"
-      // The gauge's own value, so a spec can assert what was DRAWN rather than
-      // counting elements. The old `usage-bar-fill` testid went with the pill.
+      // The meter's own value, so a spec can assert what was DRAWN rather
+      // than counting elements.
       data-usage-fill={fill}
-      // NOT `inline-flex`: the number and its unit are two inline children
-      // with a space between them, and flex layout discards whitespace between
-      // items, so the chip rendered "95%wk". There is nothing to lay out in a
-      // row here anyway; the chip's own flex centres this box vertically.
-      className={cn("shrink-0 rounded px-1.5 py-px", LEVEL_INK[level])}
-      // Genuinely dynamic (the stop moves with the number), so it cannot be a
-      // Tailwind class. Two layers: the fill gradient over a flat track, both
-      // mixed with `transparent` so they composite over whatever the footer's
-      // ground is and a custom theme's tokens carry through untouched.
-      style={{
-        background:
-          `linear-gradient(to right,`
-          + ` color-mix(in srgb, ${LEVEL_TINT[level]} ${mix}%, transparent) 0 ${fill}%,`
-          + ` transparent ${fill}% 100%),`
-          + ` color-mix(in srgb, var(--color-fg-dim) ${TRACK_MIX}%, transparent)`,
-      }}
+      data-level={level}
+      data-stale={stale ? "" : undefined}
+      className="footer-usage-window"
     >
-      {formatPercent(w)} <Unit>{unit}</Unit>
+      <span aria-hidden className="footer-meter">
+        <span className="footer-meter-fill" style={{ width: `${fill}%` }} />
+      </span>
+      <span className="footer-usage-label footer-ink">
+        {t("agentChip.windowLimit", { percent: formatPercent(w), unit })}
+      </span>
     </span>
   );
 }
 
-/** The context window's figure, drawn with the plan windows' gauge so the chip
- *  stays one row of like things. Its own thresholds: a context filling up is a
+/** The context window's reading, drawn like a plan window so the chip stays
+ *  one row of like things. Its own thresholds: a context filling up is a
  *  session's normal life, so it only colours near compaction. */
 function ContextReadout({ entry }: { entry: ContextEntry }) {
   const { t } = useTranslation("task");
@@ -1103,17 +1034,16 @@ function ContextReadout({ entry }: { entry: ContextEntry }) {
       data-usage-window="ctx"
       data-testid="context-gauge"
       data-usage-fill={fill}
+      data-level={level}
       title={t("agentChip.contextChipTip", { used: formatTokens(entry.usedTokens), total: formatTokens(entry.windowTokens) })}
-      className={cn("shrink-0 rounded px-1.5 py-px", LEVEL_INK[level])}
-      style={{
-        background:
-          `linear-gradient(to right,`
-          + ` color-mix(in srgb, ${LEVEL_TINT[level]} ${FILL_MIX[level]}%, transparent) 0 ${fill}%,`
-          + ` transparent ${fill}% 100%),`
-          + ` color-mix(in srgb, var(--color-fg-dim) ${TRACK_MIX}%, transparent)`,
-      }}
+      className="footer-usage-window"
     >
-      {Math.round(entry.usedPercent)}% <Unit>ctx</Unit>
+      <span aria-hidden className="footer-meter">
+        <span className="footer-meter-fill" style={{ width: `${fill}%` }} />
+      </span>
+      <span className="footer-usage-label footer-ink">
+        {Math.round(entry.usedPercent)}% <Unit>ctx</Unit>
+      </span>
     </span>
   );
 }

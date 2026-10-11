@@ -28,7 +28,6 @@ import { TerminalPane, FooterBar } from "./TerminalPane";
 import { RunPane } from "./RunPane";
 import { SplitNodeView } from "./SplitView";
 import { AuxTerminal } from "./AuxTerminal";
-import { MessageQueueButton } from "./MessageQueueButton";
 import { Plus, ChevronDown, ChevronUp, ChevronRight, LocateFixed, Copy, Check, FolderOpen, Globe, ArrowRightFromLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getAllLeaves, computeLeafBounds, focusedTabId } from "@/lib/splitTree";
@@ -706,7 +705,7 @@ export function TaskView({ task }: { task: Task }) {
                 // h-full + border-b-2, so the strip must give them full height
                 // or they collapse to content height and float as boxy pills
                 // with the active underline stranded mid-bar. The fixed
-                // controls (queue button, separator, collapse toggle) opt back
+                // controls (the new-shell button, collapse toggle) opt back
                 // into vertical centering with self-center. Mirrors the main
                 // TabBar — see its items-stretch comment for the same rationale.
                 "flex h-[var(--bottom-bar-h)] shrink-0 items-stretch gap-0.5 bg-[var(--color-bg-1)] px-2",
@@ -715,11 +714,6 @@ export function TaskView({ task }: { task: Task }) {
                 // border-t when collapsed to avoid a 2px double line.
                 "border-b border-[var(--color-border-soft)]",
               )}>
-                {/* Queue affordance pinned far LEFT so it's always seen; the
-                    shell tabs start after a separator. The bottom status-bar
-                    copy is hidden while the split is open — see FooterBar. */}
-                <MessageQueueButton taskId={task.id} compact className="self-center" />
-                <div className="mx-1.5 h-5 w-px shrink-0 self-center bg-[var(--color-border-soft)]" />
                 {/* Tabs + New scroll horizontally (no scrollbar) so the queue
                     button on the left and the collapse toggle on the right stay
                     fixed and reachable no matter how many shells are open. */}
