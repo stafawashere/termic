@@ -10,8 +10,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ChevronRight, ChevronDown, FilePlus, FolderPlus,
-  RefreshCw, Pencil, Trash2, ArrowRightFromLine, FolderOpen,
+  FilePlus, FolderPlus, Pencil, Trash2, ArrowRightFromLine, FolderOpen,
 } from "lucide-react";
 import type { FileEntry } from "@/lib/types";
 import * as ipc from "@/lib/ipc";
@@ -19,11 +18,13 @@ import { openScratchFileTab } from "@/lib/scratchTabs";
 import { useApp } from "@/store/app";
 import { useUI } from "@/store/ui";
 import { useProfiles } from "@/store/profiles";
-import { cn } from "@/lib/utils";
 import { fileIconUrl, folderIconUrl } from "@/lib/explorer/iconResolver";
 import { ContextMenuRoot, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from "@/components/ui/ContextMenu";
 import { Tip } from "@/components/ui/Tooltip";
 import { FILE_MANAGER } from "@/lib/openExternal";
+import { TreeChevron } from "@/components/sidebar/sidebarIcons";
+import { PlusGlyph } from "@/components/sidebar/sidebarIcons";
+import { FilePlusGlyph, NewFolderGlyph, NoteGlyph, RefreshGlyph } from "./panelIcons";
 
 interface ScratchpadPanelProps {
   taskId: string;
@@ -43,12 +44,13 @@ export function ScratchpadPanel({ taskId, projectId, reloadToken = 0 }: Scratchp
   const profileSlug = useProfiles(s => s.current);
 
   return (
-    <div className="flex flex-col select-none divide-y divide-[var(--color-border-soft)]">
+    <div className="flex flex-col select-none pb-[10px] pl-[6px] pr-[2px] pt-[6px]">
       {/* Project Scratchpad */}
       <ScratchpadSection
         scope="project"
         title={t("scratchpad.projectTitle", "Project Scratchpad")}
         badge={t("scratchpad.projectBadge", "Project")}
+        hint={t("scratchpad.projectHint")}
         taskId={taskId}
         projectId={projectId}
         reloadToken={reloadToken}
@@ -59,6 +61,7 @@ export function ScratchpadPanel({ taskId, projectId, reloadToken = 0 }: Scratchp
         scope="profile"
         title={t("scratchpad.profileTitle", "Profile Scratchpad")}
         badge={t("scratchpad.profileBadge", "Profile")}
+        hint={t("scratchpad.profileHint")}
         taskId={taskId}
         projectId={profileSlug ?? undefined}
         reloadToken={reloadToken}
@@ -69,6 +72,7 @@ export function ScratchpadPanel({ taskId, projectId, reloadToken = 0 }: Scratchp
         scope="global"
         title={t("scratchpad.globalTitle", "Global Scratchpad")}
         badge={t("scratchpad.globalBadge", "Global")}
+        hint={t("scratchpad.globalHint")}
         taskId={taskId}
         projectId={undefined}
         reloadToken={reloadToken}
@@ -81,12 +85,13 @@ interface SectionProps {
   scope: Scope;
   title: string;
   badge: string;
+  hint: string;
   taskId: string;
   projectId?: string;
   reloadToken: number;
 }
 
-function ScratchpadSection({ scope, title, badge, taskId, projectId, reloadToken }: SectionProps) {
+function ScratchpadSection({ scope, title, badge, hint, taskId, projectId, reloadToken }: SectionProps) {
   const { t } = useTranslation("task");
   const [collapsed, setCollapsed] = useState(false);
   const [entries, setEntries] = useState<FileEntry[] | null>(null);
@@ -193,52 +198,54 @@ function ScratchpadSection({ scope, title, badge, taskId, projectId, reloadToken
     }
   }
 
+  const entryCount = entries?.length ?? 0;
+  const showCount = entryCount > 0 && !disabled;
+
   return (
-    <div className="flex flex-col">
-      {/* Section Header */}
+    <section className="rp-scratch-section flex flex-col" data-scope={scope}>
       <div
-        className="group flex h-8 items-center justify-between px-2 text-[12px] font-semibold text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] cursor-pointer"
+        className="rp-scratch-head group"
+        data-collapsed={collapsed ? "true" : "false"}
         onClick={() => setCollapsed(!collapsed)}
       >
-        <div className="flex items-center gap-1.5 min-w-0">
-          {collapsed ? (
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
-          ) : (
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
-          )}
-          <span className="truncate">{title}</span>
-          <span className="shrink-0 rounded px-1 py-0.2 bg-[var(--color-bg-2)] text-[10px] text-[var(--color-fg-faint)]">
-            {badge}
-          </span>
+        <div className="flex min-w-0 items-center gap-[7px]">
+          <TreeChevron open={!collapsed} className="shrink-0 text-[var(--sidebar-chevron)]" />
+          {/* The tab already says Scratchpad, so the eyebrow names only the
+              scope; the full title rides along for screen readers. */}
+          <span className="ui-eyebrow" title={title} aria-label={title}>{badge}</span>
+          {showCount && <span className="ui-count">{entryCount}</span>}
         </div>
 
         <div
-          className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="flex items-center opacity-0 transition-opacity duration-[120ms] group-hover:opacity-100 group-focus-within:opacity-100"
           onClick={e => e.stopPropagation()}
         >
           <Tip content={t("scratchpad.newFile", "New file")} side="bottom">
             <button
               onClick={() => startCreating("", false)}
               disabled={disabled}
-              className="rounded p-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)] disabled:opacity-40"
+              className="ui-icon-btn"
+              data-size="sm"
             >
-              <FilePlus className="h-3.5 w-3.5" />
+              <FilePlusGlyph size={14} />
             </button>
           </Tip>
           <Tip content={t("scratchpad.newFolder", "New folder")} side="bottom">
             <button
               onClick={() => startCreating("", true)}
               disabled={disabled}
-              className="rounded p-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)] disabled:opacity-40"
+              className="ui-icon-btn"
+              data-size="sm"
             >
-              <FolderPlus className="h-3.5 w-3.5" />
+              <NewFolderGlyph size={14} />
             </button>
           </Tip>
           <Tip content={t("scratchpad.revealInFinder", { manager: FILE_MANAGER, defaultValue: `Reveal in ${FILE_MANAGER}` })} side="bottom">
             <button
               onClick={() => { void ipc.scratchPathReveal(scope, projectId, "").catch((e: unknown) => useUI.getState().pushToast(String(e), "error")); }}
               disabled={disabled}
-              className="rounded p-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)] disabled:opacity-40"
+              className="ui-icon-btn"
+              data-size="sm"
             >
               <FolderOpen className="h-3.5 w-3.5" />
             </button>
@@ -247,9 +254,10 @@ function ScratchpadSection({ scope, title, badge, taskId, projectId, reloadToken
             <button
               onClick={() => { void loadRoot(); }}
               disabled={disabled}
-              className="rounded p-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)] disabled:opacity-40"
+              className="ui-icon-btn"
+              data-size="sm"
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+              <RefreshGlyph size={14} className="ui-refresh-glyph" data-busy={loading} />
             </button>
           </Tip>
         </div>
@@ -257,20 +265,20 @@ function ScratchpadSection({ scope, title, badge, taskId, projectId, reloadToken
 
       {/* Section Content */}
       {!collapsed && (
-        <div className="flex flex-col py-0.5">
+        <div className="flex flex-col">
           {disabled ? (
-            <div className="px-5 py-2 text-[12px] text-[var(--color-fg-faint)] italic">
+            <div className="rp-scratch-note">
               {t("scratchpad.noProject", "Current task has no associated project.")}
             </div>
           ) : (
             <>
               {/* Root Creation Input */}
               {creating && creating.parentRel === "" && (
-                <div className="flex items-center gap-1.5 px-5 py-1">
+                <div className="ui-row" style={{ paddingLeft: 25 }}>
                   <img
                     src={creating.isDir ? folderIconUrl("folder", false) : fileIconUrl(createDraft || "txt")}
                     alt=""
-                    className="h-3.5 w-3.5 shrink-0 file-icon"
+                    className="h-4 w-4 shrink-0 file-icon"
                   />
                   <input
                     ref={createInputRef}
@@ -283,15 +291,23 @@ function ScratchpadSection({ scope, title, badge, taskId, projectId, reloadToken
                     }}
                     onBlur={() => void submitCreate()}
                     placeholder={creating.isDir ? "folder-name" : "filename.md"}
-                    className="h-6 w-full rounded border border-[var(--color-accent)] bg-[var(--color-bg)] px-1.5 font-mono text-[12px] text-[var(--color-fg)] outline-none"
+                    className="sidebar-inline-input rp-scratch-input min-w-0 flex-1"
                   />
                 </div>
               )}
 
               {/* Entries list */}
               {entries && entries.length === 0 && !creating ? (
-                <div className="px-5 py-2 text-[12px] text-[var(--color-fg-faint)] italic">
-                  {t("scratchpad.empty", "No scratchpad files yet.")}
+                <div data-testid="scratchpad-empty" className="rp-note-empty">
+                  <span aria-hidden className="rp-note-empty-glyph"><NoteGlyph size={15} /></span>
+                  <div className="rp-note-empty-text">
+                    <span className="rp-note-empty-title">{t("scratchpad.empty", "No scratchpad files yet.")}</span>
+                    <span className="rp-note-empty-hint">{hint}</span>
+                  </div>
+                  <button type="button" className="ui-raised rp-note-empty-btn" data-size="sm" onClick={() => startCreating("", false)}>
+                    <PlusGlyph size={12} strokeWidth={2.2} />
+                    {t("scratchpad.newNote")}
+                  </button>
                 </div>
               ) : (
                 entries?.map(entry => (
@@ -321,7 +337,7 @@ function ScratchpadSection({ scope, title, badge, taskId, projectId, reloadToken
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -449,7 +465,12 @@ function ScratchTreeNode({
     }
   }
 
-  const indentPx = 12 + depth * 14;
+  const indentPx = 8 + depth * 16;
+  const ancestorLevels = Array.from({ length: depth }, (_, level) => level);
+  const extensionAt = entry.name.lastIndexOf(".");
+  const hasExtension = !entry.is_dir && extensionAt > 0;
+  const baseName = hasExtension ? entry.name.slice(0, extensionAt) : entry.name;
+  const extension = hasExtension ? entry.name.slice(extensionAt) : "";
 
   return (
     <div>
@@ -458,29 +479,31 @@ function ScratchTreeNode({
           <div
             onClick={onClick}
             style={{ paddingLeft: `${indentPx}px` }}
-            className={cn(
-              "group flex h-7 items-center gap-1.5 pr-2 text-[12.5px] cursor-pointer hover:bg-[var(--color-hover)]",
-              isActive && "bg-[var(--color-active)] text-[var(--color-accent)] font-medium"
-            )}
+            data-selected={isActive}
+            data-scratch-dir={entry.is_dir ? rel : undefined}
+            className="ui-row group cursor-pointer"
           >
+            {ancestorLevels.map(level => (
+              <span key={level} aria-hidden className="ui-guide" style={{ left: 13 + level * 16 }} />
+            ))}
             {entry.is_dir ? (
               <span
                 onClick={e => {
                   e.stopPropagation();
                   toggle(rel);
                 }}
-                className="flex h-4 w-4 shrink-0 items-center justify-center text-[var(--color-fg-faint)]"
+                className="flex w-[10px] shrink-0 items-center justify-center text-[var(--sidebar-chevron)]"
               >
-                {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                <TreeChevron open={isOpen} />
               </span>
             ) : (
-              <span className="w-4 shrink-0" />
+              <span className="w-[10px] shrink-0" />
             )}
 
             <img
               src={entry.is_dir ? folderIconUrl(entry.name, isOpen) : fileIconUrl(entry.name)}
               alt=""
-              className="h-3.5 w-3.5 shrink-0 file-icon"
+              className="h-4 w-4 shrink-0 file-icon"
             />
 
             {renaming ? (
@@ -495,15 +518,15 @@ function ScratchTreeNode({
                 }}
                 onBlur={() => void submitRename()}
                 onClick={e => e.stopPropagation()}
-                className="h-5 w-full rounded border border-[var(--color-accent)] bg-[var(--color-bg)] px-1 font-mono text-[12px] text-[var(--color-fg)] outline-none"
+                className="sidebar-inline-input rp-scratch-input min-w-0 flex-1"
               />
             ) : (
-              <span className="truncate">{entry.name}</span>
+              <span className="ui-row-name">{baseName}{extension && <span className="rp-ext">{extension}</span>}</span>
             )}
           </div>
         </ContextMenuTrigger>
 
-        <ContextMenuContent>
+        <ContextMenuContent className="sidebar-menu">
           {!entry.is_dir && (
             <ContextMenuItem onSelect={() => openScratchFileTab(taskId, scope, projectId, rel)}>
               {t("common:open", "Open")}
@@ -574,13 +597,13 @@ function ScratchTreeNode({
           {/* Subdir creation input */}
           {creating && creating.parentRel === rel && (
             <div
-              style={{ paddingLeft: `${indentPx + 16}px` }}
-              className="flex items-center gap-1.5 py-1 pr-2"
+              style={{ paddingLeft: `${indentPx + 16 + 17}px` }}
+              className="ui-row"
             >
               <img
                 src={creating.isDir ? folderIconUrl("folder", false) : fileIconUrl(createDraft || "txt")}
                 alt=""
-                className="h-3.5 w-3.5 shrink-0 file-icon"
+                className="h-4 w-4 shrink-0 file-icon"
               />
               <input
                 ref={createInputRef}
@@ -593,7 +616,7 @@ function ScratchTreeNode({
                 }}
                 onBlur={() => void submitCreate()}
                 placeholder={creating.isDir ? "folder-name" : "filename.md"}
-                className="h-5 w-full rounded border border-[var(--color-accent)] bg-[var(--color-bg)] px-1 font-mono text-[12px] text-[var(--color-fg)] outline-none"
+                className="sidebar-inline-input rp-scratch-input min-w-0 flex-1"
               />
             </div>
           )}

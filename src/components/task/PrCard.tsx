@@ -34,14 +34,14 @@ const POLL_MS = 60_000;
 const PROBE_MS = 5 * 60_000;
 
 // State pill: icon + label + color, GitHub's palette (open green, draft
-// gray, merged purple, closed red) mapped onto theme-ish values. The
-// exact purples/greens are intentional one-offs - PR state colors are a
+// gray, merged purple, closed red). The PR tokens are tuned per theme the
+// way the sidebar's PR glyph uses them, since PR state colours are a
 // cross-tool convention users already know, not theme accents. Labels are
 // i18n keys (pr subtree), resolved at render.
 const STATE: Record<PrStatus["state"], { labelKey: string; color: string; Icon: typeof GitPullRequest }> = {
-  open:   { labelKey: "pr.stateOpen",   color: "#3fb950", Icon: GitPullRequest },
+  open:   { labelKey: "pr.stateOpen",   color: "var(--color-pr-open)", Icon: GitPullRequest },
   draft:  { labelKey: "pr.stateDraft",  color: "var(--color-fg-faint)", Icon: GitPullRequestDraft },
-  merged: { labelKey: "pr.stateMerged", color: "#a371f7", Icon: GitMerge },
+  merged: { labelKey: "pr.stateMerged", color: "var(--color-pr-merged)", Icon: GitMerge },
   closed: { labelKey: "pr.stateClosed", color: "var(--color-err)", Icon: GitPullRequestClosed },
 };
 
@@ -54,7 +54,7 @@ function ChecksChip({ checks }: { checks: PrStatus["checks"] }) {
   if (checks === "pending") {
     return (
       <Tip content={t("pr.checksRunning")} side="bottom">
-        <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11.5px] leading-none" style={{ color: "var(--color-warn)" }}>
+        <span className="rp-git-pr-signal" style={{ color: "var(--color-warn)" }}>
           {/* Measured against the row's actual pixel centers (bell/refresh/
               link icons and text with a descender all land on the same row
               - see CircleX below), not eyeballed: -translate-y-px pulls the
@@ -66,13 +66,13 @@ function ChecksChip({ checks }: { checks: PrStatus["checks"] }) {
     );
   }
   const map = {
-    passing: { Icon: CircleCheck, color: "#3fb950", label: t("pr.checksPassing") },
+    passing: { Icon: CircleCheck, color: "var(--color-pr-open)", label: t("pr.checksPassing") },
     failing: { Icon: CircleX, color: "var(--color-err)", label: t("pr.checksFailing") },
   } as const;
   const { Icon, color, label } = map[checks];
   return (
     <Tip content={label} side="bottom">
-      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11.5px] leading-none" style={{ color }}>
+      <span className="rp-git-pr-signal" style={{ color }}>
         {/* Measured pixel centers (see the pending-state Spinner above):
             this icon renders ~2px low relative to the row's actual
             baseline. -translate-y-px corrects it. */}
@@ -87,7 +87,7 @@ function ReviewChip({ review }: { review: PrStatus["review"] }) {
   const { t } = useTranslation("panels");
   if (review === "none") return null;
   const map = {
-    approved: { color: "#3fb950", label: t("pr.approved") },
+    approved: { color: "var(--color-pr-open)", label: t("pr.approved") },
     changes_requested: { color: "var(--color-err)", label: t("pr.changesRequested") },
     review_required: { color: "var(--color-warn)", label: t("pr.reviewRequired") },
   } as const;
@@ -95,7 +95,7 @@ function ReviewChip({ review }: { review: PrStatus["review"] }) {
   // The one shrinkable item in the row (see the two-row comment below):
   // "Changes requested" is the widest label here, and at the panel's
   // 280px default width a fully-populated row would otherwise push the
-  // action buttons off the card's right edge — clipped by the window
+  // action buttons off the card's right edge, clipped by the window
   // itself, where the button isn't even clickable. truncate keeps the
   // buttons on-screen; the full label stays reachable via title.
   return (
@@ -207,12 +207,12 @@ export function PrCard({ task }: { task: Task }) {
         body: <span className="break-words">{lookup.message}</span>,
       };
     return (
-      <Card>
+      <Card tone="var(--color-warn)">
         <div className="flex items-start gap-2">
-          <GitPullRequest className="mt-px h-4 w-4 shrink-0 text-[var(--color-fg-faint)]" />
+          <GitPullRequest className="mt-px h-4 w-4 shrink-0 text-[var(--color-warn)]" />
           <div className="min-w-0 flex-1">
-            <div className="break-words text-[12.5px] font-medium text-[var(--color-fg)]">{hint.title}</div>
-            <div className="mt-0.5 break-words text-[12px] leading-snug text-[var(--color-fg-dim)]">{hint.body}</div>
+            <div className="break-words text-[12.5px] font-semibold text-[var(--sidebar-ink-strong)]">{hint.title}</div>
+            <div className="mt-1 break-words text-[12px] leading-snug text-[var(--sidebar-muted)]">{hint.body}</div>
           </div>
           <RefreshBtn spinning={spinning} onClick={doRefresh} />
         </div>
@@ -225,14 +225,16 @@ export function PrCard({ task }: { task: Task }) {
     return (
       <Card>
         <div className="flex items-center gap-2">
-          <GitPullRequest className="h-4 w-4 shrink-0 -translate-y-px text-[var(--color-fg-faint)]" />
-          <span className="min-w-0 flex-1 truncate text-[12.5px] leading-none text-[var(--color-fg-dim)]">
+          <GitPullRequest className="h-4 w-4 shrink-0 -translate-y-px text-[var(--sidebar-icon)]" />
+          <span className="min-w-0 flex-1 truncate text-[12.5px] leading-none text-[var(--sidebar-muted)]">
             {t("pr.noPrYet", { noun })}
           </span>
           <RefreshBtn spinning={spinning} onClick={doRefresh} />
           <button
             onClick={() => openCreatePr(task.id)}
-            className="flex h-6 shrink-0 items-center gap-1 rounded-md bg-[var(--color-accent)] px-2 text-[11.5px] font-medium leading-none text-white hover:brightness-110"
+            className="ui-raised shrink-0 gap-1"
+            data-size="sm"
+            data-tone="accent"
           >
             <Plus className="h-3.5 w-3.5" /> {t("create", { ns: "common" })}
           </button>
@@ -255,46 +257,53 @@ export function PrCard({ task }: { task: Task }) {
   // whole second row to itself so it truncates against ONE sibling
   // (nothing) instead of six.
   return (
-    <Card>
+    <Card tone={color}>
       <div className="flex items-center gap-2">
         <Tip content={t("pr.stateTip", { state: label, provider: providerLabel })} side="bottom">
-          {/* Plain text + icon, same as the CI/review chips next to it - no
-              pill background. Measured pixel centers (see ChecksChip):
-              -translate-y-px corrects this icon's ~1-2px low render. */}
-          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11.5px] font-medium leading-none" style={{ color }}>
-            <Icon className="h-3.5 w-3.5 -translate-y-px" />
+          {/* The one pill on the card: the state is what the card is about,
+              and the spine and wash behind it already carry its colour. */}
+          <span className="rp-git-pr-state">
+            <Icon className="h-3 w-3" />
             {label}
           </span>
         </Tip>
         <ChecksChip checks={pr.checks} />
         <ReviewChip review={pr.review} />
         <span className="min-w-0 flex-1" />
+        <span className="flex shrink-0 items-center">
         {(pr.state === "open" || pr.state === "draft") && <WatchBell task={task} />}
         <RefreshBtn spinning={spinning} onClick={doRefresh} />
         <Tip content={t("pr.openOn", { provider: providerLabel })} side="bottom">
           <button
             onClick={() => openPath(pr.url).catch(() => {})}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+            className="ui-icon-btn"
+            data-size="sm"
           >
             <ExternalLink className="h-3.5 w-3.5" />
           </button>
         </Tip>
+        </span>
       </div>
       <button
         onClick={() => openPath(pr.url).catch(() => {})}
         title={pr.title}
         data-testid="pr-title"
-        className="mt-1.5 block w-full min-w-0 truncate text-left text-[12.5px] text-[var(--color-fg)] hover:underline"
+        className="rp-git-pr-title"
       >
-        <span className="text-[var(--color-fg-faint)]">{numberLabel}</span> {pr.title}
+        <span className="rp-git-pr-num">{numberLabel}</span>
+        <span className="rp-git-pr-title-text min-w-0 flex-1 truncate">{pr.title}</span>
       </button>
     </Card>
   );
 }
 
-function Card({ children, testId = "pr-card" }: { children: ReactNode; testId?: string }) {
+/** The card's material. `tone` is the colour of its spine and wash: the PR's
+ *  state, or a warning while the forge CLI needs attention. */
+function Card({ children, tone, testId = "pr-card" }: { children: ReactNode; tone?: string; testId?: string }) {
+  const toneStyle = tone ? ({ "--rp-pr-tone": tone } as React.CSSProperties) : undefined;
+
   return (
-    <div data-testid={testId} className="shrink-0 border-b border-[var(--color-border-soft)] px-2.5 py-2">
+    <div data-testid={testId} className="rp-git-pr" style={toneStyle}>
       {children}
     </div>
   );
@@ -305,7 +314,7 @@ function Card({ children, testId = "pr-card" }: { children: ReactNode; testId?: 
  *  even though every real render has one. */
 function Code({ children }: { children?: ReactNode }) {
   return (
-    <code className="rounded bg-[var(--color-bg-3)] px-1 py-px font-mono text-[11px] text-[var(--color-fg)]">
+    <code className="rp-git-pr-code">
       {children}
     </code>
   );
@@ -333,11 +342,10 @@ function WatchBell({ task }: { task: Task }) {
     <Tip content={tip} side="bottom">
       <button
         onClick={() => { if (!always) void setWatch(task.id, !watching); }}
+        data-size="sm"
         className={cn(
-          "flex h-6 w-6 shrink-0 items-center justify-center rounded",
-          active
-            ? "text-[var(--color-accent)] hover:bg-[var(--color-hover)]"
-            : "text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
+          "ui-icon-btn",
+          active && "text-[var(--color-accent)]",
           always && "cursor-default",
         )}
       >
@@ -353,7 +361,8 @@ function RefreshBtn({ spinning, onClick }: { spinning: boolean; onClick: () => v
     <Tip content={t("pr.refreshStatus")} side="bottom">
       <button
         onClick={onClick}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+        className="ui-icon-btn"
+        data-size="sm"
       >
         {/* A rotating SVG icon (RefreshCw, Loader2, ...) wobbles/looks
             off-center at this size - see ui/Spinner's own doc comment for
@@ -410,15 +419,15 @@ function MemberPrRow({ m }: { m: MemberPrLookup }) {
   const st = pr ? STATE[pr.state] : null;
   return (
     <div className="flex items-center gap-2 py-0.5" data-testid="member-pr-row">
-      <span className="min-w-0 flex-1 truncate text-[12px] leading-none text-[var(--color-fg-dim)]">
+      <span className="min-w-0 flex-1 truncate text-[12px] leading-none text-[var(--sidebar-ink)]">
         {m.dir_name}
-        {m.branch ? <span className="font-mono text-[var(--color-fg-faint)]"> · {m.branch}</span> : null}
+        {m.branch ? <span className="font-mono text-[var(--sidebar-faint)]"> · {m.branch}</span> : null}
       </span>
       {pr && st ? (
         <>
           <Tip content={t("pr.stateTip", { state: t(st.labelKey), provider: forgeName(pr.provider) })} side="bottom">
-            <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11.5px] font-medium leading-none" style={{ color: st.color }}>
-              <st.Icon className="h-3 w-3 -translate-y-px" />
+            <span className="rp-git-pr-signal font-medium" style={{ color: st.color }}>
+              <st.Icon className="h-3 w-3" />
               {prRef(pr.provider, pr.number)}
             </span>
           </Tip>
@@ -426,7 +435,7 @@ function MemberPrRow({ m }: { m: MemberPrLookup }) {
           <Tip content={t("pr.openOn", { provider: forgeName(pr.provider) })} side="bottom">
             <button
               onClick={() => openPath(pr.url).catch(() => {})}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+              className="ui-icon-btn h-5 w-5"
             >
               <ExternalLink className="h-3 w-3" />
             </button>

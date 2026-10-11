@@ -1,7 +1,7 @@
 // Per-side git status → glyph, fill, ink and label for the one-letter chips
 // the Git panel and Compare render on every changed file. Lives in lib/ (not
 // inside GitPanel) so the two panels share ONE definition and a unit test can
-// hold them to it — the chip is a SOLID fill with text on top, and a fill
+// hold them to it, the chip is a SOLID fill with text on top, and a fill
 // whose ink nobody checked is exactly how the "modified" chip ended up
 // near-unreadable in the light theme.
 //
@@ -35,3 +35,12 @@ export const LBL: Record<string, string> = {
   M: "modified", A: "added", "?": "untracked", D: "deleted", R: "renamed",
   C: "copied", U: "conflict",
 };
+
+/** A changed file's name takes its status colour, the way the All files tree
+ *  marks it, so the two read as one object. */
+export function statusInk(status: string): string {
+  if (status === "A" || status === "?") return "var(--ui-git-added)";
+  if (status === "D" || status === "U") return "var(--ui-git-deleted)";
+
+  return "var(--ui-git-modified)";
+}

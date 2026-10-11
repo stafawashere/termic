@@ -1,4 +1,4 @@
-// Committed history with a commit graph — the Graph section at the foot of
+// Committed history with a commit graph, the Graph section at the foot of
 // the right panel's Git tab (issue #199, moved there by GH #208).
 //
 // The staging half of that tab only ever shows the working tree, so once an
@@ -11,15 +11,15 @@
 // (pure + unit-tested); this file is the rendering and the IPC.
 //
 // Layout, top to bottom:
-//   1. Repo pills   — only when uncontrolled; inside Git, that tab's win.
-//   2. Scope row    — likewise: embedded, the picker rides the Graph header.
-//   3. Commit rows  — graph gutter, chips, subject, age. Selected row expands
-//                     into its meta line + file list.
-//   4. Load more    — pages of PAGE_SIZE, appended.
+//   Repo pills: only when uncontrolled; inside Git, that tab's win.
+//   Scope row: likewise. Embedded, the picker rides the Graph header.
+//   Commit rows: graph gutter, chips, subject, age. Selected row expands
+//     into its meta line + file list.
+//   Load more: pages of PAGE_SIZE, appended.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { GitBranch, Tag, Loader2, Copy, Check, ChevronDown } from "lucide-react";
+import { GitBranch, Tag, Loader2, Copy, Check, ChevronDown, History as HistoryGlyph } from "lucide-react";
 import type { GitCommit, GitFile, GitRef, Task } from "@/lib/types";
 import { taskGitLog, taskGitRefs, taskGitCommitFiles, taskGitCommitOffset } from "@/lib/ipc";
 import { layoutGraph, graphWidth, type GraphRow } from "@/lib/gitGraph";
@@ -33,6 +33,8 @@ import { Tip } from "@/components/ui/Tooltip";
 import { ContextMenuRoot, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuLabel } from "@/components/ui/ContextMenu";
 import { DropdownRoot, DropdownTrigger, DropdownMenu, DropdownItem, DropdownLabel, DropdownSeparator } from "@/components/ui/Dropdown";
 import { fileIconUrl } from "@/lib/explorer/iconResolver";
+import { SC, statusInk } from "@/lib/gitStatus";
+import { EmptyState } from "./GitEmptyState";
 
 /** Commits per page. VS Code's graph loads 50 and pages on scroll; a page here
  *  is a bit bigger because the rows are one line and the fetch is one process. */
@@ -82,7 +84,7 @@ export function textIndent(lane: number, lanes: number): number {
   return clampLane(lane, lanes) * LANE_W + LANE_W / 2 + DOT_R + TEXT_GAP;
 }
 
-/** Lane colours. Theme-aware by construction — these are the same palette
+/** Lane colours. Theme-aware by construction, these are the same palette
  *  tokens the sidebar's folder colours use, so every theme (including custom
  *  ones) recolours the graph for free. */
 const LANE_COLORS = [
@@ -105,11 +107,6 @@ const laneColor = (i: number) => LANE_COLORS[i % LANE_COLORS.length];
 import { commitAge } from "@/lib/commitAge";
 export { commitAge };
 
-const SC: Record<string, string> = { M: "M", A: "+", D: "D", R: "R", C: "C" };
-const COL: Record<string, string> = {
-  M: "var(--color-accent)", A: "var(--color-ok)", D: "var(--color-err)",
-  R: "var(--color-accent)", C: "var(--color-accent)",
-};
 
 /** Split git's `%D` decorations into what a chip should say.
  *  "HEAD -> main" → the branch, flagged as head; "tag: v1" → a tag. */
@@ -128,7 +125,7 @@ export function parseRefs(refs: string[]): RefChip[] {
     out.push({ label: r, kind: r.includes("/") ? "remote" : "branch" });
   }
   // Most informative first, because the row only has room for a couple: where
-  // HEAD is, then local branches, then tags, and remote-tracking refs last —
+  // HEAD is, then local branches, then tags, and remote-tracking refs last,
   // "origin/main" is the least surprising thing a commit can be labelled with.
   const rank = { head: 0, branch: 1, tag: 2, remote: 3 } as const;
   return out.sort((a, b) => rank[a.kind] - rank[b.kind]);
@@ -137,7 +134,7 @@ export function parseRefs(refs: string[]): RefChip[] {
 /** How long the cursor must rest on a row before its card appears. Long,
  *  because the card is a reward for stopping, not something to trip over while
  *  scanning the list, but short enough that resting on a row feels answered. Once one HAS opened, moving to another row shows it at
- *  once (Radix's skipDelayDuration) — having paid the wait once, you are
+ *  once (Radix's skipDelayDuration), having paid the wait once, you are
  *  reading cards now, and re-charging the timer per row would be maddening. */
 const CARD_DELAY_MS = 1500;
 /** Grace after a card closes during which the next opens instantly. */
@@ -235,7 +232,7 @@ export function HistoryPanel({ task, reloadToken, onOpenDiff, repoDir: repoDirPr
 
   // Refresh: re-read from the top, as many rows as are showing. It has to be a
   // fresh window rather than a patch, because a commit landing at HEAD shifts
-  // every offset below it — the one thing this tab exists to show.
+  // every offset below it, the one thing this tab exists to show.
   useEffect(() => {
     if (nonGit) { setLoading(false); return; }
     let alive = true;
@@ -354,9 +351,9 @@ export function HistoryPanel({ task, reloadToken, onOpenDiff, repoDir: repoDirPr
       // is what this attribute is for.
       data-loading={loading || paging ? "true" : "false"}
     >
-      {/* Repo pills — multi-repo tasks pick which repo's history to read. */}
+      {/* Repo pills, multi-repo tasks pick which repo's history to read. */}
       {members.length > 0 && (
-        <div className="flex flex-wrap gap-1 border-b border-[var(--color-border-soft)] px-2 py-1.5">
+        <div className="ui-well mx-[10px] my-[6px] flex-wrap">
           <RepoPill label={task.name} active={repoDir === ""} onClick={() => setRepoDir("")} />
           {members.map(m => (
             <RepoPill key={m.dir_name} label={m.dir_name} active={repoDir === m.dir_name} onClick={() => setRepoDir(m.dir_name)} />
@@ -369,7 +366,7 @@ export function HistoryPanel({ task, reloadToken, onOpenDiff, repoDir: repoDirPr
           BranchBar at the top of that tab, so repeating it here spent a whole
           row saying something the user could already see. */}
       {!controlled && (
-        <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-[var(--color-border-soft)] px-2 text-[11.5px]">
+        <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-[var(--sidebar-divider)] px-2 text-[11.5px]">
           <GitBranch className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
           <span className="min-w-0 flex-1 truncate text-[var(--color-fg-dim)]" title={branch || t("shared.detachedHead")}>
             {branch || t("shared.detachedHead")}
@@ -395,17 +392,17 @@ export function HistoryPanel({ task, reloadToken, onOpenDiff, repoDir: repoDirPr
           cursor has to be able to enter it. That is also why it sits flush
           against the row (`sideOffset={0}`) with no gap to cross. */}
       <RT.Provider delayDuration={CARD_DELAY_MS} skipDelayDuration={CARD_SKIP_MS}>
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+      <div ref={listRef} className="ui-scroll min-h-0 flex-1 overflow-x-hidden pl-[6px] pr-[2px]">
         {err && <Empty tone="err">{err}</Empty>}
         {!err && loading && commits.length === 0 && (
-          <div className="flex items-center gap-2 px-3 py-3 text-[12px] text-[var(--color-fg-faint)]">
+          <div className="rp-git-loading">
             <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("history.reading")}
           </div>
         )}
         {!err && !loading && commits.length === 0 && (
           grep
             ? <Empty>{t("history.noMatch", { query: grep })}</Empty>
-            : <Empty>{t("history.empty")}</Empty>
+            : <EmptyState icon={<HistoryGlyph className="h-5 w-5" />} title={t("history.emptyTitle")} body={t("history.empty")} />
         )}
 
         {rows.map((row, i) => (
@@ -429,7 +426,7 @@ export function HistoryPanel({ task, reloadToken, onOpenDiff, repoDir: repoDirPr
             data-testid="history-load-more"
             onClick={loadMore}
             disabled={loading || paging}
-            className="flex w-full items-center justify-center gap-1.5 py-2 text-[12px] text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)] disabled:opacity-50"
+            className="rp-git-load-more"
           >
             {(loading || paging) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {t("history.loadMore")}
@@ -444,8 +441,8 @@ export function HistoryPanel({ task, reloadToken, onOpenDiff, repoDir: repoDirPr
 function Empty({ children, tone }: { children: React.ReactNode; tone?: "err" }) {
   return (
     <div className={cn(
-      "px-3 py-3 text-[12px]",
-      tone === "err" ? "text-[var(--color-err)]" : "text-[var(--color-fg-faint)]",
+      "px-[14px] py-3 text-[12px] leading-snug",
+      tone === "err" ? "text-[var(--color-err)]" : "text-[var(--sidebar-faint)]",
     )}>
       {children}
     </div>
@@ -525,19 +522,15 @@ export function ScopePicker({ taskId, repoDir, branch, allBranches, picked, firs
           data-testid="history-scope"
           data-all={allBranches ? "true" : "false"}
           data-picked={picked.length}
+          data-scoped={allBranches || picked.length > 0}
           title={title}
-          className={cn(
-            "flex min-w-0 max-w-[140px] shrink items-center gap-1 rounded px-1.5 py-0.5 transition-colors",
-            allBranches || picked.length > 0
-              ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
-              : "text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
-          )}
+          className="rp-git-scope"
         >
           <span className="min-w-0 truncate">{label}</span>
           <ChevronDown className="h-3 w-3 shrink-0" />
         </button>
       </DropdownTrigger>
-      <DropdownMenu align="end" className="max-h-[60vh] w-[280px] overflow-auto">
+      <DropdownMenu align="end" className="sidebar-menu max-h-[60vh] w-[280px] overflow-auto">
         <div className="p-1">
           <input
             autoFocus
@@ -546,7 +539,7 @@ export function ScopePicker({ taskId, repoDir, branch, allBranches, picked, firs
             onKeyDown={e => e.stopPropagation()}
             placeholder={t("history.filterRefs")}
             spellCheck={false}
-            className="h-6 w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1.5 text-[11.5px] text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-faint)] focus:border-[var(--color-accent)]"
+            className="ui-input h-7 w-full text-[12px]"
           />
         </div>
         <ScopeRow
@@ -618,7 +611,7 @@ function ScopeRow({ label, hint, checked, onSelect, closeOnSelect }: {
     >
       <Check className={cn("h-3.5 w-3.5 shrink-0", !checked && "opacity-0")} />
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="shrink-0 text-[10.5px] text-[var(--color-fg-faint)]">{hint}</span>
+      <span className="shrink-0 font-mono text-[10.5px] text-[var(--sidebar-faint)]">{hint}</span>
     </DropdownItem>
   );
 }
@@ -628,12 +621,8 @@ function RepoPill({ label, active, onClick }: { label: string; active: boolean; 
     <button
       data-testid="history-repo-pill"
       onClick={onClick}
-      className={cn(
-        "max-w-full truncate rounded-full px-2 py-0.5 text-[11px] transition-colors",
-        active
-          ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
-          : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
-      )}
+      data-active={active ? "true" : "false"}
+      className="ui-seg h-[22px] max-w-full truncate px-[9px] text-[11.5px]"
     >
       {label}
     </button>
@@ -641,9 +630,9 @@ function RepoPill({ label, active, onClick }: { label: string; active: boolean; 
 }
 
 /** The lane gutter for one row: the through/in/out segments plus this commit's
- *  dot. One inline SVG per row — cheap (a handful of paths), and it scrolls
+ *  dot. One inline SVG per row, cheap (a handful of paths), and it scrolls
  *  with the row instead of needing a second synchronised canvas. */
-function LaneGutter({ row, lanes, width }: { row: GraphRow; lanes: number; width: number }) {
+function LaneGutter({ row, lanes, width, isHead }: { row: GraphRow; lanes: number; width: number; isHead: boolean }) {
   const x = (lane: number) => clampLane(lane, lanes) * LANE_W + LANE_W / 2;
   const mid = ROW_H / 2;
   return (
@@ -672,13 +661,14 @@ function LaneGutter({ row, lanes, width }: { row: GraphRow; lanes: number; width
           />
         );
       })}
-      {/* Always drawn — a clipped column collapses onto the last one rather
+      {/* Always drawn, a clipped column collapses onto the last one rather
           than leaving the row without a node. */}
+      {/* HEAD is the one solid dot: where the working tree stands. */}
       <circle
         cx={x(row.lane)}
         cy={mid}
         r={DOT_R}
-        fill="var(--color-bg)"
+        fill={isHead ? laneColor(row.color) : "var(--sidebar-bg-bottom)"}
         stroke={laneColor(row.color)}
         strokeWidth={2}
       />
@@ -731,7 +721,7 @@ function CommitCard({ commit }: { commit: GitCommit }) {
 }
 
 /** memo: selecting a commit re-renders the list, and every OTHER row's props
- *  are unchanged — without this, a click repaints every SVG on screen. */
+ *  are unchanged, without this, a click repaints every SVG on screen. */
 const CommitRow = memo(function CommitRow({
   commit, row, lanes, gutter, showUnpushed, selected, onSelect, taskId, repoDir, onOpenDiff,
 }: {
@@ -748,6 +738,8 @@ const CommitRow = memo(function CommitRow({
 }) {
   const { t } = useTranslation("panels");
   const chips = useMemo(() => parseRefs(commit.refs), [commit.refs]);
+  const isHead = chips.some(chip => chip.kind === "head");
+
   return (
     <div data-testid="history-commit" data-sha={commit.sha}>
       <ContextMenuRoot>
@@ -761,16 +753,14 @@ const CommitRow = memo(function CommitRow({
             data-testid="history-commit-row"
             onClick={onSelect}
             style={{ height: ROW_H }}
-            className={cn(
-              "flex cursor-pointer items-center gap-1.5 pr-2 text-[12px]",
-              selected ? "bg-[var(--color-sel)]" : "hover:bg-[var(--color-hover)]",
-            )}
+            data-selected={selected}
+            className="ui-row cursor-pointer gap-1.5 pl-0 pr-2 text-[12px]"
           >
             {/* The gutter spans the full graph width and the text starts just
                 past THIS row's dot, so the two overlap rather than sitting in
                 two columns. Negative margin instead of absolute positioning
                 keeps the row a plain flex line that can still be measured. */}
-            <LaneGutter row={row} lanes={lanes} width={gutter} />
+            <LaneGutter row={row} lanes={lanes} width={gutter} isHead={isHead} />
             <span
               aria-hidden="true"
               className="shrink-0"
@@ -794,7 +784,7 @@ const CommitRow = memo(function CommitRow({
                 {chips.length > MAX_CHIPS && (
                   <span
                     title={chips.slice(MAX_CHIPS).map(c => c.label).join(", ")}
-                    className="shrink-0 rounded bg-[var(--color-bg-3)] px-1 text-[10.5px] leading-[16px] text-[var(--color-fg-faint)]"
+                    className="rp-git-ref-more"
                   >
                     +{chips.length - MAX_CHIPS}
                   </span>
@@ -819,10 +809,10 @@ const CommitRow = memo(function CommitRow({
             )}
             {/* No `title`: the hover card already shows the full subject, and
                 the browser's own tooltip drew ON TOP of it a second later. */}
-            <span data-testid="history-subject" className="min-w-0 flex-1 truncate text-[var(--color-fg)]">
+            <span data-testid="history-subject" className="ui-row-name">
               {commit.subject}
             </span>
-            <span className="shrink-0 tabular-nums text-[11px] text-[var(--color-fg-faint)]">
+            <span className="rp-git-age">
               {commitAge(commit.timestamp)}
             </span>
           </div>
@@ -830,14 +820,14 @@ const CommitRow = memo(function CommitRow({
           <RT.Portal>
             <RT.Content
               side="left" align="start" sideOffset={0} collisionPadding={8}
-              className="z-[100] rounded-md border border-[var(--color-border)] bg-[var(--color-bg-2)] p-2.5 shadow-lg data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0"
+              className="rp-git-card z-[100] data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0"
             >
               <CommitCard commit={commit} />
             </RT.Content>
           </RT.Portal>
           </RT.Root>
         </ContextMenuTrigger>
-        <ContextMenuContent>
+        <ContextMenuContent className="sidebar-menu">
           <ContextMenuLabel>{commit.short}</ContextMenuLabel>
           <ContextMenuItem onSelect={() => copyToClipboard(commit.sha, "commit SHA")}>
             <Copy className="h-4 w-4" />
@@ -860,6 +850,7 @@ const CommitRow = memo(function CommitRow({
           taskId={taskId}
           repoDir={repoDir}
           indent={detailIndent(row.lane, lanes)}
+          laneTone={row.color}
           onOpenDiff={onOpenDiff}
         />
       )}
@@ -875,14 +866,12 @@ function RefBadge({ chip }: { chip: RefChip }) {
   // carries `origin/`, so the prefix distinguishes them and the colour does
   // not have to. Tags keep their own colour and glyph, being a different kind
   // of thing rather than a quieter one.
-  const style = chip.kind === "tag"
-    ? "bg-[var(--color-bg-3)] text-[var(--color-warn)]"
-    : "bg-[var(--color-accent-soft)] text-[var(--color-accent)]";
   return (
     <span
       data-testid="history-ref"
+      data-kind={chip.kind === "tag" ? "tag" : "branch"}
       title={chip.label}
-      className={cn("flex min-w-0 shrink items-center gap-0.5 rounded px-1 text-[10.5px] leading-[16px]", style)}
+      className="rp-git-ref"
     >
       {chip.kind === "tag" && <Tag className="h-2.5 w-2.5 shrink-0" />}
       <span className="truncate">{chip.label}</span>
@@ -891,12 +880,14 @@ function RefBadge({ chip }: { chip: RefChip }) {
 }
 
 /** The expanded commit: who/when/sha, then the files it touched. Fetched
- *  lazily — the file list of a commit nobody opened is a process we never run. */
-function CommitDetail({ commit, taskId, repoDir, indent, onOpenDiff }: {
+ *  lazily, the file list of a commit nobody opened is a process we never run. */
+function CommitDetail({ commit, taskId, repoDir, indent, laneTone, onOpenDiff }: {
   commit: GitCommit;
   taskId: string;
   repoDir: string;
   indent: number;
+  /** The commit's lane colour index, which its author mark takes. */
+  laneTone: number;
   onOpenDiff: (sha: string, f: GitFile) => void;
 }) {
   const [files, setFiles] = useState<GitFile[] | null>(null);
@@ -916,13 +907,16 @@ function CommitDetail({ commit, taskId, repoDir, indent, onOpenDiff }: {
   useEffect(() => () => { if (copiedTimer.current) window.clearTimeout(copiedTimer.current); }, []);
 
   const when = new Date(commit.timestamp * 1000);
+  const authorInitial = (commit.author.trim()[0] ?? "?").toUpperCase();
+  const avatarStyle = { "--rp-avatar-tone": laneColor(laneTone) } as React.CSSProperties;
+
   return (
     <div
       data-testid="history-commit-detail"
-      className="min-w-0 overflow-hidden border-b border-[var(--color-border-soft)] bg-[var(--color-bg)] pb-1.5"
-      style={{ paddingLeft: indent }}
+      className="rp-git-detail min-w-0 overflow-hidden"
+      style={{ marginLeft: Math.max(indent - 6, 0) }}
     >
-      <div className="flex items-center gap-1.5 py-1 pr-2 text-[11px] text-[var(--color-fg-faint)]">
+      <div className="rp-git-detail-meta">
         <button
           onClick={() => {
             copyToClipboard(commit.sha, "commit SHA");
@@ -930,53 +924,50 @@ function CommitDetail({ commit, taskId, repoDir, indent, onOpenDiff }: {
             if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
             copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
           }}
-          className="flex shrink-0 items-center gap-1 rounded px-1 font-mono hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+          className="rp-git-sha"
           title={t("history.copyFullSha")}
         >
-          {copied ? <Check className="h-3 w-3 text-[var(--color-ok)]" /> : <Copy className="h-3 w-3" />}
+          {copied ? <Check className="h-3 w-3 text-[var(--ui-git-added)]" /> : <Copy className="h-3 w-3" />}
           {commit.short}
         </button>
-        <span className="min-w-0 flex-1 truncate" title={commit.email}>{commit.author}</span>
-        <span className="min-w-0 shrink truncate text-right" title={when.toString()}>
+        <span className="rp-git-avatar" style={avatarStyle} aria-hidden="true">{authorInitial}</span>
+        <span className="min-w-0 flex-1 truncate text-[var(--sidebar-ink)]" title={commit.email}>{commit.author}</span>
+        <span className="min-w-0 shrink truncate text-right text-[var(--sidebar-faint)]" title={when.toString()}>
           {when.toLocaleDateString()}
         </span>
       </div>
 
       {err && <div className="px-1 py-1 text-[11px] text-[var(--color-err)]">{err}</div>}
       {!err && files === null && (
-        <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] text-[var(--color-fg-faint)]">
+        <div className="flex items-center gap-1.5 px-1.5 py-1 text-[11px] text-[var(--sidebar-faint)]">
           <Loader2 className="h-3 w-3 animate-spin" /> {t("history.readingChanges")}
         </div>
       )}
       {files?.length === 0 && (
-        <div className="px-1 py-1 text-[11px] text-[var(--color-fg-faint)]">{t("history.noFiles")}</div>
+        <div className="px-1.5 py-1 text-[11px] text-[var(--sidebar-faint)]">{t("history.noFiles")}</div>
       )}
-      {files?.map(f => (
-        <button
-          key={f.path}
-          data-testid="history-file-row"
-          data-path={f.path}
-          onClick={() => onOpenDiff(commit.sha, f)}
-          className="flex w-full items-center gap-1.5 rounded px-1 py-[3px] text-left text-[12px] hover:bg-[var(--color-hover)]"
-        >
-          <span
-            className="w-3 shrink-0 text-center text-[11px] font-semibold"
-            style={{ color: COL[f.status] ?? "var(--color-fg-dim)" }}
-            title={f.status}
+      {files?.map(f => {
+        const slash = f.path.lastIndexOf("/");
+        const fileDir = slash === -1 ? "" : f.path.slice(0, slash);
+
+        return (
+          <button
+            key={f.path}
+            data-testid="history-file-row"
+            data-path={f.path}
+            onClick={() => onOpenDiff(commit.sha, f)}
+            title={f.path}
+            className="rp-git-hfile"
           >
-            {SC[f.status] ?? f.status}
-          </span>
-          <img src={fileIconUrl(f.path)} alt="" className="h-3.5 w-3.5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate text-[var(--color-fg)]" title={f.path}>
-            {f.path.split("/").pop()}
-          </span>
-          {f.path.includes("/") && (
-            <span className="min-w-0 max-w-[45%] shrink truncate text-[10.5px] text-[var(--color-fg-faint)]">
-              {f.path.slice(0, f.path.lastIndexOf("/"))}
+            <span className="ui-status-letter" style={{ color: statusInk(f.status) }} title={f.status}>
+              {SC[f.status] ?? f.status}
             </span>
-          )}
-        </button>
-      ))}
+            <img src={fileIconUrl(f.path)} alt="" className="h-4 w-4 shrink-0 file-icon" />
+            <span className="ui-row-name">{f.path.slice(slash + 1)}</span>
+            {fileDir && <span className="ui-row-meta max-w-[45%] shrink">{fileDir}</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }

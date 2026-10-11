@@ -15871,6 +15871,42 @@ fn task_path_delete(id: String, path: String) -> Result<(), String> {
     }
 }
 
+/// Create an empty file or a directory in the task (the file tree's New file
+/// and New folder buttons). The last segment must be a plain name and must
+/// not exist yet; its parent must. Member-aware + worktree-constrained.
+#[tauri::command]
+fn task_path_create(id: String, path: String, is_dir: bool) -> Result<(), String> {
+    let w = load_tasks_all().into_iter().find(|w| w.id == id).ok_or("no task")?;
+    let name = path.rsplit('/').next().unwrap_or("").trim();
+    if !is_plain_name(name) {
+        return Err(format!("invalid name: {name:?}"));
+    }
+    let (cwd, rel) = resolve_task_git_path(&w, &path)?;
+    let abs = safe_task_path_for_create(&cwd, &rel)?;
+    create_task_entry(&abs, is_dir)
+}
+
+fn create_task_entry(abs: &Path, is_dir: bool) -> Result<(), String> {
+    let parent_missing = abs.parent().map(|p| !p.is_dir()).unwrap_or(true);
+    if parent_missing {
+        return Err("the folder it would go in does not exist".into());
+    }
+    if fs::symlink_metadata(abs).is_ok() {
+        let name = abs.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        return Err(format!("\"{name}\" already exists here"));
+    }
+    if is_dir {
+        fs::create_dir(abs).map_err(|e| format!("create failed: {e}"))
+    } else {
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(abs)
+            .map(|_| ())
+            .map_err(|e| format!("create failed: {e}"))
+    }
+}
+
 /// Reveal a task entry in the OS file manager ("Show in Finder").
 /// Resolves the absolute path server-side (member-aware) so the frontend
 /// doesn't have to reconstruct paths for members that live outside the
@@ -25743,7 +25779,7 @@ pub fn run() {
             detect_forges, task_pr_status, task_member_pr_status, task_pr_create, task_pr_comments, task_set_pr_watch, task_set_pr_comments_seen,
             project_forge_issues, project_forge_provider, project_forge_prs, project_fetch_pr_branch, project_git_checkout,
             task_file_diff, task_file_diff_sides, task_file_read, file_read_external, clipboard_image_save, clipboard_image_capture, task_file_read_base64, task_file_fp, task_file_write, task_dir_list, task_path_stat,
-            task_path_rename, task_path_delete, task_reveal_path,
+            task_path_rename, task_path_delete, task_path_create, task_reveal_path,
             scratch_list, scratch_read, scratch_write, scratch_set_meta, scratch_delete,
             scratch_promote, scratch_promote_target_exists,
             scratch_tree_list, scratch_file_read, scratch_file_write, scratch_file_create,
@@ -30619,6 +30655,21 @@ mod tests {
         std::os::unix::fs::symlink(outside.path(), ws.path().join("out")).unwrap();
         let err = safe_task_path_for_create(ws.path(), "out/notes.md").unwrap_err();
         assert!(err.contains("path escapes task: out/notes.md -> "), "{err}");
+    }
+
+    #[test]
+    fn create_task_entry_makes_files_and_dirs_once() {
+        let ws = tempfile::tempdir().unwrap();
+        let file = ws.path().join("notes.md");
+        let dir = ws.path().join("docs");
+        create_task_entry(&file, false).unwrap();
+        create_task_entry(&dir, true).unwrap();
+        assert!(file.is_file());
+        assert!(dir.is_dir());
+        assert!(create_task_entry(&file, false).unwrap_err().contains("already exists"));
+        assert!(create_task_entry(&dir, true).unwrap_err().contains("already exists"));
+        let orphan = ws.path().join("missing").join("x.md");
+        assert!(create_task_entry(&orphan, false).is_err());
     }
 
     // ARCHIVING A TASK MUST LEAVE ITS PADS ALONE. Archiving is recoverable

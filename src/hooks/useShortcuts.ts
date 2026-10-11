@@ -305,6 +305,14 @@ export function useShortcuts() {
           useUI.getState().focusSidebarFilter();
           return;
 
+        // ⇧⌘E → the right panel's file filter, showing the panel first.
+        case "focus-file-filter":
+          if (!taskId) return;
+          e.preventDefault();
+          if (state.rightPanelHidden) state.toggleRightPanel();
+          useUI.getState().focusFileFilter();
+          return;
+
         // ⌘1..⌘9 → switch to Nth tab in the active task. Indexes the
         // full tab list so position matches the TabBar.
         case "jump-to-tab": {

@@ -324,6 +324,10 @@ interface UIState {
   sidebarFilterFocusPending: boolean;
   focusSidebarFilter: () => void;
   consumeSidebarFilterFocus: () => void;
+  /** The same request for the right panel's file filter. */
+  fileFilterFocusPending: boolean;
+  focusFileFilter: () => void;
+  consumeFileFilterFocus: () => void;
   /** Transient bottom-right toasts. Auto-dismiss handled in <Toaster/>. */
   toasts: Toast[];
   /** Bumped to force the "All files" tree to re-read from disk — e.g. after
@@ -587,6 +591,9 @@ export const useUI = create<UIState>((set, get) => ({
   sidebarFilterFocusPending: false,
   focusSidebarFilter: () => set({ sidebarFilterFocusPending: true }),
   consumeSidebarFilterFocus: () => { if (get().sidebarFilterFocusPending) set({ sidebarFilterFocusPending: false }); },
+  fileFilterFocusPending: false,
+  focusFileFilter: () => set({ fileFilterFocusPending: true }),
+  consumeFileFilterFocus: () => { if (get().fileFilterFocusPending) set({ fileFilterFocusPending: false }); },
   toasts: [],
 
   openNewProject:    () => set({ newProjectOpen: true }),

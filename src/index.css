@@ -216,6 +216,23 @@
      every theme: it is the previewed page's canvas, not app chrome. */
   --color-html-canvas: #ffffff;
 
+  /* Shared "refined" family (docs/themes.md "Shared family tokens"): what
+     the right panel, the views, dialogs and settings add on top of the
+     --sidebar-* family they otherwise reuse. Dark+ values; the other themes
+     override them beside the .ui-* classes further down. */
+  --ui-badge-ink:           #1b1b1b;
+  --ui-badge-glow:          0 0 6px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  --ui-sel-hover-from:      color-mix(in srgb, var(--color-accent) 27%, var(--sidebar-bg-top));
+  --ui-sel-hover-to:        color-mix(in srgb, var(--color-accent) 19%, var(--sidebar-bg-top));
+  --ui-git-added:           #3fb950;
+  --ui-git-modified:        var(--color-accent);
+  --ui-git-deleted:         #f0605a;
+  --ui-git-untracked:       #3fb950;
+  --ui-panel-shadow:        0 20px 50px rgba(0, 0, 0, 0.45);
+  --ui-scrim:               rgba(0, 0, 0, 0.55);
+  --ui-lift:                #ffffff;
+  --ui-danger-ink:          #ffffff;
+
   /* Palette ramp: hue-named accents for user-assigned identity marks
      (project-group folders today; the user's pick is stored by hue key,
      e.g. "red"). Hue identity is the contract — a theme tunes SHADE to
@@ -1332,6 +1349,1542 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   .termic-cli-stalls { animation: none !important; }
 }
 
+/* ── Shared "refined" family ─────────────────────────────────────────────
+   The material the sidebar and title bar introduced, as classes the rest of
+   the app composes: recessed wells holding raised chips, sunk fields with a
+   keycap, eyebrow headers, 28px rows, count pills. Every value comes from
+   the --sidebar-* and --ui-* tokens, so a theme that sets only --color-*
+   still gets a matching surface (docs/ui.md "The refined family"). */
+@layer components {
+  html.claude, html.cobalt, html.matrix, html.rosepine, html.solarized,
+  html.custom-theme:not(.light) {
+    --ui-badge-ink:           var(--color-accent-fg);
+    --ui-git-added:           var(--color-palette-green);
+    --ui-git-deleted:         var(--color-palette-red);
+    --ui-git-untracked:       var(--color-palette-green);
+  }
+  html.light {
+    --ui-badge-ink:           var(--color-accent-fg);
+    --ui-sel-hover-from:      color-mix(in srgb, var(--color-accent) 27%, var(--color-bg));
+    --ui-sel-hover-to:        color-mix(in srgb, var(--color-accent) 18%, var(--color-bg));
+    --ui-git-added:           var(--color-palette-green);
+    --ui-git-modified:        var(--color-accent-deep);
+    --ui-git-deleted:         var(--color-palette-red);
+    --ui-git-untracked:       var(--color-palette-green);
+    --ui-panel-shadow:        0 20px 50px rgba(0, 0, 0, 0.16);
+    --ui-scrim:               rgba(0, 0, 0, 0.25);
+  }
+
+  .ui-panel {
+    background-color: var(--sidebar-bg-bottom);
+    background-image: linear-gradient(180deg, var(--sidebar-bg-top) 0%, var(--sidebar-bg-bottom) 100%);
+    box-shadow: inset 0 1px 0 var(--sidebar-top-highlight);
+    color: var(--sidebar-ink);
+  }
+  .ui-panel { --focus-ring: var(--sidebar-focus-ring); }
+
+  /* A recessed well and the segments in it. The active segment is a raised
+     chip; idle ones are bare text that brightens on hover. */
+  .ui-well {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 8px;
+    background-color: var(--sidebar-well-bg);
+    box-shadow: var(--sidebar-well-shadow);
+  }
+  .ui-seg {
+    display: flex;
+    height: 26px;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 6px;
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--sidebar-muted);
+    transition: color 120ms, background-color 120ms;
+  }
+  .ui-seg:hover { color: var(--sidebar-ink-strong); }
+  .ui-seg[data-active="true"] {
+    background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+    box-shadow: var(--sidebar-chip-shadow);
+    font-weight: 600;
+    color: var(--sidebar-ink-strong);
+  }
+  .ui-seg:disabled { cursor: default; opacity: 0.5; }
+
+  /* A raised chip on its own: the secondary button of the family. */
+  .ui-raised {
+    display: inline-flex;
+    height: 28px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 6px;
+    padding: 0 12px;
+    background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+    box-shadow: var(--sidebar-chip-shadow);
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--sidebar-ink-strong);
+    transition: color 120ms, background-color 120ms, filter 120ms;
+  }
+  .ui-raised:hover:not(:disabled) {
+    background-image: linear-gradient(180deg, var(--titlebar-chip-hover-top), var(--titlebar-chip-hover-bottom));
+  }
+  .ui-raised:active:not(:disabled) {
+    background-image: none;
+    background-color: var(--titlebar-pressed-bg);
+    box-shadow: var(--titlebar-pressed-shadow);
+  }
+  .ui-raised:disabled { cursor: not-allowed; opacity: 0.45; }
+  .ui-raised[data-size="sm"] { height: 24px; padding: 0 9px; font-size: 12px; }
+  /* The accent call to action: same geometry, accent fill. */
+  .ui-raised[data-tone="accent"] {
+    background-image: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 92%, var(--ui-lift)), var(--color-accent));
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    color: var(--color-accent-fg);
+  }
+  .ui-raised[data-tone="accent"]:hover:not(:disabled) {
+    background-image: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 85%, var(--ui-lift)), color-mix(in srgb, var(--color-accent) 94%, var(--ui-lift)));
+  }
+  .ui-raised[data-tone="danger"] {
+    background-image: linear-gradient(180deg, color-mix(in srgb, var(--color-err) 92%, var(--ui-lift)), var(--color-err));
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    color: var(--ui-danger-ink);
+  }
+
+  /* A bare icon button: 28px in a toolbar, 24px in a section header. */
+  .ui-icon-btn {
+    display: flex;
+    height: 28px;
+    width: 28px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: var(--sidebar-icon);
+    transition: color 120ms, background-color 120ms;
+  }
+  .ui-icon-btn:hover,
+  .ui-icon-btn[data-state="open"],
+  .ui-icon-btn[aria-expanded="true"] {
+    background-color: var(--sidebar-row-hover);
+    color: var(--sidebar-btn-hover-ink);
+  }
+  .ui-icon-btn[data-size="sm"] { height: 24px; width: 24px; border-radius: 5px; }
+  .ui-icon-btn[data-active="true"] { color: var(--color-accent); }
+  .ui-icon-btn:disabled { cursor: default; opacity: 0.4; background-color: transparent; }
+
+  /* The sunk field: an input with a leading glyph and an optional keycap.
+     The wrapper carries the material so the glyph and keycap sit inside it. */
+  .ui-field {
+    display: flex;
+    height: 30px;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--sidebar-input-border);
+    border-radius: 7px;
+    padding: 0 6px 0 10px;
+    background-color: var(--sidebar-input-bg);
+    box-shadow: var(--sidebar-input-shadow);
+    color: var(--sidebar-placeholder);
+    transition: border-color 120ms;
+  }
+  .ui-field:focus-within { border-color: color-mix(in srgb, var(--color-accent) 50%, var(--sidebar-input-border)); }
+  .ui-field[data-size="sm"] { height: 26px; border-radius: 6px; gap: 6px; padding: 0 5px 0 8px; }
+  .ui-field > input,
+  .ui-field > textarea {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    color: var(--sidebar-input-ink);
+  }
+  .ui-field[data-size="sm"] > input { font-size: 12px; }
+  .ui-field > input::placeholder,
+  .ui-field > textarea::placeholder { color: var(--sidebar-placeholder); opacity: 1; }
+  /* A sunk input with no glyph: the same material on the element itself. */
+  .ui-input {
+    min-width: 0;
+    border: 1px solid var(--sidebar-input-border);
+    border-radius: 7px;
+    padding: 0 10px;
+    background-color: var(--sidebar-input-bg);
+    box-shadow: var(--sidebar-input-shadow);
+    font-size: 13px;
+    color: var(--sidebar-input-ink);
+    outline: none;
+    transition: border-color 120ms;
+  }
+  input.ui-input, select.ui-input { height: 30px; }
+  textarea.ui-input { padding: 6px 10px; line-height: 1.45; }
+  .ui-input:focus { border-color: color-mix(in srgb, var(--color-accent) 50%, var(--sidebar-input-border)); }
+  .ui-input::placeholder { color: var(--sidebar-placeholder); opacity: 1; }
+  .ui-input:disabled { opacity: 0.55; }
+  .ui-keycap {
+    flex-shrink: 0;
+    border: 1px solid var(--sidebar-keycap-border);
+    border-radius: 4px;
+    padding: 0 5px;
+    background-color: var(--sidebar-keycap-bg);
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 17px;
+    color: var(--sidebar-placeholder);
+    white-space: nowrap;
+  }
+
+  /* Section eyebrow: the uppercase label over a list. */
+  .ui-eyebrow {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--sidebar-eyebrow);
+  }
+  .ui-section-head {
+    display: flex;
+    height: 28px;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px 0 14px;
+  }
+
+  /* Counts. The neutral pill sits after an eyebrow; the accent one asks for
+     attention (unread changes on a tab). */
+  .ui-count {
+    display: inline-flex;
+    height: 16px;
+    min-width: 16px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    padding: 0 6px;
+    background-color: var(--sidebar-count-bg);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--sidebar-count-ink);
+  }
+  .ui-count[data-tone="accent"] {
+    padding: 0 5px;
+    background-color: var(--color-accent);
+    box-shadow: var(--ui-badge-glow);
+    color: var(--ui-badge-ink);
+  }
+  /* A notification badge pinned to an icon's top-right corner: small, ringed
+     in the surface behind it so it reads as a mark on the icon. */
+  .ui-notif {
+    pointer-events: none;
+    position: absolute;
+    top: -3px;
+    right: -2px;
+    display: inline-flex;
+    height: 13px;
+    min-width: 13px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    padding: 0 3px;
+    background-color: var(--color-accent);
+    box-shadow: 0 0 0 2px var(--sidebar-well-bg);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--ui-badge-ink);
+  }
+  .ui-count[data-tone="ok"] {
+    padding: 0 5px;
+    background-color: var(--sidebar-settled);
+    color: var(--ui-badge-ink);
+  }
+
+  /* A list row: 28px, 6px radius, hover in 120ms, accent selection. */
+  .ui-row {
+    position: relative;
+    display: flex;
+    height: 28px;
+    min-width: 0;
+    align-items: center;
+    gap: 7px;
+    border-radius: 6px;
+    padding: 0 4px 0 8px;
+    font-size: 13px;
+    color: var(--sidebar-ink);
+    text-align: left;
+    transition: background-color 120ms;
+  }
+  .ui-row:hover,
+  .ui-row[data-state="open"] { background-color: var(--sidebar-row-hover); }
+  .ui-row[data-selected="true"] {
+    background-image: linear-gradient(90deg, var(--sidebar-sel-from), var(--sidebar-sel-to));
+    box-shadow: inset 2px 0 0 var(--sidebar-sel-bar), inset 0 1px 0 var(--sidebar-sel-highlight);
+    color: var(--sidebar-sel-ink);
+  }
+  .ui-row[data-selected="true"]:hover {
+    background-image: linear-gradient(90deg, var(--ui-sel-hover-from), var(--ui-sel-hover-to));
+  }
+  .ui-row[data-selected="true"] .ui-row-name { font-weight: 600; color: var(--sidebar-sel-ink); }
+  .ui-row-name {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ui-row-meta {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11.5px;
+    color: var(--sidebar-meta);
+  }
+  /* The tree's indent guide: one per ancestor level, through the row. */
+  .ui-guide {
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: var(--sidebar-guide);
+  }
+  .ui-chevron {
+    flex-shrink: 0;
+    color: var(--sidebar-chevron);
+    transition: transform 120ms;
+  }
+  .ui-chevron[data-open="true"] { transform: rotate(90deg); }
+  /* The git status letter at a row's end. */
+  .ui-status-letter {
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    font-family: "SF Mono", Menlo, var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+  }
+  /* Row actions that appear on hover, in a small tray. */
+  .ui-tray {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    border: 1px solid var(--sidebar-tray-border);
+    border-radius: 5px;
+    padding: 1px;
+    background-color: var(--sidebar-tray-bg);
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+    transition: opacity 120ms;
+  }
+  .ui-row:hover .ui-tray,
+  .ui-row:focus-within .ui-tray,
+  .ui-row[data-state="open"] .ui-tray,
+  .ui-tray:has([data-state="open"]) { opacity: 1; }
+
+  /* A thin overlay scrollbar for any list in the family. */
+  .ui-scroll {
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: var(--sidebar-scroll-thumb) transparent;
+  }
+  .ui-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+  .ui-scroll::-webkit-scrollbar-track { background: transparent; }
+  .ui-scroll::-webkit-scrollbar-corner { background: transparent; }
+  .ui-scroll::-webkit-scrollbar-thumb {
+    min-height: 36px;
+    border: 3px solid transparent;
+    border-radius: 6px;
+    background: var(--sidebar-scroll-thumb);
+    background-clip: padding-box;
+  }
+  .ui-scroll:hover::-webkit-scrollbar-thumb { background-color: var(--sidebar-scroll-thumb-idle-hover); }
+  .ui-scroll::-webkit-scrollbar-thumb:hover { background-color: var(--sidebar-scroll-thumb-hover); }
+  .ui-scroll::-webkit-scrollbar-thumb:active { background-color: var(--sidebar-scroll-thumb-active); }
+
+  /* The refresh glyph: one turn per click, a steady spin while in flight. */
+  .ui-refresh-glyph { transition: transform 500ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+  .ui-refresh-glyph[data-busy="true"] { animation: spin 0.9s linear infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .ui-refresh-glyph { transition: none; }
+    .ui-refresh-glyph[data-busy="true"] { animation: none; }
+  }
+
+  /* Popovers, menus and dialogs in the family: the sidebar's popover. */
+  .ui-popover {
+    border: 1px solid var(--sidebar-popover-border);
+    border-radius: 10px;
+    background-color: var(--sidebar-popover-bg);
+    box-shadow: var(--sidebar-popover-shadow);
+    color: var(--sidebar-ink-strong);
+  }
+  /* rp:files */
+  /* The All files tab (FileTree.tsx). Filter: the glyph and count pick up
+     the accent while a query is live, and the field rings softly on focus. */
+  .rp-filter:focus-within {
+    box-shadow: var(--sidebar-input-shadow), 0 0 0 3px color-mix(in srgb, var(--color-accent) 14%, transparent);
+  }
+  .rp-filter-glyph {
+    flex-shrink: 0;
+    transition: color 120ms;
+  }
+  .rp-filter:focus-within .rp-filter-glyph { color: var(--sidebar-muted); }
+  .rp-filter[data-active="true"] .rp-filter-glyph { color: var(--color-accent); }
+  .rp-filter-count {
+    display: inline-flex;
+    height: 17px;
+    min-width: 17px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    padding: 0 6px;
+    background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in srgb, var(--color-accent) 75%, var(--sidebar-ink-strong));
+  }
+  .rp-filter-count[data-empty="true"] {
+    background-color: var(--sidebar-count-bg);
+    color: var(--sidebar-count-ink);
+  }
+  .rp-filter-clear {
+    display: flex;
+    height: 18px;
+    width: 18px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    background-color: var(--sidebar-count-bg);
+    color: var(--sidebar-muted);
+    transition: color 120ms, background-color 120ms;
+  }
+  .rp-filter-clear:hover {
+    background-color: var(--sidebar-tray-hover);
+    color: var(--sidebar-btn-hover-ink);
+  }
+
+  /* Root header: the eyebrow, then New file / New folder / Collapse in a
+     small recessed well whose buttons rise into chips on hover. */
+  .rp-files-head { margin-top: 2px; padding-right: 10px; }
+  .rp-files-tools {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 1px;
+    padding: 2px;
+    border-radius: 7px;
+    background-color: var(--sidebar-well-bg);
+    box-shadow: var(--sidebar-well-shadow);
+  }
+  .rp-files-tools .ui-icon-btn[data-size="sm"] { height: 22px; width: 24px; }
+  .rp-files-tools .ui-icon-btn:hover {
+    background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+    box-shadow: var(--sidebar-chip-shadow);
+  }
+
+  /* The tree's scroll area: a shadow slides in under the header once the
+     list scrolls. The cover scrolls with the content and hides it at rest. */
+  .rp-tree-scroll {
+    background:
+      linear-gradient(var(--sidebar-bg-top) 40%, transparent) local,
+      linear-gradient(var(--sidebar-well-bg), transparent) scroll;
+    background-repeat: no-repeat;
+    background-size: 100% 18px, 100% 10px;
+  }
+
+  /* Pinned folders: a recessed tray above the tree, so it reads as a
+     shortcut shelf rather than more of the tree. */
+  .rp-pins {
+    margin: 4px 4px 8px 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background-color: color-mix(in srgb, var(--sidebar-well-bg) 70%, transparent);
+    box-shadow: var(--sidebar-well-shadow);
+  }
+  .rp-pins-head {
+    display: flex;
+    height: 26px;
+    width: 100%;
+    align-items: center;
+    gap: 7px;
+    border-radius: 6px;
+    padding: 0 8px 0 8px;
+    text-align: left;
+    transition: background-color 120ms;
+  }
+  .rp-pins-head:hover { background-color: var(--sidebar-row-hover); }
+  .rp-pins-head .ui-eyebrow { font-size: 10.5px; }
+  .rp-pin-row { height: 26px; padding-left: 25px; }
+  .rp-pin-name {
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+    color: var(--sidebar-ink-strong);
+  }
+  .rp-pin-toggle {
+    display: flex;
+    height: 20px;
+    width: 20px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--color-accent);
+    transition: color 120ms, background-color 120ms;
+  }
+  .rp-pin-toggle:hover {
+    background-color: var(--sidebar-tray-hover);
+    color: var(--sidebar-btn-hover-ink);
+  }
+
+  /* Tree rows. The guide of the folder holding the selection lights up,
+     names and letters take their git colour from --rp-git, and tooling
+     folders sit back a step. */
+  .ui-guide[data-active] { background-color: color-mix(in srgb, var(--color-accent) 55%, var(--sidebar-guide)); }
+  .rp-tree-row:not([data-selected="true"])[data-git] .ui-row-name { color: var(--rp-git); }
+  .rp-tree-row:not([data-selected="true"])[data-quiet] .ui-row-name { color: var(--sidebar-muted); }
+  .rp-tree-row[data-quiet] .file-icon { opacity: 0.6; }
+  .rp-tree-row:not([data-selected="true"]):hover > svg:first-of-type { color: var(--sidebar-ink); }
+  .rp-git-letter {
+    display: inline-flex;
+    height: 16px;
+    width: 16px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    background-color: color-mix(in srgb, var(--rp-git) 15%, transparent);
+    font-size: 10px;
+    line-height: 1;
+    color: var(--rp-git);
+  }
+  .rp-tree-row[data-selected="true"] .rp-git-letter {
+    background-color: color-mix(in srgb, var(--sidebar-sel-ink) 14%, transparent);
+    color: var(--sidebar-sel-ink);
+  }
+  .rp-dirty-dot {
+    margin-right: 5px;
+    height: 6px;
+    width: 6px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    background-color: var(--ui-git-modified);
+    box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--ui-git-modified) 18%, transparent);
+  }
+  .rp-row-pin {
+    margin-right: 2px;
+    flex-shrink: 0;
+    color: var(--color-accent);
+  }
+  .rp-tree-row[data-selected="true"] .rp-row-pin { color: var(--sidebar-sel-ink); }
+  .rp-match {
+    border-radius: 3px;
+    background-color: color-mix(in srgb, var(--color-accent) 24%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent);
+    font-weight: 600;
+    color: inherit;
+  }
+  .rp-tree-row[data-selected="true"] .rp-match { background-color: color-mix(in srgb, var(--sidebar-sel-ink) 18%, transparent); box-shadow: none; }
+
+  /* Keyboard focus: a hairline ring inside the row, kept beside the
+     selection's bar instead of replacing it. */
+  .rp-tree-row:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--sidebar-focus-ring);
+  }
+  .rp-tree-row[data-selected="true"]:focus-visible {
+    box-shadow: inset 2px 0 0 var(--sidebar-sel-bar), inset 0 0 0 1px var(--sidebar-focus-ring), inset 0 1px 0 var(--sidebar-sel-highlight);
+  }
+
+  /* Reveal-in-tree: an accent wash that blooms and fades on its own layer. */
+  .rp-tree-row[data-revealed]::after {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background-color: color-mix(in srgb, var(--color-accent) 14%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent);
+    content: "";
+    animation: rp-reveal 1600ms ease-out both;
+  }
+  @keyframes rp-reveal {
+    0% { opacity: 0; }
+    12% { opacity: 1; }
+    65% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  /* Inline create and rename: a sunk field with an accent ring. */
+  .rp-edit-row { background-color: color-mix(in srgb, var(--color-accent) 6%, transparent); }
+  .rp-inline-input {
+    height: 22px;
+    border: 1px solid color-mix(in srgb, var(--color-accent) 70%, var(--sidebar-input-border));
+    border-radius: 5px;
+    padding: 0 6px;
+    background-color: var(--sidebar-input-bg);
+    box-shadow: var(--sidebar-input-shadow), 0 0 0 3px color-mix(in srgb, var(--color-accent) 16%, transparent);
+    font-size: 13px;
+    color: var(--sidebar-input-ink);
+    outline: none;
+  }
+  .rp-inline-input::placeholder { color: var(--sidebar-placeholder); opacity: 1; }
+  .rp-create-hint {
+    display: inline-flex;
+    height: 18px;
+    align-items: center;
+    margin-right: 2px;
+    padding: 0 4px;
+  }
+
+  /* Notes in place of a folder's rows: empty, or still loading. */
+  .rp-tree-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding-left: 17px;
+    font-size: 12px;
+    font-style: italic;
+    color: var(--sidebar-placeholder);
+  }
+  .rp-spinner {
+    height: 10px;
+    width: 10px;
+    border: 1.5px solid color-mix(in srgb, var(--sidebar-placeholder) 45%, transparent);
+    border-top-color: var(--color-accent);
+    border-radius: 5px;
+    animation: rp-spin 0.8s linear infinite;
+  }
+  @keyframes rp-spin { to { transform: rotate(360deg); } }
+
+  /* A folder whose read failed: an inline error that retries on click. */
+  .rp-dir-failed {
+    white-space: normal;
+    display: flex;
+    cursor: pointer;
+    align-items: flex-start;
+    gap: 7px;
+    margin: 2px 4px 2px 0;
+    border: 1px solid color-mix(in srgb, var(--color-err) 28%, transparent);
+    border-radius: 6px;
+    padding: 5px 8px;
+    background-color: color-mix(in srgb, var(--color-err) 7%, transparent);
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-err);
+    transition: background-color 120ms;
+  }
+  .rp-dir-failed:hover { background-color: color-mix(in srgb, var(--color-err) 12%, transparent); }
+  .rp-dir-failed-glyph { margin-top: 1.5px; flex-shrink: 0; }
+  .rp-retry {
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--color-err) 45%, transparent);
+    text-underline-offset: 2px;
+  }
+  .rp-dir-failed-detail {
+    margin-top: 2px;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    word-break: break-all;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 14px;
+    color: var(--sidebar-meta);
+  }
+
+  /* The root itself could not be read. */
+  .rp-tree-error {
+    white-space: normal;
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin: 6px 6px 0 2px;
+    border: 1px solid color-mix(in srgb, var(--color-err) 30%, transparent);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background-color: color-mix(in srgb, var(--color-err) 8%, transparent);
+  }
+  .rp-tree-error-glyph { margin-top: 1px; flex-shrink: 0; color: var(--color-err); }
+  .rp-tree-error-title { font-size: 12.5px; font-weight: 600; line-height: 17px; color: var(--color-err); }
+  .rp-tree-error-detail {
+    margin-top: 4px;
+    word-break: break-all;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 15px;
+    color: var(--sidebar-meta);
+  }
+
+  /* Empty task and no matches: a centred state with a glyph in a well. */
+  .rp-tree-state {
+    white-space: normal;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 36px 16px 16px;
+    text-align: center;
+  }
+  .rp-tree-state-well {
+    display: flex;
+    height: 40px;
+    width: 40px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background-color: var(--sidebar-well-bg);
+    box-shadow: var(--sidebar-well-shadow);
+    color: var(--sidebar-icon);
+  }
+  .rp-tree-state-title { font-size: 13px; font-weight: 500; color: var(--sidebar-muted); }
+  .rp-tree-state-query {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: -4px;
+    border: 1px solid var(--sidebar-keycap-border);
+    border-radius: 5px;
+    padding: 1px 7px;
+    background-color: var(--sidebar-keycap-bg);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--sidebar-ink);
+  }
+
+  /* First read of the root: rows of placeholder bars that breathe. */
+  .rp-skeleton { padding-top: 2px; }
+  .rp-skeleton-row {
+    display: flex;
+    height: 28px;
+    align-items: center;
+    gap: 9px;
+    padding-left: 25px;
+    animation: rp-breathe 1.4s ease-in-out infinite;
+  }
+  .rp-skeleton-icon,
+  .rp-skeleton-bar {
+    height: 10px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    background-color: var(--sidebar-count-bg);
+  }
+  .rp-skeleton-icon { width: 14px; border-radius: 4px; }
+  @keyframes rp-breathe {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rp-tree-row[data-revealed]::after { animation: none; }
+    .rp-spinner,
+    .rp-skeleton-row { animation: none; }
+  }
+
+  /* rp:git */
+  /* The view switch spans its row. The active view wears its glyph in the
+     accent and the idle ones are words only, which is what lets three
+     labels and a glyph share a 280px panel. The row is the size container
+     rather than the well, because a well under size containment has no
+     content width to hold out against History's scope picker with. */
+  .rp-git-viewbar { container-type: inline-size; }
+  .rp-git-views {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .rp-git-views[data-view="history"] { flex: 1 0 auto; }
+  .rp-git-views > .ui-seg {
+    flex: 1 1 auto;
+    height: 24px;
+    gap: 5px;
+    padding: 0 7px;
+    font-size: 11.5px;
+  }
+  .rp-git-view-glyph {
+    display: none;
+    flex-shrink: 0;
+    color: var(--color-accent);
+  }
+  @container (min-width: 230px) {
+    .rp-git-views:not([data-view="history"]) > .ui-seg[data-active="true"] > .rp-git-view-glyph { display: block; }
+  }
+  @container (min-width: 330px) {
+    .rp-git-views[data-view="history"] > .ui-seg[data-active="true"] > .rp-git-view-glyph { display: block; }
+  }
+
+  .rp-git-branch-glyph { color: var(--color-accent); }
+
+  /* The PR card: a sunk well that takes its state's colour as a spine and a
+     wash, the same left bar the selected row uses. */
+  .rp-git-pr {
+    --rp-pr-tone: var(--sidebar-faint);
+    position: relative;
+    margin: 8px 10px 0;
+    flex-shrink: 0;
+    border-radius: 8px;
+    padding: 7px 6px 8px 12px;
+    background-color: var(--sidebar-well-bg);
+    background-image: linear-gradient(90deg, color-mix(in srgb, var(--rp-pr-tone) 13%, transparent), transparent 70%);
+    box-shadow: inset 2px 0 0 var(--rp-pr-tone), var(--sidebar-well-shadow);
+  }
+  .rp-git-pr-state {
+    display: inline-flex;
+    height: 18px;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 4px;
+    border-radius: 9px;
+    padding: 0 7px 0 6px;
+    background-color: color-mix(in srgb, var(--rp-pr-tone) 17%, transparent);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--rp-pr-tone);
+  }
+  .rp-git-pr-signal {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 4px;
+    font-size: 11.5px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .rp-git-pr-title {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: baseline;
+    gap: 6px;
+    margin-top: 6px;
+    text-align: left;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--sidebar-ink-strong);
+  }
+  .rp-git-pr-title:hover .rp-git-pr-title-text { text-decoration: underline; text-underline-offset: 2px; }
+  .rp-git-pr-num {
+    flex-shrink: 0;
+    font-family: "SF Mono", Menlo, var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--sidebar-faint);
+  }
+  .rp-git-pr-code {
+    border-radius: 4px;
+    padding: 0 4px;
+    background-color: var(--sidebar-keycap-bg);
+    box-shadow: inset 0 0 0 1px var(--sidebar-keycap-border);
+    font-family: "SF Mono", Menlo, var(--font-mono);
+    font-size: 11px;
+    color: var(--sidebar-ink-strong);
+  }
+
+  /* Pane headers: eyebrow, counts, and the bulk action as a quiet button
+     that carries its own direction glyph. */
+  .rp-git-pane-head {
+    display: flex;
+    height: 30px;
+    flex-shrink: 0;
+    align-items: center;
+    padding-right: 8px;
+  }
+  .rp-git-head-btn {
+    display: inline-flex;
+    height: 22px;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 4px;
+    border-radius: 5px;
+    padding: 0 7px 0 5px;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--sidebar-muted);
+    transition: color 120ms, background-color 120ms;
+  }
+  .rp-git-head-btn:hover {
+    background-color: var(--sidebar-row-hover);
+    color: var(--sidebar-btn-hover-ink);
+  }
+
+  /* The split between the panes: a hairline, and a grip that shows where to
+     take hold once the pointer finds it. */
+  .rp-git-split-handle::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 50%;
+    height: 3px;
+    width: 28px;
+    margin-left: -14px;
+    border-radius: 2px;
+    background-color: var(--sidebar-scroll-thumb-hover);
+    opacity: 0;
+    transition: opacity 120ms;
+  }
+  .rp-git-split-handle:hover::after { opacity: 1; }
+
+  /* Changed-file rows. The tray floats over the row's end rather than
+     holding a column open, so names and churn keep the full width at rest
+     and every row's columns line up whether it has actions or not. It stays
+     up on the selected row, which keeps its stage button the way Fork does. */
+  .rp-git-row .ui-tray {
+    position: absolute;
+    top: 50%;
+    right: 28px;
+    gap: 1px;
+    transform: translate3d(0, -50%, 0);
+  }
+  .rp-git-row[data-selected="true"] .ui-tray { opacity: 1; }
+  .rp-git-row[data-kind="dir"] .ui-tray { right: 6px; }
+  .rp-git-row .ui-row-meta { flex-shrink: 1; max-width: 45%; }
+  .rp-git-row[data-selected="true"] .ui-row-meta { color: var(--sidebar-sel-meta); }
+  .rp-git-row[data-viewed="true"] .ui-row-name {
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in srgb, var(--sidebar-faint) 60%, transparent);
+  }
+  .rp-git-row[data-viewed="true"] .file-icon { opacity: 0.5; }
+  .rp-git-tray-btn[aria-pressed="true"] { color: var(--color-accent); }
+  .rp-git-chip {
+    display: inline-flex;
+    height: 16px;
+    min-width: 16px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    padding: 0 3px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 1px 1px rgba(0, 0, 0, 0.28);
+    font-family: "SF Mono", Menlo, var(--font-mono);
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .rp-git-dir-count {
+    flex-shrink: 0;
+    padding: 0 4px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--sidebar-faint);
+  }
+  .rp-git-dirhdr {
+    display: flex;
+    height: 28px;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 0 8px 7px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--sidebar-eyebrow);
+  }
+  .rp-git-dirhdr::after {
+    content: "";
+    height: 1px;
+    min-width: 12px;
+    flex: 1;
+    margin-bottom: 5px;
+    background-color: var(--sidebar-guide);
+  }
+  .rp-git-empty-line {
+    display: flex;
+    height: 28px;
+    align-items: center;
+    padding-left: 33px;
+    font-size: 12px;
+    font-style: italic;
+    color: var(--sidebar-faint);
+  }
+
+  /* A whole view with nothing in it: a sunk medallion, a line that says
+     why, and the one action that still makes sense. */
+  .rp-git-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 36px 20px 20px;
+    text-align: center;
+  }
+  .rp-git-medallion {
+    display: flex;
+    height: 44px;
+    width: 44px;
+    margin-bottom: 6px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: var(--sidebar-well-bg);
+    box-shadow: var(--sidebar-well-shadow), 0 0 0 5px color-mix(in srgb, var(--rp-medallion-tone, var(--sidebar-faint)) 9%, transparent);
+    color: var(--rp-medallion-tone, var(--sidebar-icon));
+  }
+  .rp-git-empty-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sidebar-ink-strong);
+  }
+  .rp-git-empty-body {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--sidebar-muted);
+  }
+  .rp-git-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    font-size: 12px;
+    color: var(--sidebar-faint);
+  }
+
+  /* The commit form. The subject's length shows once there is one, and
+     turns to the accent past the 72 columns a log line wraps at. */
+  .rp-git-subject-len {
+    flex-shrink: 0;
+    padding-right: 2px;
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    color: var(--sidebar-faint);
+  }
+  .rp-git-subject-len[data-over="true"] { color: var(--color-accent); }
+  .rp-git-commit[data-tone="accent"]:disabled {
+    background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+    box-shadow: var(--sidebar-chip-shadow);
+    color: var(--sidebar-faint);
+    opacity: 1;
+  }
+  .rp-git-commit-caret { border-left: 1px solid rgba(0, 0, 0, 0.18); }
+  .rp-git-commit-caret:disabled { border-left-color: var(--sidebar-divider); }
+
+  /* Compare: the base is raised because it is a choice, the branch is sunk
+     because it is a fact. */
+  .rp-git-compare-bar {
+    display: flex;
+    min-height: 38px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 6px;
+    row-gap: 4px;
+    border-bottom: 1px solid var(--sidebar-divider);
+    padding: 6px 10px;
+    font-size: 11.5px;
+  }
+  .rp-git-target {
+    display: block;
+    height: 24px;
+    min-width: 0;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 6px;
+    padding: 0 8px;
+    background-color: var(--sidebar-well-bg);
+    box-shadow: var(--sidebar-well-shadow);
+    font-family: "SF Mono", Menlo, var(--font-mono);
+    line-height: 24px;
+    color: var(--sidebar-ink-strong);
+  }
+  .rp-git-summary {
+    position: relative;
+    display: flex;
+    height: 30px;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px 0 14px;
+    font-size: 11.5px;
+    color: var(--sidebar-muted);
+  }
+  .rp-git-stat {
+    display: inline-flex;
+    flex-shrink: 0;
+    gap: 2px;
+  }
+  .rp-git-stat > span {
+    height: 7px;
+    width: 7px;
+    border-radius: 2px;
+    background-color: var(--sidebar-count-bg);
+  }
+  .rp-git-stat > span[data-kind="add"] { background-color: var(--ui-git-added); }
+  .rp-git-stat > span[data-kind="del"] { background-color: var(--ui-git-deleted); }
+  .rp-git-churn-add { color: var(--ui-git-added); }
+  .rp-git-churn-del { color: var(--ui-git-deleted); }
+  .rp-git-progress {
+    position: absolute;
+    right: 10px;
+    bottom: 0;
+    left: 14px;
+    height: 2px;
+    overflow: hidden;
+    border-radius: 1px;
+    background-color: var(--sidebar-guide);
+  }
+  .rp-git-progress > span {
+    position: absolute;
+    inset: 0;
+    background-color: var(--color-accent);
+    transform-origin: left center;
+    transition: transform 200ms ease-out;
+  }
+
+  /* History. HEAD's dot is filled, the expanded commit opens into a well. */
+  .rp-git-ref {
+    display: flex;
+    min-width: 0;
+    flex-shrink: 1;
+    align-items: center;
+    gap: 3px;
+    border-radius: 4px;
+    padding: 0 5px;
+    background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent);
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 16px;
+    color: var(--color-accent);
+  }
+  .rp-git-ref[data-kind="tag"] {
+    background-color: color-mix(in srgb, var(--color-warn) 14%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-warn) 20%, transparent);
+    color: var(--color-warn);
+  }
+  .rp-git-ref-more {
+    flex-shrink: 0;
+    border-radius: 4px;
+    padding: 0 4px;
+    background-color: var(--sidebar-count-bg);
+    font-size: 10.5px;
+    line-height: 16px;
+    color: var(--sidebar-count-ink);
+  }
+  .rp-git-age {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--sidebar-faint);
+  }
+  .ui-row[data-selected="true"] .rp-git-age { color: var(--sidebar-sel-meta); }
+  .rp-git-detail {
+    margin: 2px 4px 6px 0;
+    border-radius: 8px;
+    padding: 4px 4px 5px;
+    background-color: var(--sidebar-well-bg);
+    box-shadow: var(--sidebar-well-shadow);
+  }
+  .rp-git-detail-meta {
+    display: flex;
+    height: 26px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px 0 2px;
+    font-size: 11px;
+    color: var(--sidebar-muted);
+  }
+  .rp-git-sha {
+    display: inline-flex;
+    height: 18px;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--sidebar-keycap-border);
+    border-radius: 4px;
+    padding: 0 5px;
+    background-color: var(--sidebar-keycap-bg);
+    font-family: "SF Mono", Menlo, var(--font-mono);
+    font-size: 10.5px;
+    color: var(--sidebar-ink);
+    transition: color 120ms, background-color 120ms;
+  }
+  .rp-git-sha:hover {
+    background-color: var(--sidebar-row-hover);
+    color: var(--sidebar-ink-strong);
+  }
+  .rp-git-avatar {
+    display: inline-flex;
+    height: 16px;
+    width: 16px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: color-mix(in srgb, var(--rp-avatar-tone) 24%, transparent);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    text-transform: uppercase;
+    color: var(--rp-avatar-tone);
+  }
+  .rp-git-hfile {
+    display: flex;
+    height: 24px;
+    width: 100%;
+    align-items: center;
+    gap: 7px;
+    border-radius: 5px;
+    padding: 0 6px 0 4px;
+    text-align: left;
+    font-size: 12px;
+    color: var(--sidebar-ink);
+    transition: background-color 120ms;
+  }
+  .rp-git-hfile:hover { background-color: var(--sidebar-row-hover); }
+  .rp-git-load-more {
+    display: flex;
+    height: 30px;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 4px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--sidebar-muted);
+    transition: color 120ms, background-color 120ms;
+  }
+  .rp-git-load-more:hover:not(:disabled) {
+    background-color: var(--sidebar-row-hover);
+    color: var(--sidebar-ink-strong);
+  }
+  .rp-git-load-more:disabled { opacity: 0.5; }
+  .rp-git-scope {
+    display: flex;
+    height: 24px;
+    min-width: 0;
+    max-width: 140px;
+    flex-shrink: 1;
+    align-items: center;
+    gap: 4px;
+    border-radius: 6px;
+    padding: 0 6px 0 8px;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--sidebar-muted);
+    transition: color 120ms, background-color 120ms;
+  }
+  .rp-git-scope:hover,
+  .rp-git-scope[data-state="open"] {
+    background-color: var(--sidebar-row-hover);
+    color: var(--sidebar-ink-strong);
+  }
+  .rp-git-scope[data-scoped="true"] {
+    background-color: color-mix(in srgb, var(--color-accent) 15%, transparent);
+    color: var(--color-accent);
+  }
+  .rp-git-card {
+    border: 1px solid var(--sidebar-popover-border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background-color: var(--sidebar-popover-bg);
+    box-shadow: var(--sidebar-popover-shadow);
+    color: var(--sidebar-ink-strong);
+  }
+
+  /* rp:shell */
+  /* The right panel lifts off the main area: a soft shadow cast leftwards and
+     a hairline of light just inside its edge. */
+  .rp-shell {
+    --rp-edge-shadow: -12px 0 28px -20px rgba(0, 0, 0, 0.75);
+    --rp-edge-light: rgba(255, 255, 255, 0.025);
+    box-shadow: inset 0 1px 0 var(--sidebar-top-highlight), inset 1px 0 0 var(--rp-edge-light), var(--rp-edge-shadow);
+  }
+  html.light .rp-shell {
+    --rp-edge-shadow: -12px 0 28px -20px rgba(0, 0, 0, 0.2);
+    --rp-edge-light: rgba(255, 255, 255, 0.6);
+  }
+  .rp-head {
+    background-image: linear-gradient(180deg, var(--sidebar-sheen), transparent);
+  }
+
+  /* One raised thumb slides between the icon segments instead of each
+     segment painting its own chip. */
+  .rp-well { position: relative; }
+  .rp-well-thumb {
+    pointer-events: none;
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    height: 26px;
+    width: 38px;
+    border-radius: 6px;
+    background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+    box-shadow: var(--sidebar-chip-shadow);
+    transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .rp-well-thumb::after {
+    content: "";
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    height: 2px;
+    width: 10px;
+    margin-left: -5px;
+    border-radius: 1px;
+    background-color: var(--color-accent);
+    opacity: 0.85;
+  }
+  .rp-well .rp-tab {
+    position: relative;
+    z-index: 1;
+    color: var(--sidebar-icon);
+  }
+  .rp-well .rp-tab:hover { color: var(--sidebar-ink-strong); }
+  .rp-well .rp-tab[data-active="true"] {
+    background-image: none;
+    box-shadow: none;
+    color: var(--sidebar-icon-active);
+  }
+  .rp-tab > svg { transition: transform 120ms; }
+  .rp-tab:active > svg { transform: scale(0.9); }
+
+  /* The git count: ringed in the well, glowing, and it pops when it changes. */
+  .rp-notif {
+    z-index: 2;
+    box-shadow: 0 0 0 2px var(--sidebar-well-bg), var(--ui-badge-glow);
+    animation: rp-notif-in 240ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+  }
+  @keyframes rp-notif-in {
+    from { opacity: 0; transform: scale(0.4); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .rp-view { animation: rp-view-in 140ms ease-out both; }
+  @keyframes rp-view-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Scratchpad: three scope sections split by a rule. */
+  .rp-scratch-section + .rp-scratch-section {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--sidebar-divider);
+  }
+  .rp-scratch-head {
+    display: flex;
+    height: 28px;
+    flex-shrink: 0;
+    cursor: pointer;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 6px;
+    padding: 0 2px 0 8px;
+    transition: background-color 120ms;
+  }
+  .rp-scratch-head:hover { background-color: var(--sidebar-row-hover); }
+  .rp-scratch-head .ui-eyebrow { transition: color 120ms; }
+  .rp-scratch-head:hover .ui-eyebrow { color: var(--sidebar-muted); }
+  .rp-scratch-note {
+    padding: 6px 8px 8px 25px;
+    font-size: 12px;
+    font-style: italic;
+    white-space: normal;
+    color: var(--sidebar-faint);
+  }
+
+  /* An empty scope: a sunk card with the note glyph on a raised tile. */
+  .rp-note-empty {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    margin: 2px 4px 4px 20px;
+    border-radius: 8px;
+    padding: 9px 10px;
+    background-color: var(--sidebar-well-bg);
+    box-shadow: var(--sidebar-well-shadow);
+    white-space: normal;
+  }
+  .rp-note-empty-glyph {
+    display: flex;
+    height: 28px;
+    width: 28px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+    box-shadow: var(--sidebar-chip-shadow);
+    color: var(--sidebar-icon);
+  }
+  .rp-note-empty-text {
+    display: flex;
+    min-width: 96px;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .rp-note-empty-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--sidebar-ink-strong);
+  }
+  .rp-note-empty-hint {
+    font-size: 11.5px;
+    line-height: 1.35;
+    color: var(--sidebar-muted);
+  }
+  .rp-note-empty-btn { gap: 5px; padding: 0 9px 0 7px; }
+
+  .rp-ext { color: var(--sidebar-meta); }
+  .ui-row[data-selected="true"] .rp-ext { font-weight: 500; color: var(--sidebar-sel-meta); }
+  .rp-scratch-input {
+    box-shadow: var(--sidebar-input-shadow), 0 0 0 3px color-mix(in srgb, var(--color-accent) 16%, transparent);
+  }
+  .rp-scratch-input::placeholder { color: var(--sidebar-placeholder); }
+
+  /* Footer strip: the chevron turns over rather than swapping icons, and a
+     state label says whether spotlight is live. */
+  .rp-foot-bar { box-shadow: inset 0 1px 0 var(--sidebar-sheen); }
+  .rp-foot-toggle > svg { transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .rp-foot-toggle[data-open="true"] > svg { transform: rotate(180deg); }
+  .rp-live {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 7px;
+    overflow: hidden;
+    padding-left: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--sidebar-eyebrow);
+  }
+  .rp-live-dot {
+    height: 6px;
+    width: 6px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    background-color: var(--sidebar-faint);
+  }
+  .rp-live-state {
+    border-radius: 4px;
+    padding: 2px 5px;
+    background-color: var(--sidebar-count-bg);
+    font-size: 9.5px;
+    letter-spacing: 0.6px;
+    color: var(--sidebar-count-ink);
+  }
+  .rp-live[data-on="true"] { color: var(--sidebar-ink-strong); }
+  .rp-live[data-on="true"] .rp-live-dot {
+    background-color: var(--color-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent), var(--ui-badge-glow);
+  }
+  .rp-live[data-on="true"] .rp-live-state {
+    background-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
+    color: var(--sidebar-menu-checked-ink);
+  }
+  .rp-stop > svg { color: var(--color-err); }
+  .rp-ftab { cursor: pointer; }
+
+  .rp-empty {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 0 24px;
+    text-align: center;
+    white-space: normal;
+  }
+  .rp-empty-tile {
+    display: flex;
+    height: 40px;
+    width: 40px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background-color: var(--sidebar-well-bg);
+    box-shadow: var(--sidebar-well-shadow);
+    color: var(--sidebar-icon);
+  }
+  .rp-empty-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sidebar-ink-strong);
+  }
+  .rp-empty-hint {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--sidebar-muted);
+  }
+
+  .rp-log {
+    padding: 6px 6px 8px;
+    font-family: "SF Mono", Menlo, var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--sidebar-muted);
+  }
+  .rp-log-waiting {
+    padding: 4px 6px;
+    white-space: normal;
+    color: var(--sidebar-faint);
+  }
+  .rp-log-entry {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+    border-radius: 5px;
+    padding: 3px 6px;
+    transition: background-color 120ms;
+  }
+  .rp-log-entry:hover { background-color: var(--sidebar-row-hover); }
+  .rp-log-entry[data-error="true"] {
+    background-color: color-mix(in srgb, var(--color-err) 9%, transparent);
+    color: var(--color-err);
+  }
+  .rp-log-time {
+    font-variant-numeric: tabular-nums;
+    color: var(--sidebar-faint);
+  }
+  .rp-log-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--sidebar-ink); }
+  .rp-log-entry[data-error="true"] .rp-log-msg { color: inherit; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rp-well-thumb,
+    .rp-foot-toggle > svg { transition: none; }
+    .rp-notif,
+    .rp-view { animation: none; }
+  }
+}
+
 /* ── Left sidebar ("refined tree") ───────────────────────────────────────
    Shell and scroll areas. Rows style themselves with utilities over the
    --sidebar-* tokens; what lives here is what utilities cannot say:
@@ -2042,4 +3595,123 @@ button.titlebar-title[aria-expanded="true"] {
 }
 .titlebar-waiting:hover {
   background-color: var(--sidebar-seg-hover);
+}
+
+/* Main views (Dashboard, History, Board, Scheduled): the sidebar's
+   materials at page scale. A card is a raised sheet, a column is a well. */
+@layer components {
+  .ui-card {
+    border: 1px solid var(--sidebar-card-border);
+    border-radius: 10px;
+    background-color: var(--sidebar-card-bg);
+    box-shadow: inset 0 1px 0 var(--sidebar-top-highlight);
+    transition: background-color 120ms;
+  }
+  .ui-card[data-interactive="true"]:hover {
+    background-image: linear-gradient(var(--sidebar-row-hover), var(--sidebar-row-hover));
+  }
+  .ui-card-head {
+    display: flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: 1px solid var(--sidebar-divider);
+    padding: 0 6px 0 14px;
+  }
+  .ui-card-glyph {
+    display: flex;
+    height: 34px;
+    width: 34px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+    box-shadow: var(--sidebar-chip-shadow);
+    color: var(--sidebar-icon);
+    transition: color 120ms;
+  }
+  .group:hover > .ui-card-glyph { color: var(--color-accent); }
+  /* A Kanban card: the raised chip material, its left edge left free for
+     the column accent the board paints inline. */
+  .ui-board-card {
+    border: 1px solid var(--sidebar-card-border);
+    border-radius: 8px;
+    background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+    box-shadow: var(--sidebar-chip-shadow);
+    color: var(--sidebar-ink-strong);
+  }
+  .ui-board-card:hover {
+    background-image: linear-gradient(180deg, var(--titlebar-chip-hover-top), var(--titlebar-chip-hover-bottom));
+  }
+  /* A view's top bar: the sidebar's surface, one row of controls. */
+  .ui-view-bar {
+    display: flex;
+    min-height: 52px;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--sidebar-border);
+    background-image: linear-gradient(180deg, var(--sidebar-bg-top), var(--sidebar-bg-bottom));
+    box-shadow: inset 0 1px 0 var(--sidebar-top-highlight);
+    padding: 0 24px;
+  }
+  .ui-column {
+    border-radius: 10px;
+    background-color: var(--sidebar-well-bg);
+    box-shadow: var(--sidebar-well-shadow);
+  }
+}
+
+/* The shared primitives (Button, Input, Dialog, Popover, Tooltip, Toaster)
+   in the same materials, so a dialog reads like the sidebar it opened from. */
+@layer components {
+  .ui-btn-secondary {
+    border: 1px solid transparent;
+    background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+    box-shadow: var(--sidebar-chip-shadow);
+    color: var(--sidebar-ink-strong);
+  }
+  .ui-btn-secondary:hover {
+    background-image: linear-gradient(180deg, var(--titlebar-chip-hover-top), var(--titlebar-chip-hover-bottom));
+  }
+  .ui-btn-secondary:active {
+    background-image: none;
+    background-color: var(--titlebar-pressed-bg);
+    box-shadow: var(--titlebar-pressed-shadow);
+  }
+  .ui-btn-primary {
+    border: 1px solid transparent;
+    background-image: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 92%, var(--ui-lift)), var(--color-accent));
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    color: var(--color-accent-fg);
+  }
+  .ui-btn-primary:hover {
+    background-image: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 85%, var(--ui-lift)), color-mix(in srgb, var(--color-accent) 94%, var(--ui-lift)));
+  }
+  .ui-btn-primary:active { filter: brightness(0.94); }
+  .ui-sunk-input {
+    border: 1px solid var(--sidebar-input-border);
+    background-color: var(--sidebar-input-bg);
+    box-shadow: var(--sidebar-input-shadow);
+    color: var(--sidebar-input-ink);
+  }
+  .ui-sunk-input::placeholder { color: var(--sidebar-placeholder); }
+  .ui-sunk-input:focus {
+    border-color: color-mix(in srgb, var(--color-accent) 50%, var(--sidebar-input-border));
+    box-shadow: var(--sidebar-input-shadow), 0 0 0 3px var(--color-accent-soft);
+  }
+  .ui-sheet {
+    border: 1px solid var(--sidebar-popover-border);
+    background-color: var(--sidebar-popover-bg);
+    box-shadow: var(--sidebar-popover-shadow);
+    color: var(--sidebar-ink-strong);
+  }
+  /* The translucent palettes (command, prompt, syntax): the sheet's edge and
+     shadow, with the fill left to the inline see-through mix. */
+  .ui-palette {
+    border: 1px solid var(--sidebar-popover-border);
+    box-shadow: var(--sidebar-popover-shadow);
+    color: var(--sidebar-ink-strong);
+  }
 }

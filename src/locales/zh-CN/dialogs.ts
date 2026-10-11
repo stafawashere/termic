@@ -97,6 +97,7 @@ export default {
       setSyntax: "设置语法…",
       toggleInlineBlame: "切换行内 git blame",
       filterSidebar: "筛选侧边栏任务",
+      filterFiles: "筛选文件",
       clearSidebarFilter: "清除侧边栏筛选",
       toggleWordWrap: "切换自动换行",
       changeTheme: "更换主题…",

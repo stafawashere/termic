@@ -2,18 +2,32 @@
 // - Initial render fetches the task root only.
 // - Clicking a dir expands it and fetches its entries on demand (cached by rel-path).
 // - Clicking a file opens/selects an edit tab in the task.
-// - Indentation reflects depth; chevrons rotate to indicate expansion state.
+// - The filter above it searches the whole task (task_files), not just the
+//   folders that happen to be loaded, and forces every match's folders open
+//   without touching the expanded set, so clearing it restores the tree.
+// - Rows follow the refined family (docs/ui.md "Right panel"): guide lines
+//   per level, folders tinted by role, names coloured by git status.
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight, ChevronDown, Pencil, Trash2, Play, Plus, Minus, Pin, PinOff } from "lucide-react";
-import type { FileEntry } from "@/lib/types";
-import { taskDirList, taskPathRename, taskPathDelete } from "@/lib/ipc";
+import { Pencil, Trash2, Play, Plus, Minus, Pin, PinOff, X } from "lucide-react";
+import type { FileEntry, GitStatus } from "@/lib/types";
+import { taskDirList, taskPathRename, taskPathDelete, taskPathCreate, taskFiles } from "@/lib/ipc";
 import { useApp } from "@/store/app";
 import { useUI } from "@/store/ui";
 import { usePinnedFolders, EMPTY_PINS } from "@/store/pinnedFolders";
 import { cn } from "@/lib/utils";
 import { fileIconUrl, folderIconUrl } from "@/lib/explorer/iconResolver";
+import {
+  activeGuideLevel, filteredListing, gitMarkColor, isQuietEntry, nameMatch, treeGitMarks, type TreeGitMark,
+} from "@/lib/explorer/treeLook";
+import { bindingText } from "@/lib/shortcuts";
+import { usePrefs } from "@/store/prefs";
+import { Tip } from "@/components/ui/Tooltip";
+import { TreeChevron, DotsHorizontalGlyph } from "@/components/sidebar/sidebarIcons";
+import {
+  FilePlusGlyph, NewFolderGlyph, CollapseInGlyph, PinGlyph, MagnifierGlyph, ReturnKeyGlyph, AlertGlyph, EmptyFolderGlyph,
+} from "./panelIcons";
 import { ROOT, sameChildren, mergeReload, dirsNeedingLoad, without, withoutKey } from "@/lib/explorer/dirCache";
 import { explainDirError } from "@/lib/explorer/dirError";
 import { ContextMenuRoot, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from "@/components/ui/ContextMenu";
@@ -34,7 +48,20 @@ interface Props {
    *  symlink. Agent-settle reloads bump `reloadToken` but not this, so they
    *  skip the heal. */
   refreshToken?: number;
+  /** The Git tab's status poll, for the marks on changed rows. */
+  gitStatus?: GitStatus | null;
+  /** The eyebrow over the tree: the project's name. */
+  rootLabel?: string;
 }
+
+/** A pending New file / New folder row: where it goes and what it makes. */
+interface Creating {
+  parent: string;
+  isDir: boolean;
+}
+
+const ROW_STEP = 16;
+const ROW_INSET = 8;
 
 // Expanded folders, kept per task across switches. FileTree is a single
 // shared instance (lives under RightPanel, not per-task), so its local
@@ -47,7 +74,7 @@ const expandedByTask = new Map<string, Set<string>>();
 // or a generator rewrites it, and `task_dir_list` canonicalizes the path.
 const RETRY_DELAY_MS = 200;
 
-export function FileTree({ taskId, reloadToken = 0, refreshToken = 0 }: Props) {
+export function FileTree({ taskId, reloadToken = 0, refreshToken = 0, gitStatus = null, rootLabel = "" }: Props) {
   const { t } = useTranslation("task");
   // Absolute task root, used to build the "Copy path" (absolute) item.
   // Tree `rel` paths are task-root-relative, so absolute = root/rel.
@@ -101,8 +128,8 @@ export function FileTree({ taskId, reloadToken = 0, refreshToken = 0 }: Props) {
   const expandedRef = useRef(expanded);
   expandedRef.current = expanded;
   // Mirror children too: the reload effect (driven by an agent settling)
-  // compares the fresh listing against this to avoid a setState — and the
-  // whole-tree re-render it triggers — when nothing on disk actually changed.
+  // compares the fresh listing against this to avoid a setState (and the
+  // whole-tree re-render it triggers) when nothing on disk actually changed.
   const childrenRef = useRef(children);
   childrenRef.current = children;
 
@@ -113,13 +140,68 @@ export function FileTree({ taskId, reloadToken = 0, refreshToken = 0 }: Props) {
   const clearReveal = useApp(s => s.clearReveal);
 
   // Folders pinned for this task's project. The record slice is ref-stable
-  // (EMPTY_PINS for a project with no pins), so the memo — and every row —
+  // (EMPTY_PINS for a project with no pins), so the memo, and every row,
   // only sees a new Set when a pin actually changes.
   const pinRecord = usePinnedFolders(s => s.byProject[projectId] ?? EMPTY_PINS);
   const togglePin = usePinnedFolders(s => s.toggle);
   const pins = useMemo(() => new Set(pinRecord), [pinRecord]);
   const sectionCollapsed = usePinnedFolders(s => s.sectionCollapsed);
   const setSectionCollapsed = usePinnedFolders(s => s.setSectionCollapsed);
+
+  // The highlighted row: the last one clicked, following the active editor
+  // tab whenever that changes.
+  const activeEditPath = useApp(s => {
+    const activeId = s.activeTab[taskId];
+    const activeTab = (s.tabs[taskId] || []).find(tab => tab.id === activeId);
+
+    return activeTab?.type === "edit" ? activeTab.path : null;
+  });
+  const [selected, setSelected] = useState<{ rel: string; isDir: boolean } | null>(
+    activeEditPath ? { rel: activeEditPath, isDir: false } : null,
+  );
+  useEffect(() => { if (activeEditPath) setSelected({ rel: activeEditPath, isDir: false }); }, [activeEditPath]);
+  const selectedRel = selected?.rel ?? null;
+  const select = useCallback((rel: string, isDir: boolean) => setSelected({ rel, isDir }), []);
+
+  const { marks: gitMarks, dirty: dirtyDirs } = useMemo(() => treeGitMarks(gitStatus), [gitStatus]);
+
+  // The filter. Its listing comes from every file in the task, read once
+  // per task (and again after a reload) while the field has text.
+  const [query, setQuery] = useState("");
+  const [allFiles, setAllFiles] = useState<string[] | null>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
+  const filtering = query.trim() !== "";
+  useEffect(() => { setAllFiles(null); }, [taskId, reloadToken]);
+  useEffect(() => {
+    if (!filtering || allFiles) return;
+    let alive = true;
+    taskFiles(taskId).then(list => { if (alive) setAllFiles(list); }).catch(() => { if (alive) setAllFiles([]); });
+    return () => { alive = false; };
+  }, [filtering, allFiles, taskId]);
+  const filtered = useMemo(() => (filtering && allFiles ? filteredListing(allFiles, query) : null), [filtering, allFiles, query]);
+  const filteredOpen = useMemo(() => new Set(filtered ? Object.keys(filtered) : []), [filtered]);
+  const matchCount = useMemo(() => {
+    if (!filtered) return 0;
+
+    let files = 0;
+
+    for (const entries of Object.values(filtered)) {
+      for (const entry of entries) if (!entry.is_dir) files++;
+    }
+
+    return files;
+  }, [filtered]);
+
+  const filterFocusPending = useUI(s => s.fileFilterFocusPending);
+  useEffect(() => {
+    if (!filterFocusPending) return;
+    useUI.getState().consumeFileFilterFocus();
+    filterRef.current?.focus();
+    filterRef.current?.select();
+  }, [filterFocusPending]);
+  const filterBinding = usePrefs(s => s.shortcuts["focus-file-filter"]);
+
+  const [creating, setCreating] = useState<Creating | null>(null);
 
   // Load root on mount / taskId change. Restore this task's previously
   // expanded folders (empty on first visit) and re-fetch them so they show
@@ -128,7 +210,7 @@ export function FileTree({ taskId, reloadToken = 0, refreshToken = 0 }: Props) {
     const saved = new Set(expandedByTask.get(taskId));
     setRootEntries(null); setChildren({}); setExpanded(saved); setFailed(new Map()); setErr(null);
     let alive = true;
-    // Launch is an intentional moment — heal missing member symlinks here.
+    // Launch is an intentional moment, so heal missing member symlinks here.
     const toLoad = ["", ...saved];
     Promise.all(toLoad.map(rel =>
       taskDirList(taskId, rel, rel === "")
@@ -236,6 +318,44 @@ export function FileTree({ taskId, reloadToken = 0, refreshToken = 0 }: Props) {
     for (const rel of dirsNeedingLoad(expanded, children, loading, failed)) ensureLoaded(rel);
   }, [expanded, children, loading, failed, ensureLoaded]);
 
+  const collapseAll = useCallback(() => {
+    const none = new Set<string>();
+    expandedByTask.set(taskId, none);
+    setExpanded(none);
+  }, [taskId]);
+
+  // New file / New folder land in the selected folder, or beside the
+  // selected file, or at the root.
+  const startCreate = (isDir: boolean) => {
+    const parentOfSelected = selectedRel?.includes("/") ? selectedRel.slice(0, selectedRel.lastIndexOf("/")) : "";
+    const parent = !selected ? "" : selected.isDir ? selected.rel : parentOfSelected;
+
+    if (parent && !expandedRef.current.has(parent)) toggle(parent);
+    setQuery("");
+    setCreating({ parent, isDir });
+  };
+
+  const finishCreate = async (name: string) => {
+    const pending = creating;
+    setCreating(null);
+
+    const trimmed = name.trim();
+    if (!pending || !trimmed) return;
+
+    const rel = pending.parent ? `${pending.parent}/${trimmed}` : trimmed;
+
+    try {
+      await taskPathCreate(taskId, rel, pending.isDir);
+      await refetchDir(pending.parent);
+      useApp.getState().bumpGitRevision(taskId);
+      setSelected({ rel, isDir: pending.isDir });
+
+      if (!pending.isDir) useApp.getState().openPreviewTab(taskId, { type: "edit", path: rel, title: trimmed });
+    } catch (e) {
+      useUI.getState().pushToast(String(e), "error");
+    }
+  };
+
   const toggle = useCallback((rel: string) => {
     // Collapsing clears the failed mark, so re-opening always retries.
     if (expandedRef.current.has(rel)) setFailed(f => withoutKey(f, rel));
@@ -291,49 +411,201 @@ export function FileTree({ taskId, reloadToken = 0, refreshToken = 0 }: Props) {
     return () => clearTimeout(t);
   }, [revealedRel]);
 
+  // Arrow keys walk the visible rows; right and left open and close
+  // folders (left on a closed one goes to its parent). Enter is the row
+  // button's own click.
+  const onTreeKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const isArrow = e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight";
+    const fromInput = (e.target as HTMLElement).tagName === "INPUT";
+    if (!isArrow || fromInput) return;
+
+    const rows = Array.from(treeRef.current?.querySelectorAll<HTMLElement>("[data-tree-row]") ?? []);
+    if (rows.length === 0) return;
+
+    e.preventDefault();
+    const at = rows.findIndex(row => row.dataset.path === selectedRel);
+    const current = at >= 0 ? rows[at] : null;
+    const currentIsDir = current?.dataset.dir === "true";
+    const currentOpen = current?.dataset.open === "true";
+
+    const focusRow = (row: HTMLElement | undefined) => {
+      if (!row) return;
+      select(row.dataset.path ?? "", row.dataset.dir === "true");
+      row.focus();
+      row.scrollIntoView({ block: "nearest" });
+    };
+
+    if (e.key === "ArrowDown") return focusRow(rows[Math.min(rows.length - 1, at + 1)]);
+    if (e.key === "ArrowUp") return focusRow(rows[Math.max(0, at - 1)]);
+    if (!current || !selectedRel) return focusRow(rows[0]);
+
+    const opensFolder = e.key === "ArrowRight" && currentIsDir && !currentOpen;
+    const closesFolder = e.key === "ArrowLeft" && currentIsDir && currentOpen;
+
+    if (opensFolder || closesFolder) {
+      if (!filtering) toggle(selectedRel);
+      return;
+    }
+
+    if (e.key === "ArrowLeft" && selectedRel.includes("/")) {
+      const parent = selectedRel.slice(0, selectedRel.lastIndexOf("/"));
+      focusRow(rows.find(row => row.dataset.path === parent));
+    }
+  };
+
+  let body: React.ReactNode;
+
   if (err) {
     // The raw message under the headline, not only in a tooltip: this panel is
     // where a user copies the errno into a bug report (GH #250).
     const { short, detail } = explainDirError(err);
-    return (
-      <div data-testid="tree-root-failed" className="px-3 py-2 text-[12.5px]">
-        <div className="text-[var(--color-err)]">{t("fileTree.rootFailed", { short })}</div>
-        {detail !== short && (
-          <div className="mt-1 break-all text-[11.5px] text-[var(--color-fg-faint)]">{detail}</div>
-        )}
+    body = (
+      <div data-testid="tree-root-failed" className="rp-tree-error">
+        <AlertGlyph size={15} className="rp-tree-error-glyph" />
+        <div className="min-w-0 flex-1">
+          <div className="rp-tree-error-title">{t("fileTree.rootFailed", { short })}</div>
+          {detail !== short && <div className="rp-tree-error-detail">{detail}</div>}
+        </div>
       </div>
     );
+  } else if (!rootEntries || (filtering && !filtered)) {
+    body = <TreeSkeleton label={t("fileTree.loading")} />;
+  } else if (rootEntries.length === 0 && !creating) {
+    body = (
+      <div className="rp-tree-state">
+        <span className="rp-tree-state-well"><EmptyFolderGlyph size={18} /></span>
+        <span className="rp-tree-state-title">{t("fileTree.empty")}</span>
+        <button type="button" className="ui-raised" data-size="sm" onClick={() => startCreate(false)}>
+          <FilePlusGlyph size={13} />
+          {t("fileTree.newFile")}
+        </button>
+      </div>
+    );
+  } else if (filtered && filtered[""].length === 0) {
+    body = (
+      <div data-testid="tree-no-matches" className="rp-tree-state">
+        <span className="rp-tree-state-well"><MagnifierGlyph size={17} /></span>
+        <span className="rp-tree-state-title">{t("fileTree.noMatches")}</span>
+        <span className="rp-tree-state-query">{query.trim()}</span>
+        <button type="button" className="ui-raised" data-size="sm" onClick={() => { setQuery(""); filterRef.current?.focus(); }}>
+          {t("fileTree.filterClear")}
+        </button>
+      </div>
+    );
+  } else {
+    const listing = filtered ?? children;
+    const topLevel = filtered ? filtered[""] : rootEntries;
+    const openSet = filtered ? filteredOpen : expanded;
+    const selectionOpensFolder = !!selected?.isDir && openSet.has(selected.rel);
+    const parentOfSelection = selectedRel?.includes("/") ? selectedRel.slice(0, selectedRel.lastIndexOf("/")) : "";
+    const activeGuide = !selected ? null : selectionOpensFolder ? selected.rel : parentOfSelection;
+    const shared = {
+      taskId, root, toggle, revealed: revealedRel, refetch: refetchDir, loading, failed, retry: ensureLoaded,
+      projectId, pins, togglePin, savedCmds, reloadCmds, selected: selectedRel, select, gitMarks, dirtyDirs,
+      creating, finishCreate, filtering, activeGuide, needle: filtered ? query : "",
+    };
+    body = (
+      <>
+        {pinRecord.length > 0 && !filtered && (
+          <PinnedSection
+            taskId={taskId} projectId={projectId} pins={pinRecord}
+            collapsed={sectionCollapsed}
+            onToggleCollapsed={() => setSectionCollapsed(!sectionCollapsed)}
+          />
+        )}
+        {creating?.parent === "" && <CreateRow depth={0} isDir={creating.isDir} onDone={finishCreate} guideLevel={-1} />}
+        {topLevel.map(e => (
+          <TreeNode key={e.name} {...shared} entry={e} depth={0} rel={e.name} expanded={openSet} children_={listing} />
+        ))}
+      </>
+    );
   }
-  if (!rootEntries) return <div className="px-3 py-2 text-[13.5px] text-[var(--color-fg-faint)]">Loading…</div>;
-  if (rootEntries.length === 0) return <div className="px-3 py-2 text-[13.5px] text-[var(--color-fg-faint)]">{t("fileTree.empty")}</div>;
 
   return (
-    <div ref={treeRef} className="flex flex-col select-none">
-      {pinRecord.length > 0 && (
-        <PinnedSection
-          taskId={taskId} projectId={projectId} pins={pinRecord}
-          collapsed={sectionCollapsed}
-          onToggleCollapsed={() => setSectionCollapsed(!sectionCollapsed)}
-        />
-      )}
-      {rootEntries.map(e => (
-        <TreeNode
-          key={e.name} taskId={taskId} entry={e} depth={0} rel={e.name} root={root}
-          expanded={expanded} children_={children} toggle={toggle} revealed={revealedRel} refetch={refetchDir}
-          loading={loading} failed={failed} retry={ensureLoaded}
-          projectId={projectId} pins={pins} togglePin={togglePin} savedCmds={savedCmds} reloadCmds={reloadCmds}
-        />
-      ))}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 px-[10px] pb-[4px] pt-[8px]">
+        <label className="ui-field rp-filter" data-testid="file-filter" data-active={filtering}>
+          <MagnifierGlyph size={13} className="rp-filter-glyph" />
+          <input
+            ref={filterRef}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Escape" && query) { e.preventDefault(); e.stopPropagation(); setQuery(""); }
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                treeRef.current?.querySelector<HTMLElement>("[data-tree-row]")?.focus();
+              }
+            }}
+            placeholder={t("fileTree.filterPlaceholder")}
+            data-testid="file-filter-input"
+            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+          />
+          {query ? (
+            <>
+              {filtered && (
+                <span
+                  className="rp-filter-count"
+                  data-testid="file-filter-count"
+                  data-empty={matchCount === 0}
+                  title={t("fileTree.matchCount", { count: matchCount })}
+                >
+                  {matchCount}
+                </span>
+              )}
+              <button
+                type="button"
+                aria-label={t("fileTree.filterClear")}
+                data-testid="file-filter-clear"
+                onClick={() => { setQuery(""); filterRef.current?.focus(); }}
+                className="rp-filter-clear"
+              >
+                <X className="h-3 w-3" strokeWidth={2.4} />
+              </button>
+            </>
+          ) : (
+            <kbd className="ui-keycap" aria-hidden data-testid="file-filter-keycap">{bindingText(filterBinding)}</kbd>
+          )}
+        </label>
+      </div>
+      <div className="ui-section-head rp-files-head" data-testid="file-tree-header">
+        <span className="ui-eyebrow flex-1" title={root}>{rootLabel}</span>
+        <div className="rp-files-tools">
+          <Tip content={t("fileTree.newFile")} side="bottom">
+            <button type="button" className="ui-icon-btn" data-size="sm" aria-label={t("fileTree.newFile")} data-testid="file-tree-new-file" onClick={() => startCreate(false)}>
+              <FilePlusGlyph size={15} />
+            </button>
+          </Tip>
+          <Tip content={t("fileTree.newFolder")} side="bottom">
+            <button type="button" className="ui-icon-btn" data-size="sm" aria-label={t("fileTree.newFolder")} data-testid="file-tree-new-folder" onClick={() => startCreate(true)}>
+              <NewFolderGlyph size={15} />
+            </button>
+          </Tip>
+          <Tip content={t("fileTree.collapseAll")} side="bottom">
+            <button type="button" className="ui-icon-btn" data-size="sm" aria-label={t("fileTree.collapseAll")} data-testid="file-tree-collapse-all" onClick={collapseAll}>
+              <CollapseInGlyph size={15} />
+            </button>
+          </Tip>
+        </div>
+      </div>
+      <div
+        ref={treeRef}
+        onKeyDown={onTreeKeyDown}
+        data-testid="file-tree"
+        className="ui-scroll rp-tree-scroll min-h-0 flex-1 select-none pb-[10px] pl-[6px] pr-[2px]"
+      >
+        {body}
+      </div>
     </div>
   );
 }
 
-// The tree's Pinned section: a GitPanel-style collapsible header, then one
-// plain tree row per pin. Rows are JUMP links, not tree nodes: a click asks
-// the reveal mechanism to expand the path, scroll to the real row and ring
-// it, so the section adds no navigation state of its own beyond the fold,
-// and carries `data-pin-path` (never `data-path`) so the reveal's row lookup
-// cannot land here instead of in the tree.
+// The tree's Pinned section: an eyebrow header that folds, then one plain row
+// per pin. Rows are JUMP links, not tree nodes: a click asks the reveal
+// mechanism to expand the path, scroll to the real row and ring it, so the
+// section adds no navigation state of its own beyond the fold, and carries
+// `data-pin-path` (never `data-path`) so the reveal's row lookup cannot land
+// here instead of in the tree.
 function PinnedSection({ taskId, projectId, pins, collapsed, onToggleCollapsed }: {
   taskId: string;
   projectId: string;
@@ -344,30 +616,23 @@ function PinnedSection({ taskId, projectId, pins, collapsed, onToggleCollapsed }
   const { t } = useTranslation("task");
   const unpin = usePinnedFolders(s => s.unpin);
   return (
-    <div
-      className="mb-1 shrink-0 border-b border-[var(--color-border-soft)]"
-      data-testid="pinned-section"
-    >
+    <div className="rp-pins" data-testid="pinned-section" data-collapsed={collapsed}>
       <button
         type="button"
         onClick={onToggleCollapsed}
         aria-expanded={!collapsed}
         data-testid="pinned-section-header"
         data-collapsed={collapsed}
-        // The band treatment is the section's whole case for "I am not part
-        // of the tree below": GitPanel's pane-header tint + the container's
-        // closing border and gap enclose the rows instead of letting them
-        // read as the first tree entries.
-        className="flex h-7 w-full items-center gap-1.5 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-1)] pl-2.5 pr-1 text-left text-[11.5px] font-medium uppercase tracking-[0.06em] text-[var(--color-fg-dim)] hover:text-[var(--color-fg)]"
+        className="rp-pins-head"
       >
-        {collapsed
-          ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
-          : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />}
-        {t("fileTree.pinnedSectionLabel")}
-        <span className="tabular-nums text-[var(--color-fg-faint)]">{pins.length}</span>
+        <TreeChevron open={!collapsed} className="ui-chevron" />
+        <span className="ui-eyebrow">{t("fileTree.pinnedSectionLabel")}</span>
+        <span className="ui-count">{pins.length}</span>
       </button>
       {!collapsed && pins.map(rel => {
-        const iconUrl = folderIconUrl(rel.split("/").pop() ?? rel, false);
+        const name = rel.split("/").pop() ?? rel;
+        const parent = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
+
         return (
           <ContextMenuRoot key={rel}>
             <ContextMenuTrigger asChild>
@@ -377,15 +642,26 @@ function PinnedSection({ taskId, projectId, pins, collapsed, onToggleCollapsed }
                 data-pin-path={rel}
                 title={rel}
                 onClick={() => useApp.getState().revealInTree(taskId, rel, true)}
-                className="group flex h-[26px] w-full min-w-0 items-center gap-2 rounded-sm px-2 text-left text-[13px] text-[var(--color-fg)]/85 hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
-                style={{ paddingLeft: 6 + 12 }}
+                className="ui-row rp-pin-row w-full"
               >
-                {iconUrl ? <img src={iconUrl} alt="" className="h-4 w-4 shrink-0 file-icon" /> : <span className="h-4 w-4 shrink-0" />}
-                <span className="min-w-0 flex-1 truncate">{rel}</span>
-                <Pin className="h-3 w-3 shrink-0 text-[var(--color-accent)] opacity-60 group-hover:opacity-100" />
+                <TreeIcon url={folderIconUrl(name, false)} />
+                <span className="rp-pin-name">{name}</span>
+                <span className="ui-row-meta min-w-0 flex-1">{parent}</span>
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  aria-label={t("fileTree.unpinFolder")}
+                  title={t("fileTree.unpinFolder")}
+                  data-testid="pinned-row-unpin"
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); unpin(projectId, rel); }}
+                  className="rp-pin-toggle"
+                >
+                  <PinGlyph size={13} />
+                </span>
               </button>
             </ContextMenuTrigger>
-            <ContextMenuContent>
+            <ContextMenuContent className="sidebar-menu">
               <ContextMenuItem onSelect={() => unpin(projectId, rel)}>
                 <PinOff /> {t("fileTree.unpinFolder")}
               </ContextMenuItem>
@@ -426,15 +702,81 @@ interface NodeProps {
   savedCmds: Set<string>;
   /** Refresh `savedCmds` after an add/remove. */
   reloadCmds: () => void;
+  selected: string | null;
+  select: (rel: string, isDir: boolean) => void;
+  gitMarks: Map<string, TreeGitMark>;
+  /** Folders with a change somewhere below them. */
+  dirtyDirs: Set<string>;
+  creating: Creating | null;
+  finishCreate: (name: string) => void;
+  /** The filter is on: every folder shown is forced open. */
+  filtering: boolean;
+  /** The folder holding the selection, whose indent guide lights up. */
+  activeGuide: string | null;
+  /** The filter text to mark in each name, or "" when not filtering. */
+  needle: string;
 }
 
-function TreeNode({ taskId, entry, depth, rel, root, expanded, children_, toggle, revealed, refetch, loading, failed, retry, projectId, pins, togglePin, savedCmds, reloadCmds }: NodeProps) {
+/** The app's file icon theme, unchanged: one glyph per file type and folder. */
+function TreeIcon({ url }: { url: string | null }) {
+  return url ? <img src={url} alt="" className="h-4 w-4 shrink-0 file-icon" /> : <span className="h-4 w-4 shrink-0" />;
+}
+
+function Guides({ depth, activeLevel = -1 }: { depth: number; activeLevel?: number }) {
+  return (
+    <>
+      {Array.from({ length: depth }, (_, level) => (
+        <span
+          key={level}
+          className="ui-guide"
+          data-active={level === activeLevel || undefined}
+          style={{ left: ROW_INSET + level * ROW_STEP + 4 }}
+        />
+      ))}
+    </>
+  );
+}
+
+/** A name with the filter's match picked out. */
+function MatchedName({ name, needle }: { name: string; needle: string }) {
+  const span = nameMatch(name, needle);
+
+  if (!span) return <>{name}</>;
+
+  const [start, end] = span;
+
+  return (
+    <>
+      {name.slice(0, start)}
+      <mark className="rp-match">{name.slice(start, end)}</mark>
+      {name.slice(end)}
+    </>
+  );
+}
+
+const SKELETON_WIDTHS = [62, 48, 74, 40, 56, 68, 44, 52];
+
+/** The root's first read: placeholder rows in the tree's own geometry. */
+function TreeSkeleton({ label }: { label: string }) {
+  return (
+    <div role="status" aria-label={label} className="rp-skeleton">
+      {SKELETON_WIDTHS.map((width, index) => (
+        <div key={index} className="rp-skeleton-row" style={{ animationDelay: `${index * 70}ms` }}>
+          <span className="rp-skeleton-icon" />
+          <span className="rp-skeleton-bar" style={{ width: `${width}%` }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TreeNode(props: NodeProps) {
+  const {
+    taskId, entry, depth, rel, root, expanded, children_, toggle, revealed, refetch, loading, failed, retry,
+    projectId, pins, togglePin, savedCmds, reloadCmds, selected, select, gitMarks, dirtyDirs, creating, finishCreate, filtering,
+    activeGuide, needle,
+  } = props;
   const { t } = useTranslation("task");
-  const openPreviewTab = useApp(s => s.openPreviewTab);
-  const persistTab = useApp(s => s.persistTab);
-  const closeTab = useApp(s => s.closeTab);
-  const tabs = useApp(s => s.tabs[taskId] || []);
-  const activeTabId = useApp(s => s.activeTab[taskId]);
   const isOpen = expanded.has(rel);
   const kids = children_[rel];
 
@@ -457,14 +799,17 @@ function TreeNode({ taskId, entry, depth, rel, root, expanded, children_, toggle
 
   // Close any open edit/diff tabs pointing at a path that just moved or was
   // deleted (the entry itself, or anything beneath it when it's a folder).
+  // Read from the store at the moment of the mutation: a subscription here
+  // would re-render every row on every tab switch.
   function closeStaleTabs(p: string) {
-    for (const t of tabs) {
+    const app = useApp.getState();
+    for (const tab of app.tabs[taskId] || []) {
       // "dir" included (issue #151): a folder listing is just as stale as an
       // editor once its folder is renamed or deleted, and leaving it open
       // parks the tab on a path that no longer resolves.
-      if ((t.type === "edit" || t.type === "diff" || t.type === "dir")
-          && (t.path === p || t.path.startsWith(`${p}/`))) {
-        closeTab(taskId, t.id);
+      if ((tab.type === "edit" || tab.type === "diff" || tab.type === "dir")
+          && (tab.path === p || tab.path.startsWith(`${p}/`))) {
+        app.closeTab(taskId, tab.id);
       }
     }
   }
@@ -541,14 +886,14 @@ function TreeNode({ taskId, entry, depth, rel, root, expanded, children_, toggle
     catch (e) { useUI.getState().pushToast(String(e), "error"); }
   }
 
-  const activeTab = tabs.find(t => t.id === activeTabId);
-  const isActive = activeTab?.type === "edit" && activeTab.path === rel;
+  const isSelected = selected === rel;
 
   function onClick() {
+    select(rel, entry.is_dir);
     if (entry.is_dir) {
-      toggle(rel);
+      if (!filtering) toggle(rel);
     } else {
-      openPreviewTab(taskId, { type: "edit", path: rel, title: entry.name });
+      useApp.getState().openPreviewTab(taskId, { type: "edit", path: rel, title: entry.name });
     }
   }
 
@@ -558,23 +903,42 @@ function TreeNode({ taskId, entry, depth, rel, root, expanded, children_, toggle
   // every one of those editors also puts it. See the discussion on GH #147.
   function onDoubleClick() {
     if (entry.is_dir) return;
-    const existing = tabs.find(t => t.type === "edit" && t.path === rel);
+    const app = useApp.getState();
+    const existing = (app.tabs[taskId] || []).find(tab => tab.type === "edit" && tab.path === rel);
     if (existing) {
-      persistTab(taskId, existing.id);
+      app.persistTab(taskId, existing.id);
     }
   }
 
-  const iconUrl = entry.is_dir ? folderIconUrl(entry.name, isOpen) : fileIconUrl(entry.name);
+  // The tray's More opens the row's own context menu under the button, so
+  // the two cannot offer different actions.
+  function openMenuFrom(e: React.MouseEvent<HTMLElement>) {
+    e.stopPropagation();
+    const row = e.currentTarget.closest<HTMLElement>("[data-tree-row]");
+    const box = e.currentTarget.getBoundingClientRect();
+    row?.dispatchEvent(new MouseEvent("contextmenu", {
+      bubbles: true, cancelable: true, clientX: box.left, clientY: box.bottom + 2,
+    }));
+  }
+
+  const mark = gitMarks.get(rel);
+  const quiet = isQuietEntry(entry.name);
+  const showsDirtyDot = entry.is_dir && !isOpen && dirtyDirs.has(rel);
+  const isPinned = entry.is_dir && pins.has(rel);
+  const gitTint = mark ? ({ "--rp-git": gitMarkColor(mark) } as React.CSSProperties) : undefined;
+  const icon = <TreeIcon url={entry.is_dir ? folderIconUrl(entry.name, isOpen) : fileIconUrl(entry.name)} />;
+  const pad = ROW_INSET + depth * ROW_STEP;
+  const childCreating = entry.is_dir && isOpen && creating?.parent === rel;
+  const rowGuideLevel = activeGuideLevel(activeGuide, parentRel);
+  const childGuideLevel = activeGuideLevel(activeGuide, rel);
 
   return (
     <>
       {renaming ? (
-        <div
-          className="flex h-[26px] w-full min-w-0 items-center gap-2 rounded-sm px-2 text-[13px]"
-          style={{ paddingLeft: 6 + depth * 12 }}
-        >
-          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center" />
-          {iconUrl ? <img src={iconUrl} alt="" className="h-4 w-4 shrink-0 file-icon" /> : <span className="h-4 w-4 shrink-0" />}
+        <div className="ui-row rp-edit-row" style={{ paddingLeft: pad }}>
+          <Guides depth={depth} activeLevel={rowGuideLevel} />
+          <span className="w-[10px] shrink-0" />
+          {icon}
           <input
             ref={renameInputRef}
             value={draft}
@@ -585,85 +949,85 @@ function TreeNode({ taskId, entry, depth, rel, root, expanded, children_, toggle
             }}
             onBlur={submitRename}
             autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-            className="min-w-0 flex-1 rounded border border-[var(--color-accent)] bg-[var(--color-bg)] px-1 py-[1px] text-[13px] text-[var(--color-fg)] outline-none"
+            className="rp-inline-input min-w-0 flex-1"
           />
         </div>
       ) : (
       <ContextMenuRoot>
       <ContextMenuTrigger asChild>
       <button
+        type="button"
         onClick={onClick}
         onDoubleClick={onDoubleClick}
         // Drag a row onto a terminal to type its path at the prompt (GH #136),
         // the same affordance as dragging a file in from Finder. Pointer-based,
-        // not HTML5 DnD — see the note in lib/terminalDrop.
+        // not HTML5 DnD; see the note in lib/terminalDrop.
         onPointerDown={e => startPathDrag(e, { taskId, rel, abs: absUnder(root, rel) }, entry.name)}
         title={rel}
         data-path={rel}
-        className={cn(
-          "group flex h-[26px] w-full min-w-0 cursor-pointer items-center gap-2 rounded-sm px-2 text-left text-[13px] transition-colors duration-150 select-none",
-          rel === revealed && "ring-1 ring-inset ring-[var(--color-accent)]",
-          // While this row's context menu is open, keep it visibly marked so
-          // it's clear which item the actions apply to (Radix sets
-          // data-state="open" on the trigger).
-          "data-[state=open]:bg-[var(--color-hover)] data-[state=open]:text-[var(--color-fg)] data-[state=open]:ring-1 data-[state=open]:ring-inset data-[state=open]:ring-[var(--color-border)]",
-          isActive
-            ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
-            // Idle rows: a NEUTRAL dimmed foreground (fg at 85%), not
-            // --color-fg-dim. fg-dim is a warm clay tone reserved for
-            // genuine muted text; on a long file list it reads as
-            // "brown". terax dims its file tree the same way — the
-            // plain foreground knocked back, hue untouched.
-            : "text-[var(--color-fg)]/85 hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
-        )}
-        style={{ paddingLeft: 6 + depth * 12 }}
+        data-tree-row=""
+        data-dir={entry.is_dir}
+        data-open={entry.is_dir ? isOpen : undefined}
+        data-selected={isSelected}
+        data-git={mark}
+        data-quiet={quiet || undefined}
+        data-revealed={rel === revealed || undefined}
+        className="ui-row rp-tree-row group w-full cursor-pointer"
+        style={{ paddingLeft: pad, ...gitTint }}
       >
-        <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[var(--color-fg-faint)]">
-          {entry.is_dir ? (
-            <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-150", isOpen && "rotate-90")} />
-          ) : null}
-        </span>
-        {iconUrl ? (
-          <img src={iconUrl} alt="" className="h-4 w-4 shrink-0 file-icon" />
-        ) : (
-          <span className="h-4 w-4 shrink-0" />
-        )
-      }
-        <span className="truncate flex-1 min-w-0 font-medium">{entry.name}</span>
-        {entry.is_dir && projectId && (
-          // Pin affordance, not a <button>: nested buttons are invalid HTML,
-          // and the row's own handlers own keyboard focus anyway (the context
-          // menu is the keyboard path to pinning). Every handler stops
-          // propagation: onPointerDown especially, or the row's drag-to-type
-          // (startPathDrag) fires before click ever does.
+        <Guides depth={depth} activeLevel={rowGuideLevel} />
+        {entry.is_dir
+          ? <TreeChevron open={isOpen} className={cn("shrink-0", isSelected ? "text-[var(--sidebar-sel-chevron)]" : "text-[var(--sidebar-chevron)]")} />
+          : <span className="w-[10px] shrink-0" />}
+        {icon}
+        <span className="ui-row-name">{needle ? <MatchedName name={entry.name} needle={needle} /> : entry.name}</span>
+        {showsDirtyDot && <span data-testid="tree-dirty-dot" className="rp-dirty-dot" />}
+        {mark && <span className="ui-status-letter rp-git-letter">{mark}</span>}
+        {isPinned && <PinGlyph size={13} className="rp-row-pin" />}
+        <span className="ui-tray">
+          {entry.is_dir && projectId && (
+            // Not a <button>: nested buttons are invalid HTML, and the row's
+            // own handlers own keyboard focus anyway (the context menu is the
+            // keyboard path to pinning). Every handler stops propagation:
+            // onPointerDown especially, or the row's drag-to-type
+            // (startPathDrag) fires before click ever does.
+            <span
+              role="button"
+              tabIndex={-1}
+              aria-label={isPinned ? t("fileTree.unpinFolder") : t("fileTree.pinFolder")}
+              data-testid="pin-folder"
+              data-path={rel}
+              data-pinned={isPinned}
+              title={isPinned ? t("fileTree.unpinFolder") : t("fileTree.pinFolder")}
+              onPointerDown={e => e.stopPropagation()}
+              onDoubleClick={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); togglePin(projectId, rel); }}
+              className="sidebar-tray-btn"
+            >
+              <PinGlyph size={12} strokeWidth={2} />
+            </span>
+          )}
           <span
             role="button"
             tabIndex={-1}
-            aria-label={pins.has(rel) ? t("fileTree.unpinFolder") : t("fileTree.pinFolder")}
-            data-testid="pin-folder"
-            data-path={rel}
-            data-pinned={pins.has(rel)}
-            title={pins.has(rel) ? t("fileTree.unpinFolder") : t("fileTree.pinFolder")}
+            aria-label={t("fileTree.more")}
+            title={t("fileTree.more")}
+            data-testid="tree-row-more"
             onPointerDown={e => e.stopPropagation()}
             onDoubleClick={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); togglePin(projectId, rel); }}
-            className={cn(
-              "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-[var(--color-accent)] transition-opacity duration-150 hover:bg-[var(--color-hover)]",
-              // Pinned: always visible (the passive indicator). Unpinned:
-              // hover-only invitation, same pattern as the sidebar's row
-              // affordances.
-              pins.has(rel) ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-70",
-            )}
+            onClick={openMenuFrom}
+            className="sidebar-tray-btn"
           >
-            <Pin className="h-3 w-3" />
+            <DotsHorizontalGlyph size={12} />
           </span>
-        )}
+        </span>
       </button>
       </ContextMenuTrigger>
       <ContextMenuContent
+        className="sidebar-menu"
         // Renaming from the menu mounts the inline input in the same tick the
         // menu unmounts, and Radix's close-time focus restore would then land
-        // on the pre-menu element (the terminal, usually) — blurring the
+        // on the pre-menu element (the terminal, usually), blurring the
         // input, whose onBlur cancels the rename outright. While the flag is
         // up, keep focus in the input instead.
         onCloseAutoFocus={(e) => { if (renamingRef.current) e.preventDefault(); }}
@@ -690,7 +1054,7 @@ function TreeNode({ taskId, entry, depth, rel, root, expanded, children_, toggle
           <>
             <ContextMenuSeparator />
             <ContextMenuItem onSelect={() => togglePin(projectId, rel)}>
-              {pins.has(rel) ? <PinOff /> : <Pin />} {pins.has(rel) ? t("fileTree.unpinFolder") : t("fileTree.pinFolder")}
+              {isPinned ? <PinOff /> : <Pin />} {isPinned ? t("fileTree.unpinFolder") : t("fileTree.pinFolder")}
             </ContextMenuItem>
           </>
         )}
@@ -705,27 +1069,73 @@ function TreeNode({ taskId, entry, depth, rel, root, expanded, children_, toggle
       </ContextMenuContent>
       </ContextMenuRoot>
       )}
+      {childCreating && <CreateRow depth={depth + 1} isDir={creating.isDir} onDone={finishCreate} guideLevel={childGuideLevel} />}
       {entry.is_dir && isOpen && kids && kids.map(c => (
-        <TreeNode
-          key={c.name} taskId={taskId} entry={c} depth={depth + 1} rel={`${rel}/${c.name}`} root={root}
-          expanded={expanded} children_={children_} toggle={toggle} revealed={revealed} refetch={refetch}
-          loading={loading} failed={failed} retry={retry}
-          projectId={projectId} pins={pins} togglePin={togglePin} savedCmds={savedCmds} reloadCmds={reloadCmds}
-        />
+        <TreeNode key={c.name} {...props} entry={c} depth={depth + 1} rel={`${rel}/${c.name}`} />
       ))}
+      {entry.is_dir && isOpen && kids && kids.length === 0 && !childCreating && (
+        <div className="ui-row pointer-events-none" style={{ paddingLeft: pad + ROW_STEP }}>
+          <Guides depth={depth + 1} activeLevel={childGuideLevel} />
+          <span data-testid="tree-empty-folder" className="rp-tree-note">{t("fileTree.emptyFolder")}</span>
+        </div>
+      )}
       {entry.is_dir && isOpen && !kids && (
         failed.has(rel) ? (
           <DirReadFailed rel={rel} depth={depth} raw={failed.get(rel) ?? ""} retry={retry} />
         ) : (
-          <div
-            className="h-[22px] flex items-center text-[12px] text-[var(--color-fg-faint)] italic"
-            style={{ paddingLeft: 6 + (depth + 1) * 12 + 22 }}
-          >
-            Loading…
+          <div className="ui-row pointer-events-none" style={{ paddingLeft: pad + ROW_STEP }}>
+            <Guides depth={depth + 1} activeLevel={childGuideLevel} />
+            <span className="rp-tree-note" data-loading="">
+              <span className="rp-spinner" aria-hidden />
+              {t("fileTree.loading")}
+            </span>
           </div>
         )
       )}
     </>
+  );
+}
+
+/** The inline name field a New file / New folder click opens in the tree.
+ *  Enter creates, Escape or an empty blur gives up. */
+function CreateRow({ depth, isDir, onDone, guideLevel }: {
+  depth: number;
+  isDir: boolean;
+  onDone: (name: string) => void;
+  guideLevel: number;
+}) {
+  const { t } = useTranslation("task");
+  const [name, setName] = useState("");
+  const doneRef = useRef(false);
+  const finish = (value: string) => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    onDone(value);
+  };
+
+  return (
+    <div className="ui-row rp-edit-row" style={{ paddingLeft: ROW_INSET + depth * ROW_STEP }} data-testid="tree-create-row">
+      <Guides depth={depth} activeLevel={guideLevel} />
+      <span className="w-[10px] shrink-0" />
+      <TreeIcon url={isDir ? folderIconUrl(name || "folder", false) : fileIconUrl(name || "file")} />
+      <input
+        autoFocus
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === "Enter") { e.preventDefault(); finish(name); }
+          else if (e.key === "Escape") { e.preventDefault(); finish(""); }
+        }}
+        onBlur={() => finish(name)}
+        placeholder={isDir ? t("fileTree.newFolderPlaceholder") : t("fileTree.newFilePlaceholder")}
+        data-testid="tree-create-input"
+        autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+        className="rp-inline-input min-w-0 flex-1"
+      />
+      <kbd className="ui-keycap rp-create-hint" title={t("fileTree.createHint")} aria-hidden>
+        <ReturnKeyGlyph size={11} strokeWidth={2.2} />
+      </kbd>
+    </div>
   );
 }
 
@@ -746,15 +1156,16 @@ function DirReadFailed(
       role="button"
       tabIndex={0}
       onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); retry(rel); } }}
-      className="cursor-pointer py-[2px] pr-2 text-left text-[12px] leading-[15px] text-[var(--color-err)]"
-      style={{ paddingLeft: 6 + (depth + 1) * 12 + 22 }}
+      className="rp-dir-failed"
+      style={{ marginLeft: ROW_INSET + (depth + 1) * ROW_STEP }}
       title={t("fileTree.retryTip", { detail })}
     >
-      <span className="break-words">{short}.</span>{" "}
-      <span className="underline">{t("common:retry")}</span>
-      {detail !== short && (
-        <div className="line-clamp-2 break-all text-[11px] leading-[14px] text-[var(--color-fg-faint)]">{detail}</div>
-      )}
+      <AlertGlyph size={13} className="rp-dir-failed-glyph" />
+      <div className="min-w-0 flex-1">
+        <span className="break-words">{short}.</span>{" "}
+        <span className="rp-retry">{t("common:retry")}</span>
+        {detail !== short && <div className="rp-dir-failed-detail">{detail}</div>}
+      </div>
     </div>
   );
 }

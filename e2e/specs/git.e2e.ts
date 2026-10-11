@@ -83,7 +83,7 @@ describe("git dirty tree", () => {
   const chipContrast = () =>
     browser.execute(() => {
       const chip = document.querySelector(
-        '[data-testid="git-file-row"][data-pane="unstaged"] span',
+        '[data-testid="git-file-row"][data-pane="unstaged"] [data-testid="git-status-chip"]',
       ) as HTMLElement | null;
       if (!chip) return null;
       const cs = getComputedStyle(chip);

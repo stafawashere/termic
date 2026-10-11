@@ -16,7 +16,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useApp, useActiveTask } from "@/store/app";
 import { useUI } from "@/store/ui";
 import { usePr, watchTickNow, prRelevant } from "@/store/pr";
-import { useAlignedSpin } from "@/hooks/useAlignedSpin";
 import {
   taskGitStatus, taskRunScriptStream, repoConfigLoad, repoConfigLoadAt,
   taskSpotlightResync,
@@ -26,10 +25,11 @@ import { startSpotlight, stopSpotlight } from "@/lib/spotlight";
 import { launchRunTabs, expandPreviewUrl } from "@/lib/runTabs";
 import type { GitStatus, Task, TaskMember, Project, TerminalTab } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Play, ChevronDown, ChevronUp, Square, Globe, X, AudioWaveform, RefreshCw, Copy, Check, Settings, SquareArrowOutUpRight, PanelBottom } from "lucide-react";
+import { Play, ChevronUp, Square, Globe, X, AudioWaveform, RefreshCw, Copy, Check, Settings } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Tip } from "@/components/ui/Tooltip";
-import { Spinner } from "@/components/ui/Spinner";
+import { RefreshGlyph, FilesGlyph, NoteGlyph } from "./panelIcons";
+import { BranchGlyph } from "@/components/sidebar/sidebarIcons";
 import { AuxTerminal } from "./AuxTerminal";
 import { FileTree } from "./FileTree";
 import { ScratchpadPanel } from "./ScratchpadPanel";
@@ -55,6 +55,11 @@ function scriptTopicMember(member: string): string {
 }
 
 type FootTab = "setup" | "run" | "term" | "spotlight";
+
+// Header tab order, and the distance from one icon segment to the next
+// (38px segment plus the well's 2px gap). The well's thumb slides by it.
+const PANEL_VIEWS = ["files", "scratchpad", "changes"] as const;
+const RTAB_PITCH = 40;
 
 // Footer collapse persists across launches. Component-local (no other
 // component reads it) so it's localStorage-backed directly rather than
@@ -87,6 +92,12 @@ export function RightPanel() {
     if (useApp.getState().rightPanelHidden) useApp.getState().toggleRightPanel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commitReveal, task?.id]);
+  // ⇧⌘E and the palette's "Filter files" ask for the files view; FileTree
+  // takes the focus once it is on screen.
+  const fileFilterFocus = useUI(s => s.fileFilterFocusPending);
+  useEffect(() => {
+    if (fileFilterFocus) setView("files");
+  }, [fileFilterFocus]);
   useEffect(() => {
     if (revealFile && task && revealFile.taskId === task.id) setView("files");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,12 +121,9 @@ export function RightPanel() {
   // while away show up in the tree. Folded into FileTree's reloadToken;
   // its sameChildren gate makes the no-change case render-free.
   const [focusReload, setFocusReload] = useState(0);
-  const [refreshClicked, setRefreshClicked] = useState(false);
-  // See useAlignedSpin: cutting animate-spin off at an arbitrary point in
-  // its cycle snaps the icon back to rest from wherever it was, which reads
-  // as a visible stutter - this rounds the visible window up to a whole
-  // rotation.
-  const refreshing = useAlignedSpin(refreshClicked);
+  // Each click turns the refresh glyph one more full turn (a transform
+  // transition, so it always comes to rest upright).
+  const [refreshTurns, setRefreshTurns] = useState(0);
   // Multi-repo tasks add a Target selector to the footer so
   // Setup/Run can target a composition member. Stored as the
   // member's dir_name. Single-repo tasks keep this empty
@@ -246,7 +254,7 @@ export function RightPanel() {
   // repo has one) the PR/MR card - "refresh" should mean everything this
   // panel shows, not just the parts GitPanel itself owns. Also kicks the
   // comment-watcher tick, same reasoning as PrCard's own refresh button.
-  // The brief `refreshing` flag spins the icon for feedback.
+  // Each click also turns the glyph once, for feedback.
   const doRefresh = () => {
     refreshGit();
     setFileTreeReload(n => n + 1);
@@ -254,8 +262,7 @@ export function RightPanel() {
       usePr.getState().refresh(task.id, true);
       watchTickNow();
     }
-    setRefreshClicked(true);
-    window.setTimeout(() => setRefreshClicked(false), 600);
+    setRefreshTurns(n => n + 1);
   };
 
   // Subscribe to streaming output for BOTH setup and run kinds on the active
@@ -495,7 +502,7 @@ export function RightPanel() {
   };
 
   return (
-    <aside ref={asideRef} className="relative flex h-full flex-col border-l border-[var(--color-border-soft)] bg-[var(--color-bg-1)]">
+    <aside ref={asideRef} data-testid="right-panel" className="ui-panel rp-shell relative flex h-full flex-col whitespace-nowrap border-l border-[var(--sidebar-border)]">
       {/* Drag the LEFT edge to resize the right panel's width. Reads fresh
           state from the store every frame so stale closures don't make it
           snap back to a few px after each move. */}
@@ -515,42 +522,39 @@ export function RightPanel() {
           useApp.getState().setRightPanelWidth(next);
         }}
       />
-      <header className="flex h-10 shrink-0 items-stretch border-b border-[var(--color-border-soft)]">
-        <RTab label={t("rightPanel.allFiles")} active={view === "files"} onClick={() => setView("files")} />
-        <RTab label={t("rightPanel.scratchpad", "Scratchpad")} active={view === "scratchpad"} onClick={() => setView("scratchpad")} />
-        <RTab label={t("rightPanel.git")} active={view === "changes"} onClick={() => setView("changes")}
-          badge={(gitStatus?.total_changed ?? 0) > 0 ? gitStatus!.total_changed : undefined}
-          repoBadge={(gitStatus?.repos_changed ?? 0) > 1 ? gitStatus!.repos_changed : undefined} />
-        <div className="flex shrink-0 items-center px-1.5">
-          <Tip content={t("rightPanel.refreshTip")} side="bottom">
-            <button
-              onClick={doRefresh}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
-            >
-              {/* A rotating SVG icon wobbles/looks off-center at this size
-                  (see ui/Spinner's doc comment) - its border-radius ring is
-                  symmetric by construction and pixel-snapped. */}
-              {refreshing
-                ? <Spinner size={14} />
-                : <RefreshCw className="h-4 w-4" />}
-            </button>
-          </Tip>
+      <header className="rp-head flex h-[44px] shrink-0 items-center gap-[8px] border-b border-[var(--sidebar-divider)] pl-[10px] pr-[8px]">
+        <div role="tablist" className="ui-well rp-well">
+          <span aria-hidden className="rp-well-thumb" style={{ transform: `translateX(${PANEL_VIEWS.indexOf(view) * RTAB_PITCH}px)` }} />
+          <RTab label={t("rightPanel.allFiles")} icon={<FilesGlyph size={15} />} active={view === "files"} onClick={() => setView("files")} />
+          <RTab label={t("rightPanel.scratchpad", "Scratchpad")} icon={<NoteGlyph size={15} />} active={view === "scratchpad"} onClick={() => setView("scratchpad")} />
+          <RTab label={t("rightPanel.git")} icon={<BranchGlyph size={15} />} active={view === "changes"} onClick={() => setView("changes")}
+            badge={(gitStatus?.total_changed ?? 0) > 0 ? gitStatus!.total_changed : undefined}
+            repoBadge={(gitStatus?.repos_changed ?? 0) > 1 ? gitStatus!.repos_changed : undefined} />
         </div>
+        <div className="flex-1" />
+        <Tip content={t("rightPanel.refreshTip")} side="bottom">
+          <button type="button" onClick={doRefresh} data-testid="right-panel-refresh" aria-label={t("rightPanel.refreshTip")} className="ui-icon-btn">
+            <RefreshGlyph size={16} className="ui-refresh-glyph" style={{ transform: `rotate(${refreshTurns * 360}deg)` }} />
+          </button>
+        </Tip>
       </header>
 
       {/* Files / Scratchpad / Git: flexible, takes whatever's left after the footer.
           Files & Scratchpad scroll inside their wrappers; Git manages its own panes +
           scrolling so it gets the bare flex-1 height with no overflow. */}
       {view === "files" ? (
-        <div className="min-h-0 flex-1 overflow-auto py-1">
-          <FileTree taskId={task.id} reloadToken={fileTreeReload + fileTreeNonce + fsRevision + focusReload} refreshToken={fileTreeReload} />
+        <div className="rp-view flex min-h-0 flex-1 flex-col">
+          <FileTree
+            taskId={task.id} reloadToken={fileTreeReload + fileTreeNonce + fsRevision + focusReload} refreshToken={fileTreeReload}
+            gitStatus={gitStatus} rootLabel={project?.name ?? task.name}
+          />
         </div>
       ) : view === "scratchpad" ? (
-        <div className="min-h-0 flex-1 overflow-auto py-1">
+        <div className="rp-view ui-scroll flex min-h-0 flex-1 flex-col">
           <ScratchpadPanel taskId={task.id} projectId={task.project_id} reloadToken={fileTreeReload + fileTreeNonce + fsRevision + focusReload} />
         </div>
       ) : (
-        <div className="min-h-0 flex-1">
+        <div className="rp-view min-h-0 flex-1">
           <GitPanel
             task={task}
             status={gitStatus}
@@ -587,7 +591,7 @@ export function RightPanel() {
           just confusing chrome. */}
       {showFooter && (
       <footer
-        className="relative flex shrink-0 flex-col bg-[var(--color-bg-1)]"
+        className="sidebar-footer rp-foot relative flex shrink-0 flex-col"
         style={{ height: footCollapsed ? "var(--bottom-bar-h)" : footHeight }}
       >
         {/* Top-edge drag handle — only shown when the footer is expanded.
@@ -607,18 +611,31 @@ export function RightPanel() {
           />
         )}
         <div className={cn(
-          "flex h-[var(--bottom-bar-h)] min-w-0 shrink-0 items-center gap-0.5 overflow-hidden border-t border-[var(--color-border-soft)] px-1.5",
+          "rp-foot-bar flex h-[var(--bottom-bar-h)] min-w-0 shrink-0 items-center gap-[6px] overflow-hidden border-t border-[var(--sidebar-divider)] px-[8px]",
           // Collapsed → nothing below the strip → drop border-b so it
           // doesn't stack with the footer's border-t into a double line.
-          !footCollapsed && "border-b border-[var(--color-border-soft)]",
+          !footCollapsed && "border-b border-[var(--sidebar-divider)]",
         )}>
-          <button
-            onClick={() => setFootCollapsed(c => !c)}
-            title={footCollapsed ? t("rightPanel.expandTip") : t("rightPanel.collapseTip")}
-            className="rounded p-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
-          >
-            {footCollapsed ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
+          <Tip content={footCollapsed ? t("rightPanel.expandTip") : t("rightPanel.collapseTip")} side="top">
+            <button
+              type="button"
+              onClick={() => setFootCollapsed(c => !c)}
+              aria-label={footCollapsed ? t("rightPanel.expandTip") : t("rightPanel.collapseTip")}
+              data-open={footCollapsed ? "false" : "true"}
+              data-testid="right-footer-toggle"
+              className="ui-icon-btn rp-foot-toggle"
+              data-size="sm"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </button>
+          </Tip>
+          {onlySpotlightFooter && (
+            <span className="rp-live" data-on={isSpotlighted ? "true" : "false"}>
+              <span className="rp-live-dot" />
+              {t("rightPanel.spotlight")}
+              <span className="rp-live-state">{isSpotlighted ? t("rightPanel.spotlightLive") : t("rightPanel.spotlightOff")}</span>
+            </span>
+          )}
           {/* Spotlight is toolbar-only when it is the footer's only surface;
               keep a real tab only when it is competing with Run/Setup/Terminal. */}
           {spotlightAvailable && !onlySpotlightFooter && (
@@ -657,30 +674,41 @@ export function RightPanel() {
           {spotlightSelected && isSpotlighted ? (
             // Active: Resync + Stop
             <div className="ml-auto flex shrink-0 items-center gap-1">
+              <Tip content={t("rightPanel.resyncTip")} side="top">
+                <button
+                  type="button"
+                  onClick={handleSpotlightResync}
+                  aria-label={t("rightPanel.resyncTip")}
+                  className="ui-icon-btn"
+                  data-size="sm"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              </Tip>
               <button
-                onClick={handleSpotlightResync}
-                title={t("rightPanel.resyncTip")}
-                className="rounded p-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
-              <button
+                type="button"
                 onClick={handleSpotlightStop}
-                className="flex items-center gap-1 rounded px-2 py-1 text-[12px] font-medium bg-[var(--color-bg-3)] text-[var(--color-fg-dim)] hover:text-[var(--color-fg)] hover:bg-[var(--color-hover)]"
+                className="ui-raised rp-stop gap-1.5"
+                data-size="sm"
               >
-                <Square className="h-3 w-3" fill="currentColor" />
+                <Square className="h-2.5 w-2.5" fill="currentColor" />
                 {t("rightPanel.stop")}
               </button>
             </div>
+          ) : spotlightSelected && !isSpotlighted && !footCollapsed ? (
+            // Idle and open: the body below carries the Start call to action.
+            null
           ) : spotlightSelected && !isSpotlighted ? (
             // Idle: CTA Start button on the right
             <div className="ml-auto flex shrink-0 items-center">
               <button
+                type="button"
                 onClick={handleSpotlightStart}
-                className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] px-2.5 py-1 text-[12px] font-medium text-[var(--color-fg-dim)] hover:text-[var(--color-fg)] hover:border-[var(--color-accent)]"
+                className="ui-raised gap-1.5"
+                data-size="sm"
               >
                 <AudioWaveform className="h-3 w-3" />
-                {t("rightPanel.spotlight")}
+                {onlySpotlightFooter ? t("rightPanel.start") : t("rightPanel.spotlight")}
               </button>
             </div>
           ) : footTab !== "term" ? (
@@ -763,23 +791,17 @@ function FTab({ label, icon, active, onClick, onClose }: {
 }) {
   const { t } = useTranslation("task");
   return (
-    <div
-      className={cn(
-        // shrink-0 so tabs hold their width when the row gets cramped
-        // (a sibling like RunToolbar grows instead) and rounded-md
-        // keeps the underline-active treatment intact.
-        "group flex shrink-0 items-center rounded-md text-[12.5px] transition-colors border-b-2",
-        active ? "text-[var(--color-fg)] border-[var(--color-accent)]" : "text-[var(--color-fg-dim)] border-transparent hover:text-[var(--color-fg)]",
-      )}
-      style={active ? { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 } : undefined}
-    >
-      <button onClick={onClick} className="flex items-center gap-1 px-1.5 py-1">
+    // shrink-0 so tabs hold their width when the row gets cramped (a sibling
+    // like RunToolbar grows instead).
+    <div className="ui-seg rp-ftab group shrink-0 gap-1 px-[8px]" data-active={active ? "true" : "false"}>
+      <button type="button" onClick={onClick} className="flex items-center gap-1">
         {icon}{label}
       </button>
       {onClose && (
         <button
+          type="button"
           onClick={(e) => { e.stopPropagation(); onClose(); }}
-          className="ml-0.5 mr-0.5 rounded p-0.5 text-[var(--color-fg-faint)] opacity-0 hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)] group-hover:opacity-100"
+          className="sidebar-tray-btn h-4 w-4 opacity-0 group-hover:opacity-100"
           title={t("rightPanel.closeTabTip")}
         ><X className="h-3 w-3" /></button>
       )}
@@ -971,48 +993,39 @@ function ScriptStream({ taskId, kind, run, hasScript, dismissKey, onStart, onCon
   );
 }
 
-// Conductor-style pill tab: active = filled bg + bright fg, inactive
-// = plain dim text, hover = soft hover. Count appears as plain faint
-// text alongside the label (no accent-colored badge pill) so a "0"
-// reads as informational rather than urgent.
-function RTab({ label, active, badge, repoBadge, onClick }: { label: string; active: boolean; badge?: number; repoBadge?: number; onClick: () => void }) {
+// One icon segment of the tab well; the label is its tooltip and stays in
+// the DOM for screen readers and for specs (data-tab). The Git count is a
+// small notification badge on the icon's corner, not part of the label.
+function RTab({ label, icon, active, badge, repoBadge, onClick }: {
+  label: string; icon: React.ReactNode; active: boolean; badge?: number; repoBadge?: number; onClick: () => void;
+}) {
   const { t } = useTranslation("task");
+  const filesTip = badge !== undefined ? t("rightPanel.filesChangedTip", { count: badge }) : "";
+  const reposTip = repoBadge !== undefined ? t("rightPanel.reposChangedTip", { count: repoBadge }) : "";
+  const tip = [label, filesTip, reposTip].filter(Boolean).join(" · ");
+
   return (
-    <button
-      onClick={onClick}
-      // Text alone can't address these tabs once a badge renders inside them
-      // ("Git" becomes "Git29"), so e2e aims at the label + active state.
-      data-testid="right-tab"
-      data-tab={label}
-      data-active={active ? "true" : "false"}
-      className={cn(
-        "flex flex-1 items-center justify-center gap-1.5 border-b-2 text-[13px] font-medium transition-colors",
-        active
-          ? "border-[var(--color-accent)] bg-[var(--color-bg)] text-[var(--color-fg)]"
-          : "border-transparent text-[var(--color-fg-dim)] hover:text-[var(--color-fg)]",
-      )}
-    >
-      {label}
-      {/* Repos-changed badge (green) — only when more than one repo has
-          changes. Sits before the total so it reads "N repos, M files". */}
-      {repoBadge !== undefined && (
-        <span
-          title={t("rightPanel.reposChangedTip", { count: repoBadge })}
-          className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--color-ok)] px-1.5 text-[11px] font-semibold leading-none text-black tabular-nums"
-        >
-          {repoBadge}
-        </span>
-      )}
-      {/* Total changed files (accent). */}
-      {badge !== undefined && (
-        <span
-          title={t("rightPanel.filesChangedTip", { count: badge })}
-          className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--color-accent)] px-1.5 text-[11px] font-semibold leading-none text-[var(--color-accent-fg)] tabular-nums"
-        >
-          {badge}
-        </span>
-      )}
-    </button>
+    <Tip content={tip} side="bottom">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={active}
+        aria-label={tip}
+        onClick={onClick}
+        data-testid="right-tab"
+        data-tab={label}
+        data-active={active ? "true" : "false"}
+        className="ui-seg rp-tab relative w-[38px] px-0"
+      >
+        {icon}
+        <span className="sr-only">{label}</span>
+        {badge !== undefined && (
+          <span key={badge} data-testid="right-tab-badge" data-repos={repoBadge} className="ui-notif rp-notif">
+            {badge > 99 ? "99+" : badge}
+          </span>
+        )}
+      </button>
+    </Tip>
   );
 }
 
@@ -1042,17 +1055,16 @@ function SpotlightContent({
 
   if (!isSpotlighted) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <AudioWaveform className="h-10 w-10 text-[var(--color-fg-faint)] opacity-30" />
-        <button
-          onClick={onStart}
-          className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-2)] px-4 py-2 text-[13.5px] font-medium text-[var(--color-fg)] hover:border-[var(--color-accent)] hover:bg-[var(--color-hover)] transition-colors"
-        >
+      <div className="rp-empty">
+        <span className="rp-empty-tile"><AudioWaveform className="h-[18px] w-[18px]" /></span>
+        <div className="flex flex-col gap-[4px]">
+          <span className="rp-empty-title">{t("rightPanel.spotlightIdleTitle")}</span>
+          <p className="rp-empty-hint">{t("rightPanel.spotlightHint")}</p>
+        </div>
+        <button type="button" onClick={onStart} className="ui-raised" data-tone="accent">
+          <AudioWaveform className="h-3.5 w-3.5" />
           {t("rightPanel.startSpotlight")}
         </button>
-        <p className="text-[12px] text-[var(--color-fg-faint)]">
-          {t("rightPanel.spotlightHint")}
-        </p>
       </div>
     );
   }
@@ -1062,17 +1074,14 @@ function SpotlightContent({
     d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   return (
-    <div
-      ref={logRef}
-      className="h-full overflow-auto px-3 py-2 font-mono text-[11.5px] leading-snug text-[var(--color-fg-dim)]"
-    >
+    <div ref={logRef} data-selectable className="ui-scroll rp-log h-full">
       {log.length === 0 && (
-        <div className="text-[var(--color-fg-faint)]">{t("rightPanel.spotlightWaiting")}</div>
+        <div className="rp-log-waiting">{t("rightPanel.spotlightWaiting")}</div>
       )}
       {log.map((entry, i) => (
-        <div key={i} className={cn("whitespace-pre-wrap", entry.error && "text-[var(--color-err)]")}>
-          <span className="mr-2 text-[var(--color-fg-faint)]">{fmt(entry.time)}</span>
-          {entry.msg}
+        <div key={i} className="rp-log-entry" data-error={entry.error ? "true" : undefined}>
+          <span className="rp-log-time">{fmt(entry.time)}</span>
+          <span className="rp-log-msg">{entry.msg}</span>
         </div>
       ))}
     </div>

@@ -1,18 +1,18 @@
 // Fork-style git staging panel (the "Git" tab of the right panel).
 //
 // Layout, top to bottom:
-//   1. Repo sub-tabs   — multi-repo tasks only; one wrapping pill per
-//      repo that has changes (even if just one), each badged with its
-//      changed-file count. Clean repos get no pill.
-//   2. Toolbar         — Changes / Compare switch, search filter, view-mode
-//      menu (Tree / List / Combined List + Hide untracked). The filter and the
-//      view mode are shared by both modes.
-//   3. Unstaged pane   — resizable, scrollable file list.
-//   4. Resize handle   — drag to repartition the two panes.
-//   5. Staged pane     — resizable, scrollable file list.
-//   6. Commit form     — subject, description, Amend, split Commit button.
+//   Repo sub-tabs: multi-repo tasks only; one wrapping pill per repo that
+//     has changes (even if just one), each badged with its changed-file
+//     count. Clean repos get no pill.
+//   Toolbar: Commit / Compare / History switch, search filter, view-mode
+//     menu (Tree / List / Combined List + Hide untracked). The filter and
+//     the view mode are shared by every view.
+//   Unstaged pane: resizable, scrollable file list.
+//   Resize handle: drag to repartition the two panes.
+//   Staged pane: resizable, scrollable file list.
+//   Commit form: subject, description, Amend, split Commit button.
 //
-// In Compare mode (issue #208) 3-5 are replaced by ComparePanel: one list of
+// In Compare mode (issue #208) the panes and their handle are replaced by ComparePanel: one list of
 // everything this branch differs by against a chosen ref, committed work
 // included, which is the half the staging panes structurally cannot show. The
 // commit form goes with them, since nothing in that list is stageable. The
@@ -26,7 +26,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import {
-  ChevronRight, ChevronDown, ArrowDown, ArrowUp, List, ListTree, Rows3, Check, Eye, Search, Trash2, MessageSquare, Loader2, GitBranch, GitMerge, RotateCw, FileText,
+  ChevronDown, ArrowDown, ArrowUp, List, ListTree, Rows3, Check, Eye, Trash2, MessageSquare, Loader2, GitBranch, GitMerge, RotateCw, FileText,
+  GitCommitHorizontal, GitCompare, History, CircleCheck, FolderX,
 } from "lucide-react";
 import type { Task, GitStatus, GitRepo, GitFile, UpdateMode, UpdateInfo } from "@/lib/types";
 import { taskStage, taskUnstage, taskCommit, taskDiscard, taskGitBranches, taskGitCheckout, taskGitUpdate, taskGitUpdateAll, taskGitUpdateInfo, taskGitPush } from "@/lib/ipc";
@@ -47,12 +48,15 @@ import { HistoryPanel, ScopePicker } from "./HistoryPanel";
 import { ComparePanel } from "./ComparePanel";
 import { fileIconUrl, folderIconUrl } from "@/lib/explorer/iconResolver";
 import { PrCard, MemberPrRows } from "./PrCard";
+import { TreeChevron } from "@/components/sidebar/sidebarIcons";
+import { MagnifierGlyph } from "./panelIcons";
+import { EmptyState } from "./GitEmptyState";
 import { usePr } from "@/store/pr";
 
 // Per-side status → glyph / fill / ink / label, shared with Compare (GH #208)
 // so the two panels cannot drift. Re-exported here because this is where they
 // used to live and DiffPane / ComparePanel import from this module.
-import { SC, COL, INK, LBL } from "@/lib/gitStatus";
+import { SC, COL, INK, LBL, statusInk } from "@/lib/gitStatus";
 import { kbd } from "@/lib/platform";
 export { SC, COL, INK, LBL };
 
@@ -74,11 +78,15 @@ const LS_VIEWTAB = "gitPanelView";
  *  views of what the branch has already done. */
 export type GitView = "commit" | "compare" | "history";
 // Labels/titles are i18n keys into the gitPanel subtree, resolved at render.
-const GIT_VIEWS: { id: GitView; labelKey: string; titleKey: string }[] = [
-  { id: "commit",  labelKey: "gitPanel.viewCommit",  titleKey: "gitPanel.viewCommitTitle" },
-  { id: "compare", labelKey: "gitPanel.viewCompare", titleKey: "gitPanel.viewCompareTitle" },
-  { id: "history", labelKey: "gitPanel.viewHistory", titleKey: "gitPanel.viewHistoryTitle" },
+const GIT_VIEWS: { id: GitView; labelKey: string; titleKey: string; Glyph: typeof GitCompare }[] = [
+  { id: "commit",  labelKey: "gitPanel.viewCommit",  titleKey: "gitPanel.viewCommitTitle", Glyph: GitCommitHorizontal },
+  { id: "compare", labelKey: "gitPanel.viewCompare", titleKey: "gitPanel.viewCompareTitle", Glyph: GitCompare },
+  { id: "history", labelKey: "gitPanel.viewHistory", titleKey: "gitPanel.viewHistoryTitle", Glyph: History },
 ];
+
+/** A subject past this many columns wraps in `git log --oneline` and in most
+ *  forge UIs, so the counter changes colour there. */
+const SUBJECT_SOFT_LIMIT = 72;
 function readGitView(): GitView {
   try {
     const v = localStorage.getItem(LS_VIEWTAB);
@@ -191,13 +199,13 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
   const repos = status?.repos ?? [];
   const changedRepos = repos.filter(r => r.changed > 0);
   // Pills show changed repos plus a pinned (just-committed) one, even at 0
-  // changes — so the pill the user committed in stays put. Preserves repo order.
+  // changes, so the pill the user committed in stays put. Preserves repo order.
   const pinnedExists = !!pinnedRepoDir && repos.some(r => r.dir_name === pinnedRepoDir);
   const visibleRepos = pinnedExists
     ? repos.filter(r => r.changed > 0 || r.dir_name === pinnedRepoDir)
     : changedRepos;
 
-  // Keep the selection on a repo that actually has changes — the pills only
+  // Keep the selection on a repo that actually has changes, the pills only
   // list changed repos now, so an activeRepoDir pointing at a clean repo
   // (fresh open, or one that just went clean after a commit) has no pill and
   // must snap to the first changed repo so its files show immediately. The
@@ -214,7 +222,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
 
   // Reset transient form state on task switch. Skipped on the first run:
   // on mount every value here is already empty, and blanking activeRepoDir
-  // would undo the snap the effect above just made — both effects flush in
+  // would undo the snap the effect above just made, both effects flush in
   // the same commit, so the snap loses, and afterwards its deps are
   // unchanged ("" in, "" out) so it never re-runs. A multi-repo task then
   // sat on repos[0] (the wrapper, usually clean) with an empty file list
@@ -240,7 +248,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
   const repo: GitRepo | undefined = repos.find(r => r.dir_name === activeRepoDir) ?? repos[0];
   // Every group is diffable: the backend's resolve_task_git_path runs
   // git in the group's OWN repo cwd (member.path), so repo_root members
-  // (live checkouts that live outside the wrapper subtree) resolve fine —
+  // (live checkouts that live outside the wrapper subtree) resolve fine,
   // safe_task_path is checked against that member cwd, not the wrapper.
   const clickable = !!repo;
 
@@ -273,7 +281,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
     files.reduce((n, f) => n + (f.fp !== "" && viewedMap?.[dir ? `${dir}/${f.path}` : f.path] === f.fp ? 1 : 0), 0);
   // After a single file leaves its pane (stage / unstage / discard), move the
   // selection to the NEXT file in that pane's visual order so files can be
-  // worked through in sequence — never linger on the file just acted on. If it
+  // worked through in sequence, never linger on the file just acted on. If it
   // was the last file in the pane, clear the selection and close the preview
   // ("pending", italic-titled) diff tab so no stale diff is left open.
   // Drop the selection and close the preview ("pending", italic-titled) diff
@@ -300,7 +308,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
 
   // Keep the sidebar selection in lockstep with the open preview diff. The
   // diff pane can move the preview tab on its own (Mark-as-viewed advances to
-  // the next file), and that path change must re-highlight the matching row —
+  // the next file), and that path change must re-highlight the matching row,
   // and switch the active repo sub-tab if the next file lives in another repo.
   // Without this, the row highlight stays stuck on the file you started from.
   const previewDiffPath = useApp(s => {
@@ -359,7 +367,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
           if (opts?.pane && paths.length === 1) focusNext(opts.pane, paths[0]);
           else closePreviewDiff();
           // Discard mutates the WORKING TREE (restores tracked files,
-          // deletes untracked ones) — a plain refresh() would update git
+          // deletes untracked ones), a plain refresh() would update git
           // status but leave the file tree listing deleted files and open
           // editors holding the discarded buffer (where a ⌘S would
           // resurrect it). bumpFsRevision fans out to all of them, git
@@ -380,7 +388,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
     taskCommit(task.id, dir, subject, body, false, push)
       .then(() => {
         setSubject(""); setBody("");
-        // The committed files no longer have changes — drop the now-stale
+        // The committed files no longer have changes, drop the now-stale
         // preview diff tab (same as clearing the last staged/unstaged file).
         closePreviewDiff();
         pushToast(push ? t("gitPanel.committedPushed") : t("gitPanel.committed"), "success");
@@ -468,7 +476,12 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
   }, [selected, dir, task.id, refresh, pushToast, stageBinding, discardBinding, focusNext, doDiscard]);
 
   if (!status) {
-    return <div className="px-3 py-3 text-[13.5px] text-[var(--color-fg-faint)]">{t("shared.loading")}</div>;
+    return (
+      <div className="rp-git-loading">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        {t("shared.loading")}
+      </div>
+    );
   }
   // A repo termic could not read at all (or a plain folder) has nothing to
   // show and no graph to draw, so it keeps the bare message.
@@ -480,11 +493,11 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
             main-checkout task (only the HOST card is wrong there). */}
         <MemberPrRows task={task} />
         {!nonGit && <BranchBar task={task} branch={status.repos[0]?.branch ?? task.branch} dir="" />}
-        <div className="px-3 py-3 text-[13.5px] text-[var(--color-fg-faint)]">
-          {nonGit
-            ? t("gitPanel.notGit")
-            : t("gitPanel.clean")}
-        </div>
+        {nonGit ? (
+          <EmptyState icon={<FolderX className="h-5 w-5" />} title={t("gitPanel.notGitTitle")} body={t("gitPanel.notGit")} />
+        ) : (
+          <EmptyState icon={<CircleCheck className="h-5 w-5" />} tone="var(--ui-git-added)" title={t("gitPanel.cleanTitle")} body={t("gitPanel.clean")} />
+        )}
       </div>
     );
   }
@@ -495,7 +508,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
   // message takes the file panes' place.
   const clean = status.total_changed === 0 && !pinnedExists;
 
-  // Show repo pills only for repos that actually have changes — even when
+  // Show repo pills only for repos that actually have changes, even when
   // that's a single repo. Unchanged repos are noise here; the "All files"
   // tab is where you browse repos that aren't currently dirty.
   const showSubTabs = repos.length > 1 && visibleRepos.length > 0;
@@ -521,7 +534,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
 
   // Single click: select the row (keeps it highlighted + shows its stage
   // button, Fork-style) and open the diff preview. Works for every group
-  // including repo_root members — the backend diffs in the member's own
+  // including repo_root members, the backend diffs in the member's own
   // repo cwd, so the file resolves even though it's outside the wrapper.
   void onDoubleClickDiff;
   const activate = (pane: "unstaged" | "staged", p: string) => {
@@ -555,7 +568,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
           here: which repo you are looking at is what the branch bar and all
           three sub-tabs below are ABOUT, so it cannot sit inside them. */}
       {showSubTabs && (
-        <div className="flex shrink-0 flex-wrap gap-1 border-b border-[var(--color-border-soft)] px-2 py-1.5">
+        <div className="ui-well mx-[10px] mt-[8px] shrink-0 flex-wrap">
           {visibleRepos.map(r => (
             <button
               key={r.dir_name}
@@ -565,7 +578,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
                 // clean pill it was holding open can drop away.
                 setPinnedRepoDir(null);
                 setActiveRepoDir(r.dir_name);
-                // The open diff belongs to the previous repo — drop the
+                // The open diff belongs to the previous repo, drop the
                 // selection and close the preview diff tab so we don't show
                 // a stale file from another repo.
                 setSelected(null);
@@ -577,16 +590,11 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
               data-testid="repo-pill"
               data-repo-dir={r.dir_name}
               data-active={r.dir_name === activeRepoDir ? "true" : "false"}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[12px] transition-colors",
-                r.dir_name === activeRepoDir
-                  ? "border-[var(--color-accent)] bg-[var(--color-bg-2)] text-[var(--color-fg)]"
-                  : "border-transparent text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
-              )}
+              className="ui-seg"
             >
               <span className="truncate max-w-[140px]">{r.name}</span>
               {r.changed > 0 && (
-                <span className="inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[var(--color-bg-3)] px-1 text-[10.5px] tabular-nums text-[var(--color-fg-dim)]">
+                <span className="ui-count" data-tone={r.dir_name === activeRepoDir ? "accent" : undefined}>
                   {r.changed}
                 </span>
               )}
@@ -603,17 +611,17 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
           branch={repo?.branch ?? task.branch}
           dir={dir}
           multi={repos.length > 1}
-          right={<div className="relative ml-auto flex min-w-[30%] flex-1 items-center">
-            <Search className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-[var(--color-fg-faint)]" />
+          right={<label className="ui-field ml-auto min-w-[30%] flex-1" data-size="sm">
+            <MagnifierGlyph size={12} className="shrink-0" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={view === "history" ? t("gitPanel.searchMessages") : t("gitPanel.filterPlaceholder")}
               title={t("gitPanel.filterTip")}
               spellCheck={false} autoCorrect="off" autoCapitalize="off" autoComplete="off"
-              className="h-6 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] pl-7 pr-2 text-[12px] text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-faint)] focus:border-[var(--color-accent)]"
+              className="w-full"
             />
-          </div>}
+          </label>}
         />
       )}
 
@@ -621,8 +629,8 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
           row. Two rows of tabs would be a lot for a panel that drags down to
           220px, and the file filter is meaningless in History, so History
           hands that half of the row to the ref picker instead. */}
-      <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-[var(--color-border-soft)] px-2">
-        <div className="flex shrink-0 items-stretch gap-0.5">
+      <div className="rp-git-viewbar flex shrink-0 items-center gap-1.5 border-b border-[var(--sidebar-divider)] px-[10px] pb-[8px] pt-[2px]">
+        <div className="ui-well rp-git-views" data-view={view}>
           {GIT_VIEWS.map(v => (
             <button
               key={v.id}
@@ -631,19 +639,15 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
               data-active={view === v.id ? "true" : "false"}
               onClick={() => changeView(v.id)}
               title={t(v.titleKey)}
-              className={cn(
-                "flex h-6 items-center rounded-md px-1.5 text-[11.5px] leading-none transition-colors",
-                view === v.id
-                  ? "bg-[var(--color-bg-3)] text-[var(--color-fg)]"
-                  : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
-              )}
+              className="ui-seg"
             >
-              {t(v.labelKey)}
+              <v.Glyph className="rp-git-view-glyph h-3.5 w-3.5" />
+              <span className="truncate">{t(v.labelKey)}</span>
             </button>
           ))}
         </div>
         {view === "history" ? (
-          <div className="ml-auto flex min-w-0 items-center text-[11.5px]">
+          <div className="flex min-w-0 shrink items-center justify-end">
             <ScopePicker
               taskId={task.id}
               repoDir={dir}
@@ -659,12 +663,13 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
             <DropdownTrigger asChild>
               <button
                 title={t("gitPanel.viewOptions")}
-                className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+                className="ui-icon-btn ml-auto"
+                data-size="sm"
               >
                 {viewMode === "tree" ? <ListTree className="h-4 w-4" /> : viewMode === "combined" ? <Rows3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
               </button>
             </DropdownTrigger>
-            <DropdownMenu align="end">
+            <DropdownMenu align="end" className="sidebar-menu">
               <ViewItem label={t("gitPanel.viewTree")}          active={viewMode === "tree"}     onSelect={() => changeViewMode("tree")} />
               <ViewItem label={t("gitPanel.viewCombined")} active={viewMode === "combined"} onSelect={() => changeViewMode("combined")} />
               <ViewItem label={t("gitPanel.viewList")}          active={viewMode === "list"}     onSelect={() => changeViewMode("list")} />
@@ -683,9 +688,33 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
           and their two localStorage keys are gone with it. */}
       <div ref={bodyRef} className="relative flex min-h-0 flex-1 flex-col">
         {clean && view === "commit" ? (
-          <div className="px-3 py-3 text-[13.5px] text-[var(--color-fg-faint)]">
-            {t("gitPanel.clean")}
-          </div>
+          <EmptyState
+            icon={<CircleCheck className="h-5 w-5" />}
+            tone="var(--ui-git-added)"
+            title={t("gitPanel.cleanTitle")}
+            body={t("gitPanel.clean")}
+          >
+            {/* The form and its Push button go away with the changes, but
+                commits made in the terminal can still be waiting. */}
+            {ahead > 0 && !nonGit && (
+              <>
+                <div className="rp-git-empty-body">
+                  {ahead === 1 ? t("gitPanel.cleanAheadOne") : t("gitPanel.cleanAheadMany", { count: ahead })}
+                </div>
+                <button
+                  data-testid="git-push"
+                  data-ahead={ahead}
+                  disabled={pushDisabled}
+                  onClick={doPush}
+                  className={cn(FOOTER_BTN, "ui-raised mt-2 gap-1.5 px-3")}
+                >
+                  {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUp className="h-3.5 w-3.5" />}
+                  {pushing ? t("gitPanel.pushing") : t("gitPanel.push")}
+                  <span className="ui-count" data-tone="accent">{ahead}</span>
+                </button>
+              </>
+            )}
+          </EmptyState>
         ) : view === "history" ? (
           <HistoryPanel
             task={task}
@@ -722,9 +751,9 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
           className={unstagedCollapsed ? "shrink-0" : "min-h-0 flex-1"}
           style={bothOpen ? { flexBasis: `${ratio * 100}%`, flexGrow: 0, flexShrink: 0 } : undefined}
         />
-        <div className="relative h-px shrink-0 bg-[var(--color-border-soft)]">
+        <div className="relative h-px shrink-0 bg-[var(--sidebar-divider)]">
           {bothOpen && (
-            <ResizeHandle direction="y" className="top-0" onDrag={onSplitDrag} onEnd={() => persist(LS_RATIO, String(ratioRef.current))} />
+            <ResizeHandle direction="y" className="rp-git-split-handle top-0" onDrag={onSplitDrag} onEnd={() => persist(LS_RATIO, String(ratioRef.current))} />
           )}
         </div>
         <Pane
@@ -749,15 +778,27 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
           too, so a "Commit N files" button under it would be counting a
           staging area that is not on screen. */}
       {view === "commit" && !clean && (
-      <div className="flex shrink-0 flex-col gap-1.5 border-t border-[var(--color-border-soft)] p-2">
-        <input
-          value={subject}
-          onChange={e => setSubject(e.target.value)}
-          onKeyDown={onCommitKey}
-          placeholder={t("gitPanel.commitSubject")}
-          spellCheck={false} autoCorrect="off" autoCapitalize="off" autoComplete="off"
-          className="h-7 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 text-[13px] text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-faint)] focus:border-[var(--color-accent)]"
-        />
+      <div className="sidebar-footer flex shrink-0 flex-col gap-[6px] border-t border-[var(--sidebar-divider)] p-[10px]">
+        <label className="ui-field w-full">
+          <input
+            value={subject}
+            onChange={e => setSubject(e.target.value)}
+            onKeyDown={onCommitKey}
+            placeholder={t("gitPanel.commitSubject")}
+            spellCheck={false} autoCorrect="off" autoCapitalize="off" autoComplete="off"
+          />
+          {subject.length > 0 ? (
+            <span
+              className="rp-git-subject-len"
+              data-over={subject.length > SUBJECT_SOFT_LIMIT}
+              title={t("gitPanel.subjectLengthTip", { limit: SUBJECT_SOFT_LIMIT })}
+            >
+              {subject.length}
+            </span>
+          ) : (
+            <kbd className="ui-keycap" title={t("gitPanel.commitKeyTip")}>{kbd("⌘↵")}</kbd>
+          )}
+        </label>
         <textarea
           value={body}
           onChange={e => setBody(e.target.value)}
@@ -765,7 +806,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
           placeholder={t("gitPanel.description")}
           rows={2}
           spellCheck={false} autoCorrect="off" autoCapitalize="off" autoComplete="off"
-          className="w-full resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-[12.5px] leading-snug text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-faint)] focus:border-[var(--color-accent)]"
+          className="ui-input w-full resize-none text-[12.5px]"
         />
         {/* Split commit button: main = remembered mode, caret picks.
             Push sits beside it because the commits it sends are usually not
@@ -780,13 +821,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
             title={ahead > 0
               ? (ahead === 1 ? t("gitPanel.pushTipOne") : t("gitPanel.pushTipMany", { count: ahead }))
               : t("gitPanel.pushTipNew")}
-            className={cn(
-              FOOTER_BTN,
-              "mr-auto shrink-0 gap-1.5 rounded-md border border-[var(--color-border)] px-2.5",
-              pushDisabled
-                ? "cursor-not-allowed text-[var(--color-fg-faint)] opacity-50"
-                : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
-            )}
+            className={cn(FOOTER_BTN, "ui-raised mr-auto gap-1.5 px-2.5")}
           >
             {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUp className="h-3.5 w-3.5" />}
             {pushing ? t("gitPanel.pushing") : t("gitPanel.push")}
@@ -796,7 +831,7 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
                 happened to be), and `min-w-4` stops "1" from rendering as a
                 sliver next to "15". */}
             {ahead > 0 && (
-              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-accent-soft)] px-1 text-[10.5px] leading-none tabular-nums text-[var(--color-accent)]">
+              <span className="ui-count" data-tone="accent">
                 {ahead}
               </span>
             )}
@@ -811,11 +846,8 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
             disabled={commitDisabled}
             onClick={() => doCommit(pushDefault)}
             title={commitLabel}
-            className={cn(
-              FOOTER_BTN,
-              "min-w-0 truncate rounded-l-md bg-[var(--color-accent)] px-3 text-[var(--color-accent-fg)]",
-              commitDisabled ? "cursor-not-allowed opacity-40" : "hover:brightness-110",
-            )}
+            data-tone="accent"
+            className={cn(FOOTER_BTN, "ui-raised rp-git-commit min-w-0 truncate rounded-r-none px-3")}
           >
             {committing ? t("gitPanel.committing") : commitLabel}
           </button>
@@ -824,16 +856,13 @@ export function GitPanel({ task, status, refresh, onOpenDiff, onOpenFile, onDoub
               <button
                 disabled={commitDisabled}
                 title={t("gitPanel.commitOptions")}
-                className={cn(
-                  FOOTER_BTN,
-                  "w-6 shrink-0 justify-center rounded-r-md border-l border-black/15 bg-[var(--color-accent)] text-[var(--color-accent-fg)]",
-                  commitDisabled ? "cursor-not-allowed opacity-40" : "hover:brightness-110",
-                )}
+                data-tone="accent"
+                className={cn(FOOTER_BTN, "ui-raised rp-git-commit rp-git-commit-caret w-6 justify-center rounded-l-none px-0")}
               >
                 <ChevronDown className="h-3.5 w-3.5" />
               </button>
             </DropdownTrigger>
-            <DropdownMenu align="end">
+            <DropdownMenu align="end" className="sidebar-menu">
               <DropdownItem onSelect={() => setPush(false)}>
                 <Check className={cn("h-3.5 w-3.5", pushDefault && "opacity-0")} />
                 <span>{t("gitPanel.commitItem")}</span>
@@ -865,7 +894,7 @@ function BranchBar({ task, branch, dir, multi, right }: {
   task: Task;
   branch: string;
   dir: string;
-  /** More than one repo on this task — offers the "all repos" update items. */
+  /** More than one repo on this task, offers the "all repos" update items. */
   multi?: boolean;
   /** Rendered on the right of the same row. The branch chip is one short
    *  control on a full-width row, so the filter rides with it rather than
@@ -905,7 +934,7 @@ function BranchBar({ task, branch, dir, multi, right }: {
       .then(r => {
         setBranches(null);   // stale after an update - reload on next open
         setInfo(null);
-        // Merge/rebase rewrote the working tree — refresh the file tree and
+        // Merge/rebase rewrote the working tree, refresh the file tree and
         // open editors too, not just git status (same reasoning as discard).
         useApp.getState().bumpFsRevision(task.id);
         if (r.conflicted) {
@@ -936,7 +965,7 @@ function BranchBar({ task, branch, dir, multi, right }: {
 
   // Same op across the host and every member repo, one summary toast. A repo
   // the mode can't serve (no upstream for pull, no base for merge/rebase)
-  // reports its own reason — the batch does not stop at it.
+  // reports its own reason, the batch does not stop at it.
   const runUpdateAll = (mode: UpdateMode) => {
     if (updating || switching) return;
     setUpdating(true);
@@ -972,7 +1001,7 @@ function BranchBar({ task, branch, dir, multi, right }: {
     taskGitCheckout(task.id, dir, target)
       .then(r => {
         setBranches(null);   // stale after a switch - reload on next open
-        // Checkout rewrote the working tree — full fan-out, not just status.
+        // Checkout rewrote the working tree, full fan-out, not just status.
         useApp.getState().bumpFsRevision(task.id);
         if (r.conflicted) {
           pushToast(t("gitPanel.switchedConflict", { branch: r.branch }), "error", { ttlMs: 8000 });
@@ -987,7 +1016,7 @@ function BranchBar({ task, branch, dir, multi, right }: {
   };
 
   return (
-    <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-[var(--color-border-soft)] px-2">
+    <div className="flex shrink-0 items-center gap-1.5 px-[10px] pb-[6px] pt-[8px]">
       {/* Load on OPEN, not on the trigger's onClick: Radix opens the menu on
           pointerdown and its modal layer sets pointer-events:none on the rest
           of the page before the mouse button is released, so with a REAL
@@ -1001,7 +1030,7 @@ function BranchBar({ task, branch, dir, multi, right }: {
             data-testid="branch-chip"
             title={t("gitPanel.branchChipTip")}
             className={cn(
-              "flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 text-[12px] transition-colors hover:border-[var(--color-accent-soft)] disabled:opacity-50",
+              "ui-raised h-[26px] min-w-0 max-w-full justify-start gap-1.5 px-2 text-[12px] font-medium",
               // Only when it SHARES the row. The chip is sized to its content
               // and `right` is a flex-basis-0 item, so a basis-0 item absorbs
               // none of the shrink: a long branch name took the whole row and
@@ -1014,13 +1043,13 @@ function BranchBar({ task, branch, dir, multi, right }: {
             )}
           >
             {switching || updating
-              ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--color-fg-faint)]" />
-              : <GitBranch className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />}
-            <span className="truncate font-mono text-[var(--color-fg)]">{branch || t("shared.detachedHead")}</span>
-            <ChevronDown className="h-3 w-3 shrink-0 text-[var(--color-fg-faint)]" />
+              ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--sidebar-icon)]" />
+              : <GitBranch className="rp-git-branch-glyph h-3.5 w-3.5 shrink-0" />}
+            <span className="truncate font-mono text-[var(--sidebar-ink-strong)]">{branch || t("shared.detachedHead")}</span>
+            <ChevronDown className="h-3 w-3 shrink-0 text-[var(--sidebar-icon)]" />
           </button>
         </DropdownTrigger>
-        <DropdownMenu align="start">
+        <DropdownMenu align="start" className="sidebar-menu">
           {loading ? (
             <div className="flex items-center gap-2 px-2 py-1.5 text-[12px] text-[var(--color-fg-faint)]">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("gitPanel.loadingBranches")}
@@ -1129,7 +1158,7 @@ interface PaneProps {
   selectedKey: string | null;
   /** Display glyph for the stage/unstage shortcut, e.g. "⌘S". */
   stageGlyph: string;
-  /** Owning task id — keys the per-file viewed marks + comment counts. */
+  /** Owning task id, keys the per-file viewed marks + comment counts. */
   taskId: string;
   /** How many of this pane's files are currently marked viewed (header badge). */
   viewedCount?: number;
@@ -1160,9 +1189,11 @@ function Pane({
   taskId, viewedCount = 0, headerAction, onRowClick, onRowOpenFile, onToggle, onDiscard, rowActionIcon, root, repoDir, truncated, className, style,
 }: PaneProps) {
   const { t } = useTranslation("panels");
+  const HeadActionIcon = rowActionIcon === "down" ? ArrowDown : ArrowUp;
+
   return (
     <div className={cn("flex flex-col overflow-hidden", className)} style={style}>
-      <div className="group flex h-7 shrink-0 items-center border-b border-[var(--color-border-soft)] bg-[var(--color-bg-1)] hover:bg-[var(--color-hover)]">
+      <div className="rp-git-pane-head">
         <button
           type="button"
           onClick={onTogglePane}
@@ -1170,15 +1201,13 @@ function Pane({
           data-testid="git-pane-header"
           data-pane={pane}
           data-collapsed={paneCollapsed}
-          className="flex h-full flex-1 items-center gap-1.5 pl-2.5 pr-1 text-[11.5px] font-medium uppercase tracking-[0.06em] text-[var(--color-fg-dim)] group-hover:text-[var(--color-fg)]"
+          className="flex h-full min-w-0 flex-1 items-center gap-[7px] pl-[14px] pr-1"
         >
-          {paneCollapsed
-            ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
-            : <ChevronDown  className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />}
-          {title}
-          <span className="tabular-nums text-[var(--color-fg-faint)]">{files.length}</span>
+          <TreeChevron open={!paneCollapsed} className="shrink-0 text-[var(--sidebar-chevron)]" />
+          <span className="ui-eyebrow">{title}</span>
+          <span className="ui-count">{files.length}</span>
           {viewedCount > 0 && (
-            <span className="flex items-center gap-1 rounded-full bg-[var(--color-bg-3)] px-1.5 py-px text-[10px] font-medium normal-case tracking-normal text-[var(--color-fg-dim)]">
+            <span className="ui-count gap-1 font-semibold">
               <Check className="h-2.5 w-2.5" />
               <span className="tabular-nums">{viewedCount}/{files.length}</span>
             </span>
@@ -1187,21 +1216,23 @@ function Pane({
         {headerAction && (
           <button
             onClick={headerAction.onClick}
-            className="mr-2.5 shrink-0 rounded px-1.5 py-0.5 text-[11.5px] text-[var(--color-fg-dim)] hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)]"
+            className="rp-git-head-btn"
           >
+            <HeadActionIcon className="h-3 w-3" />
             {headerAction.label}
           </button>
         )}
       </div>
+
       {!paneCollapsed && truncated && (
-        <div className="flex shrink-0 items-center gap-1.5 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-2)] px-2.5 py-1 text-[11px] text-[var(--color-fg-faint)]">
+        <div className="mx-[10px] mb-[4px] flex shrink-0 items-center gap-1.5 rounded-[6px] bg-[var(--sidebar-well-bg)] px-2.5 py-1 text-[11px] text-[var(--sidebar-meta)] shadow-[var(--sidebar-well-shadow)]">
           {t("gitPanel.truncated")}
         </div>
       )}
       {!paneCollapsed && (
         <div className="min-h-0 flex-1 overflow-hidden">
           {files.length === 0 ? (
-            <div className="px-3 py-1.5 text-[12px] text-[var(--color-fg-faint)]">
+            <div className="rp-git-empty-line">
               {pane === "unstaged" ? t("gitPanel.nothingToStage") : t("gitPanel.nothingStaged")}
             </div>
           ) : (
@@ -1242,7 +1273,7 @@ function FileList(props: FileListProps) {
     [files, viewMode, collapsed, pane],
   );
 
-  const ROW_H = 26;
+  const ROW_H = 28;
   const OVERSCAN = 5;
   const startIdx = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
   const endIdx = Math.min(rows.length - 1, Math.ceil((scrollTop + containerH) / ROW_H) + OVERSCAN);
@@ -1252,7 +1283,7 @@ function FileList(props: FileListProps) {
   return (
     <div
       ref={containerRef}
-      className="h-full overflow-auto py-0.5"
+      className="ui-scroll h-full pl-[6px] pr-[2px]"
       onScroll={e => setScrollTop(e.currentTarget.scrollTop)}
     >
       {paddingTop > 0 && <div style={{ height: paddingTop }} aria-hidden />}
@@ -1300,7 +1331,7 @@ export type FlatRow =
 
 /** Flatten a file list into rows for the active view mode. Exported because
  *  Compare (GH #208) renders its OWN rows (churn columns, no stage
- *  buttons) but must group and order them exactly like the Commit tab does —
+ *  buttons) but must group and order them exactly like the Commit tab does,
  *  two file lists in the same panel that disagreed about where a folder sits
  *  would read as a bug. `pane` only namespaces the collapsed-folder keys. */
 export function flattenRows(files: GitFile[], viewMode: ViewMode, collapsed: Set<string>, pane: string): FlatRow[] {
@@ -1350,11 +1381,7 @@ export function flattenRows(files: GitFile[], viewMode: ViewMode, collapsed: Set
 
 function renderFlatRow(row: FlatRow, props: FileListProps) {
   if (row.kind === "dirhdr") {
-    return (
-      <div key={`h:${row.label}`} className="truncate px-2.5 pb-0.5 pt-1.5 text-[11px] font-medium uppercase tracking-wider text-[var(--color-fg-dim)]">
-        {row.label}
-      </div>
-    );
+    return <DirHeader key={`h:${row.label}`} label={row.label} />;
   }
   if (row.kind === "dir") {
     return (
@@ -1373,6 +1400,28 @@ function renderFlatRow(row: FlatRow, props: FileListProps) {
     );
   }
   return <FileRow key={`f:${props.pane}:${row.file.path}`} file={row.file} label={row.label} depth={row.depth} {...rowProps(props)} />;
+}
+
+/** A folder's path over its files in the combined view, ruled off to the
+ *  row's end. Shared with Compare, which groups the same way. */
+export function DirHeader({ label }: { label: string }) {
+  return (
+    <div className="rp-git-dirhdr" title={label}>
+      <span className="min-w-0 truncate">{label}</span>
+    </div>
+  );
+}
+
+/** One vertical guide per ancestor level, through the row, the way the All
+ *  files tree draws them. Sits at the centre of that level's chevron. */
+export function RowGuides({ depth }: { depth: number }) {
+  return (
+    <>
+      {Array.from({ length: depth }, (_, level) => (
+        <span key={level} className="ui-guide" style={{ left: 8 + level * 16 + 4 }} />
+      ))}
+    </>
+  );
 }
 
 function DirRow({ row, pane, setCollapsed, onToggle, onDiscard, rowActionIcon, stageGlyph, root, repoDir }: {
@@ -1403,31 +1452,37 @@ function DirRow({ row, pane, setCollapsed, onToggle, onDiscard, rowActionIcon, s
       <ContextMenuTrigger asChild>
         <div
           onClick={toggle}
-          className="group flex h-[26px] w-full cursor-pointer items-center gap-1.5 px-2 pr-1 text-left text-[13px] text-[var(--color-fg)]/85 hover:bg-[var(--color-hover)]"
-          style={{ paddingLeft: 6 + depth * 12 }}
+          data-kind="dir"
+          className="ui-row rp-git-row w-full cursor-pointer pr-[6px]"
+          style={{ paddingLeft: 8 + depth * 16 }}
         >
-          <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)] transition-transform", !isCollapsed && "rotate-90")} />
+          <RowGuides depth={depth} />
+          <TreeChevron open={!isCollapsed} className="ui-chevron" />
           <img src={folderIconUrl(name, !isCollapsed)} alt="" className="h-4 w-4 shrink-0 file-icon" />
-          <span className="truncate flex-1 font-medium">{name}</span>
-          <Tip
-            side="left"
-            content={
-              <span className="flex items-center gap-1.5">
-                {dirLabel}
-                <kbd className="rounded bg-[var(--color-bg-3)] px-1 text-[10.5px] text-[var(--color-fg-faint)]">{stageGlyph}</kbd>
-              </span>
-            }
-          >
-            <button
-              onClick={(e) => { e.stopPropagation(); onToggle(leaves); }}
-              className="shrink-0 rounded p-0.5 text-[var(--color-fg-faint)] opacity-0 hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)] group-hover:opacity-100"
+          <span className="ui-row-name">{name}</span>
+          {isCollapsed && <span className="rp-git-dir-count">{leaves.length}</span>}
+          <span className="ui-tray">
+            <Tip
+              side="left"
+              content={
+                <span className="flex items-center gap-1.5">
+                  {dirLabel}
+                  <kbd className="ui-keycap">{stageGlyph}</kbd>
+                </span>
+              }
             >
-              <DirActionIcon className="h-3.5 w-3.5" />
-            </button>
-          </Tip>
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggle(leaves); }}
+                aria-label={dirLabel}
+                className="sidebar-tray-btn"
+              >
+                <DirActionIcon className="h-3.5 w-3.5" />
+              </button>
+            </Tip>
+          </span>
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent className="sidebar-menu">
         <ContextMenuItem onSelect={() => onToggle(leaves)}>
           <DirActionIcon />
           {rowActionIcon === "down" ? t("gitPanel.stageNamed", { name }) : t("gitPanel.unstageNamed", { name })}
@@ -1449,7 +1504,7 @@ type TreeNode = { name: string; path: string; file?: GitFile; children: Map<stri
 /** Flatten files into the exact top-to-bottom order the given view renders
  *  them, so "go to the next file" (focusNext, diff-pane Mark-as-viewed)
  *  follows what the eye sees. Tree view puts folders before files at each
- *  level — a flat path sort would interleave them and make the next file
+ *  level, a flat path sort would interleave them and make the next file
  *  jump around (GH: diff-pane advance order). */
 export function orderedFiles(files: GitFile[], viewMode: ViewMode): GitFile[] {
   if (viewMode === "list") {
@@ -1534,31 +1589,31 @@ function TreeView(props: FileListProps) {
             <ContextMenuTrigger asChild>
               <div
                 onClick={() => toggle(k.path)}
-                className="group flex h-[26px] w-full cursor-pointer items-center gap-1.5 px-2 pr-1 text-left text-[13px] text-[var(--color-fg)]/85 hover:bg-[var(--color-hover)]"
-                style={{ paddingLeft: 6 + depth * 12 }}
+                className="ui-row group w-full cursor-pointer"
+                style={{ paddingLeft: 8 + depth * 16 }}
               >
-                <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)] transition-transform", !isCollapsed && "rotate-90")} />
+                <TreeChevron open={!isCollapsed} className="shrink-0 text-[var(--sidebar-chevron)]" />
                 <img src={folderIconUrl(k.name, !isCollapsed)} alt="" className="h-4 w-4 shrink-0 file-icon" />
-                <span className="truncate flex-1 font-medium">{k.name}</span>
+                <span className="ui-row-name">{k.name}</span>
                 <Tip
                   side="left"
                   content={
                     <span className="flex items-center gap-1.5">
                       {dirLabel}
-                      <kbd className="rounded bg-[var(--color-bg-3)] px-1 text-[10.5px] text-[var(--color-fg-faint)]">{stageGlyph}</kbd>
+                      <kbd className="ui-keycap">{stageGlyph}</kbd>
                     </span>
                   }
                 >
                   <button
                     onClick={(e) => { e.stopPropagation(); onToggle(leaves); }}
-                    className="shrink-0 rounded p-0.5 text-[var(--color-fg-faint)] opacity-0 hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)] group-hover:opacity-100"
+                    className="sidebar-tray-btn opacity-0 group-hover:opacity-100"
                   >
                     <DirActionIcon className="h-3.5 w-3.5" />
                   </button>
                 </Tip>
               </div>
             </ContextMenuTrigger>
-            <ContextMenuContent>
+            <ContextMenuContent className="sidebar-menu">
               {/* Git actions first (stage + discard), then path/finder items. */}
               <ContextMenuItem onSelect={() => onToggle(leaves)}>
                 <DirActionIcon />
@@ -1587,7 +1642,7 @@ function TreeView(props: FileListProps) {
 // ── row ──
 // Single click selects (highlight + persistent action button) and opens
 // the diff preview. Double click stages / unstages (same as the trailing
-// arrow button). `clickable` is `!!repo` — a task with no git repo at all,
+// arrow button). `clickable` is `!!repo`, a task with no git repo at all,
 // which renders no rows anyway. It is NOT about repo_root members: those are
 // diffable and openable like any other group (see `clickable` above and
 // resolve_task_git_path), and a stale comment here claiming otherwise is
@@ -1628,7 +1683,7 @@ function FileRow({ file, label, depth = 0, pane, selectedKey, stageGlyph, taskId
     return n;
   });
   // A deletion has no working-tree file to fingerprint (fp === ""), so the
-  // viewed mark can't anchor to content — hide the checkbox there.
+  // viewed mark can't anchor to content, hide the checkbox there.
   const canView = file.fp !== "";
   const toggleViewed = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1643,22 +1698,21 @@ function FileRow({ file, label, depth = 0, pane, selectedKey, stageGlyph, taskId
   // checkout lives outside the wrapper. A repo-less task renders no rows to
   // gate anyway, so the extra condition only ever misled a reader.
   const canOpenFile = canView;
+  const slash = label.lastIndexOf("/");
+  const fileName = slash === -1 ? label : label.slice(slash + 1);
+  const fileDir = slash === -1 ? "" : label.slice(0, slash);
+
   return (
     <ContextMenuRoot>
       <ContextMenuTrigger asChild>
     <div
       className={cn(
-        "group flex h-[26px] w-full items-center gap-2 border-l-2 pr-2.5 text-[13px]",
-        selected
-          ? "border-[var(--color-accent)] bg-[var(--color-sel)] text-[var(--color-fg)]"
-          : cn(
-              "border-transparent text-[var(--color-fg-dim)]",
-              clickable ? "hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]" : "opacity-80",
-            ),
+        "ui-row rp-git-row w-full pr-[6px]",
+        !clickable && "opacity-80",
         clickable ? "cursor-pointer" : "cursor-default",
       )}
-      // 2px accent bar eats into the left pad; subtract it so glyphs don't shift.
-      style={{ paddingLeft: 6 + depth * 12 + 8 - 2 }}
+      // A file sits where a sibling folder's chevron would, plus the chevron.
+      style={{ paddingLeft: 8 + depth * 16 + 17 }}
       title={`${LBL[key] || key}: ${file.path}`}
       data-testid="git-file-row"
       data-pane={pane}
@@ -1667,6 +1721,7 @@ function FileRow({ file, label, depth = 0, pane, selectedKey, stageGlyph, taskId
       // promise, and it is carried by a themed border class. A state
       // attribute is what a spec can assert without pinning a class string.
       data-selected={selected}
+      data-viewed={viewed && !selected}
       // ⌥-click reads the file instead of its diff. Plain click keeps
       // opening the diff, which is what this panel is for; the modifier is
       // the fast path for the case where the diff is the wrong reader (a
@@ -1675,99 +1730,95 @@ function FileRow({ file, label, depth = 0, pane, selectedKey, stageGlyph, taskId
       onClick={(e) => (canOpenFile && e.altKey ? onOpenFile(file.path) : onClick(file.path))}
       onDoubleClick={() => onToggle([file.path])}
     >
-      <span
-        className="inline-flex h-4 min-w-[16px] shrink-0 items-center justify-center rounded px-0.5 text-[10.5px] font-semibold"
-        style={{ background: COL[key] || "var(--color-fg-dim)", color: INK[key] || "var(--color-status-ink)" }}
-      >{SC[key] || key}</span>
-      <img src={fileIconUrl(label)} alt="" className={cn("h-4 w-4 shrink-0 file-icon", viewed && !selected && "opacity-50")} />
+      <RowGuides depth={depth} />
+      <img src={fileIconUrl(label)} alt="" className="h-4 w-4 shrink-0 file-icon" />
       {/* Same face and size as the All files tree (13px, medium, not mono).
           A changed file and the same file in the tree are the same object;
           rendering one in monospace made them read as different kinds of
           thing, and mono is wider, so long paths truncated sooner. */}
-      <span className={cn("truncate flex-1 font-medium", viewed && !selected && "text-[var(--color-fg-faint)] line-through decoration-[var(--color-fg-faint)]/40")}>{label}</span>
+      <span
+        className="ui-row-name"
+        style={selected ? undefined : { color: viewed ? "var(--sidebar-faint)" : statusInk(key) }}
+      >{fileName}</span>
+      {/* The flat list names the file first and its folder after, quieter,
+          so a column of paths still scans by name. */}
+      {fileDir && <span className="ui-row-meta">{fileDir}</span>}
       {commentCount > 0 && (
         <Tip side="left" content={commentCount === 1 ? t("shared.inlineCommentOne") : t("shared.inlineCommentMany", { count: commentCount })}>
-          <span className="flex shrink-0 items-center gap-0.5 rounded bg-[var(--color-bg-3)] px-1 text-[10.5px] tabular-nums text-[var(--color-fg-dim)]">
+          <span className="ui-count gap-0.5 px-[5px]">
             <MessageSquare className="h-2.5 w-2.5" />
             {commentCount}
           </span>
         </Tip>
       )}
-      {canOpenFile && (
-        <Tip side="left" content={t("shared.openFileTip", { combo: kbd("⌥") })}>
-          <button
-            onClick={(e) => { e.stopPropagation(); onOpenFile(file.path); }}
-            // The row's dblclick STAGES, and a button that stops only
-            // `click` still lets the second one through: double-clicking a
-            // read-only action would quietly mutate the index. Reading a
-            // file must never stage it, however fast you click.
-            onDoubleClick={(e) => e.stopPropagation()}
-            aria-label={t("shared.openFile")}
-            // Left of the eye: this navigates, the eye records a judgement,
-            // the arrow acts on the index. Same quiet-until-hover treatment
-            // as the eye, so a third control does not make the resting row
-            // any busier than it already was.
-            className={cn(
-              "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded transition-colors",
-              "text-[var(--color-fg-dim)] hover:text-[var(--color-fg)]",
-              selected ? "opacity-100" : "opacity-30 group-hover:opacity-100",
-            )}
-          >
-            <FileText className="h-3.5 w-3.5" />
-          </button>
-        </Tip>
-      )}
-      {canView && (
-        <Tip side="left" content={viewed ? t("shared.markNotViewed") : t("shared.markViewed")}>
-          <button
-            onClick={toggleViewed}
-            // Same hole as the Open file button above, and it predates it:
-            // a double-click on the eye staged the file through the row.
-            onDoubleClick={(e) => e.stopPropagation()}
-            aria-pressed={viewed}
-            // An eye, not a checkbox: a tickbox next to the stage arrow reads
-            // as "stage this" (every git client uses checkboxes for staging).
-            // The eye says "seen" and shares no vocabulary with staging.
-            className={cn(
-              "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded transition-colors",
-              viewed
-                ? "text-[var(--color-accent)]"
-                : cn(
-                    "text-[var(--color-fg-dim)] hover:text-[var(--color-fg)]",
-                    // Faintly present so the feature is discoverable, but quiet
-                    // until the row is hovered/selected.
-                    selected ? "opacity-100" : "opacity-30 group-hover:opacity-100",
-                  ),
-            )}
-          >
-            <Eye className="h-3.5 w-3.5" />
-          </button>
-        </Tip>
-      )}
-      <Tip
-        side="left"
-        content={
-          <span className="flex items-center gap-1.5">
-            {rowActionIcon === "down" ? t("gitPanel.stage") : t("gitPanel.unstage")}
-            <kbd className="rounded bg-[var(--color-bg-3)] px-1 text-[10.5px] text-[var(--color-fg-faint)]">{stageGlyph}</kbd>
-          </span>
-        }
-      >
-        <button
-          onClick={(e) => { e.stopPropagation(); onToggle([file.path]); }}
-          className={cn(
-            "shrink-0 rounded p-0.5 text-[var(--color-fg-faint)] hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)]",
-            // Visible while hovering the row OR when the row is selected,
-            // matching Fork (the focused file keeps its stage button).
-            selected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-          )}
+      {/* Open, viewed and stage share one tray that comes up on hover and
+          stays up on the selected row, matching Fork (the focused file keeps
+          its stage button). Open sits left of the eye: it navigates, the eye
+          records a judgement, the arrow acts on the index. */}
+      <span className="ui-tray">
+        {canOpenFile && (
+          <Tip side="left" content={t("shared.openFileTip", { combo: kbd("⌥") })}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenFile(file.path); }}
+              // The row's dblclick STAGES, and a button that stops only
+              // `click` still lets the second one through: double-clicking a
+              // read-only action would quietly mutate the index. Reading a
+              // file must never stage it, however fast you click.
+              onDoubleClick={(e) => e.stopPropagation()}
+              aria-label={t("shared.openFile")}
+              className="sidebar-tray-btn"
+            >
+              <FileText className="h-3.5 w-3.5" />
+            </button>
+          </Tip>
+        )}
+        {canView && (
+          <Tip side="left" content={viewed ? t("shared.markNotViewed") : t("shared.markViewed")}>
+            <button
+              onClick={toggleViewed}
+              // Same hole as the Open file button above, and it predates it:
+              // a double-click on the eye staged the file through the row.
+              onDoubleClick={(e) => e.stopPropagation()}
+              aria-pressed={viewed}
+              // An eye, not a checkbox: a tickbox next to the stage arrow
+              // reads as "stage this" (every git client uses checkboxes for
+              // staging). The eye says "seen" and shares no vocabulary with
+              // staging.
+              className="sidebar-tray-btn rp-git-tray-btn"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          </Tip>
+        )}
+        <Tip
+          side="left"
+          content={
+            <span className="flex items-center gap-1.5">
+              {actionLabel}
+              <kbd className="ui-keycap">{stageGlyph}</kbd>
+            </span>
+          }
         >
-          <ActionIcon className="h-3.5 w-3.5" />
-        </button>
-      </Tip>
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggle([file.path]); }}
+            onDoubleClick={(e) => e.stopPropagation()}
+            aria-label={actionLabel}
+            className="sidebar-tray-btn"
+          >
+            <ActionIcon className="h-3.5 w-3.5" />
+          </button>
+        </Tip>
+      </span>
+      {/* The status as a solid chip at the row's end: a fill with its own
+          ink reads in every theme (lib/gitStatus.ts says why). */}
+      <span
+        data-testid="git-status-chip"
+        className="rp-git-chip"
+        style={{ background: COL[key] || "var(--color-fg-dim)", color: INK[key] || "var(--color-status-ink)" }}
+      >{SC[key] || key}</span>
     </div>
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent className="sidebar-menu">
         {/* Git actions first (stage + discard), then the path/finder items. */}
         <ContextMenuItem onSelect={() => onToggle([file.path])}>
           <ActionIcon />

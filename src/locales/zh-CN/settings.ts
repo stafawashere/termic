@@ -687,6 +687,7 @@ export default {
       taskFinder: { label: "打开任务搜索", hint: "跨项目快速搜索并切换任务" },
       findInFiles: { label: "在文件中查找" },
       focusSidebarFilter: { label: "聚焦侧边栏筛选" },
+      focusFileFilter: { label: "筛选文件", hint: "聚焦右侧面板的文件筛选" },
       toggleLeftSidebar: { label: "切换左侧边栏", hint: "收起 / 展开项目侧边栏" },
       toggleRightSidebar: { label: "切换右侧边栏", hint: "显示 / 隐藏右侧面板" },
       broadcast: { label: "广播到智能体" },

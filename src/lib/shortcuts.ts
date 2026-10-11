@@ -55,6 +55,7 @@ export type ShortcutId =
   | "task-finder"
   | "find-in-files"
   | "focus-sidebar-filter"
+  | "focus-file-filter"
   | "toggle-left-sidebar"
   | "toggle-right-sidebar"
   | "broadcast"
@@ -192,6 +193,10 @@ export const SHORTCUT_DEFS: ShortcutDef[] = [
     defaultBinding: B("f", { cmd: true, alt: true }) },
   { id: "focus-sidebar-filter", group: "General",
     defaultBinding: B("f", { cmd: true, shift: true }) },
+  // The right panel's file filter. E for explorer, the key VS Code gives
+  // its own file tree; the field draws it as its keycap.
+  { id: "focus-file-filter", group: "General",
+    defaultBinding: B("e", { cmd: true, shift: true }) },
   { id: "toggle-left-sidebar", group: "General",
     defaultBinding: B("b", { cmd: true }) },
   { id: "toggle-right-sidebar", group: "General",

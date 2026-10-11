@@ -1375,7 +1375,7 @@ const captureArmedRef = useRef(false);
     // useShortcuts, which dispatches the command. Read from resolved prefs
     // so user rebinds are honored.
     const PASS_TO_APP: ShortcutId[] = [
-      "file-finder", "find-in-files", "focus-sidebar-filter", "broadcast", "open-settings",
+      "file-finder", "find-in-files", "focus-sidebar-filter", "focus-file-filter", "broadcast", "open-settings",
     ];
     term.attachCustomKeyEventHandler((e) => {
       // IME composition guard (Korean/Japanese/Chinese). xterm's

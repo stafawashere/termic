@@ -694,6 +694,7 @@ export default {
       taskFinder: { label: "Open task finder", hint: "Quick search and switch tasks across projects" },
       findInFiles: { label: "Find in files" },
       focusSidebarFilter: { label: "Focus sidebar filter" },
+      focusFileFilter: { label: "Filter files", hint: "Focus the file filter in the right panel" },
       toggleLeftSidebar: { label: "Toggle left sidebar", hint: "Collapse / expand the projects sidebar" },
       toggleRightSidebar: { label: "Toggle right sidebar", hint: "Show / hide the right panel" },
       broadcast: { label: "Broadcast to agents" },

@@ -98,6 +98,7 @@ export default {
       setSyntax: "Set syntax…",
       toggleInlineBlame: "Toggle inline git blame",
       filterSidebar: "Filter sidebar tasks",
+      filterFiles: "Filter files",
       clearSidebarFilter: "Clear sidebar filter",
       toggleWordWrap: "Toggle word wrap",
       changeTheme: "Change theme…",

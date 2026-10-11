@@ -931,6 +931,9 @@ export const taskPathRename = (id: string, path: string, newName: string) =>
 /** Permanently delete a file/dir (caller confirms first). */
 export const taskPathDelete = (id: string, path: string) =>
   invoke<void>("task_path_delete", { id, path });
+/** Create an empty file or a folder (the file tree's New file / New folder). */
+export const taskPathCreate = (id: string, path: string, isDir: boolean) =>
+  invoke<void>("task_path_create", { id, path, isDir });
 /** Reveal a file/dir in the OS file manager ("Show in Finder"). */
 export const taskRevealPath = (id: string, path: string) =>
   invoke<void>("task_reveal_path", { id, path });

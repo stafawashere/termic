@@ -300,6 +300,16 @@ new default. Off macOS, Ctrl+Shift+F inside a terminal stays that
 terminal's find (`TERMINAL_OWN`), so the filter is reached with it from
 outside a terminal only.
 
+## Right-panel file filter (⇧⌘E)
+
+`focus-file-filter` holds ⇧⌘E and is the keycap the All files filter
+draws (read from the binding, like the sidebar's). It shows the right
+panel if it is hidden, switches it to All files and focuses the field;
+`ui.fileFilterFocusPending` carries the request across the mount. The
+filter matches any path segment of the whole task (`task_files`), and ⌘P
+stays the file finder. It is in `PASS_TO_APP`, so it works from inside a
+terminal.
+
 ## Kanban filter bar (`/` and ⌘F)
 
 Contextual, in `BoardFilterBar`'s own capture listener, not `SHORTCUT_DEFS`:
