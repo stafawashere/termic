@@ -25687,6 +25687,7 @@ pub fn run() {
             agent_usage::agent_context_devin,
             subagent_transcripts::subagent_list,
             subagent_transcripts::subagent_workflow_runs,
+            subagent_transcripts::subagent_claude_theme,
             subagent_transcripts::subagent_transcript_read,
             subagent_watch::subagent_watch_open,
             subagent_watch::subagent_watch_close,

@@ -396,6 +396,11 @@ export const subagentList = (taskId: string, sessionId: string, limit?: number) 
 export const subagentWorkflowRuns = (taskId: string, sessionId: string) =>
   invoke<WorkflowRunInfo[]>("subagent_workflow_runs", { taskId, sessionId });
 
+/** The claude `theme` setting of the agent running this session: one of
+ *  dark, light, dark-daltonized, light-daltonized, dark-ansi, light-ansi. */
+export const subagentClaudeTheme = (taskId: string, sessionId: string) =>
+  invoke<string>("subagent_claude_theme", { taskId, sessionId });
+
 /** One page (up to 500 entries) of a subagent's transcript. Pass the previous
  *  page's `start` as `before` to load the entries above it. */
 export const subagentTranscriptRead = (

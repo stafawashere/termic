@@ -880,6 +880,20 @@ fn list_workflow_runs_with(cache: &Mutex<WorkflowStateCache>, subagents_dir: &Pa
 /// is the fallback for a session minted before tabs were persisted.
 pub(crate) fn subagents_dir_for(task_id: &str, session_id: &str) -> Result<PathBuf, String> {
     validate_session_id(session_id).map_err(|e| e.to_string())?;
+    let (task, settings, agent_id) = session_agent(task_id, session_id)?;
+
+    let docker = task.docker_sandbox_enabled && settings.docker_sandbox_enabled;
+    let account_store = if docker { None } else { account_store_for(&task, &agent_id, &settings) };
+    let home = dirs::home_dir().ok_or("no home dir")?;
+    let root = projects_root(&settings.agents, &agent_id, docker, &home, account_store)
+        .ok_or_else(|| format!("{agent_id} has no known config dir"))?;
+
+    session_subagents_dir(&root, &task.path, session_id).map_err(|e| e.to_string())
+}
+
+/// The task, its profile's settings, and the agent entry whose tab runs
+/// `session_id`.
+fn session_agent(task_id: &str, session_id: &str) -> Result<(crate::Task, crate::Settings, String), String> {
     let task = crate::load_tasks_all()
         .into_iter()
         .find(|t| t.id == task_id)
@@ -900,18 +914,46 @@ pub(crate) fn subagents_dir_for(task_id: &str, session_id: &str) -> Result<PathB
         })
         .unwrap_or_else(|| task.cli.clone());
 
-    let docker = task.docker_sandbox_enabled && settings.docker_sandbox_enabled;
-    let account_store = if docker {
-        None
-    } else {
-        crate::relocating_account(Some(&task), &agent_id, &settings.agents)
-            .and_then(|account| crate::login_store_dir(&agent_id, Some(&account), crate::LoginRealm::Host))
-    };
-    let home = dirs::home_dir().ok_or("no home dir")?;
-    let root = projects_root(&settings.agents, &agent_id, docker, &home, account_store)
-        .ok_or_else(|| format!("{agent_id} has no known config dir"))?;
+    Ok((task, settings, agent_id))
+}
 
-    session_subagents_dir(&root, &task.path, session_id).map_err(|e| e.to_string())
+fn account_store_for(task: &crate::Task, agent_id: &str, settings: &crate::Settings) -> Option<PathBuf> {
+    crate::relocating_account(Some(task), agent_id, &settings.agents)
+        .and_then(|account| crate::login_store_dir(agent_id, Some(&account), crate::LoginRealm::Host))
+}
+
+pub(crate) const CLAUDE_THEMES: [&str; 6] =
+    ["dark", "light", "dark-daltonized", "light-daltonized", "dark-ansi", "light-ansi"];
+const CLAUDE_CONFIG_READ_CAP: u64 = 4 * 1024 * 1024;
+
+fn theme_in_file(path: &Path) -> Option<String> {
+    let metadata = fs::metadata(path).ok()?;
+    let is_readable_size = metadata.is_file() && metadata.len() <= CLAUDE_CONFIG_READ_CAP;
+    if !is_readable_size {
+        return None;
+    }
+
+    let raw = fs::read_to_string(path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let theme = value.get("theme")?.as_str()?;
+    CLAUDE_THEMES.contains(&theme).then(|| theme.to_string())
+}
+
+/// The `theme` claude draws with: `settings.json` in its config dir first,
+/// then the global `.claude.json` (inside a relocated config dir, else in
+/// home). Anything missing, unreadable or unknown is `dark`, claude's own
+/// default.
+pub(crate) fn claude_theme_in(config_dir: &Path, home: &Path) -> String {
+    let candidates = [
+        config_dir.join("settings.json"),
+        config_dir.join(".claude.json"),
+        home.join(".claude.json"),
+    ];
+
+    candidates
+        .iter()
+        .find_map(|path| theme_in_file(path))
+        .unwrap_or_else(|| "dark".to_string())
 }
 
 /// Every subagent of one session, newest first.
@@ -927,6 +969,25 @@ pub async fn subagent_list(
     })
     .await
     .map_err(|e| format!("subagent list failed: {e}"))?
+}
+
+/// The claude theme the tab running `session_id` draws with, so the
+/// subagent view can use the same palette. A Docker task reads the host's
+/// value: the container's claude is configured from the same files.
+#[tauri::command]
+pub async fn subagent_claude_theme(task_id: String, session_id: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        validate_session_id(&session_id).map_err(|e| e.to_string())?;
+        let (task, settings, agent_id) = session_agent(&task_id, &session_id)?;
+        let home = dirs::home_dir().ok_or("no home dir")?;
+        let config_dir = account_store_for(&task, &agent_id, &settings)
+            .or_else(|| crate::agent_dirs::instance_config_dir(&settings.agents, &agent_id, &home))
+            .ok_or_else(|| format!("{agent_id} has no known config dir"))?;
+
+        Ok(claude_theme_in(&config_dir, &home))
+    })
+    .await
+    .map_err(|e| format!("claude theme read failed: {e}"))?
 }
 
 /// Name and phase list of each workflow run in one session.
@@ -1348,6 +1409,36 @@ mod tests {
         assert_eq!(json["outputTokens"], 321);
         assert_eq!(json["model"], "claude-test-model");
         assert!(serde_json::to_value(&parsed.entries[3]).unwrap()["outputTokens"].is_null());
+    }
+
+    #[test]
+    fn claude_theme_prefers_settings_then_global_config_then_dark() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let config = home.join(".claude");
+        fs::create_dir_all(&config).unwrap();
+
+        assert_eq!(claude_theme_in(&config, &home), "dark");
+
+        fs::write(home.join(".claude.json"), r#"{"theme":"light-ansi"}"#).unwrap();
+        assert_eq!(claude_theme_in(&config, &home), "light-ansi");
+
+        fs::write(config.join("settings.json"), r#"{"theme":"dark-daltonized","model":"x"}"#).unwrap();
+        assert_eq!(claude_theme_in(&config, &home), "dark-daltonized");
+
+        fs::write(config.join("settings.json"), r#"{"theme":"neon"}"#).unwrap();
+        assert_eq!(claude_theme_in(&config, &home), "light-ansi");
+
+        fs::write(config.join("settings.json"), "not json").unwrap();
+        fs::write(home.join(".claude.json"), r#"{"theme":7}"#).unwrap();
+        assert_eq!(claude_theme_in(&config, &home), "dark");
+
+        fs::write(config.join(".claude.json"), r#"{"theme":"light"}"#).unwrap();
+        fs::write(home.join(".claude.json"), r#"{"theme":"dark-ansi"}"#).unwrap();
+        assert_eq!(claude_theme_in(&config, &home), "light");
+
+        fs::write(config.join("settings.json"), r#"{"theme":"light-daltonized"}"#).unwrap();
+        assert_eq!(claude_theme_in(&config, &home), "light-daltonized");
     }
 
     #[test]
