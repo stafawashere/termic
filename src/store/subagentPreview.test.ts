@@ -22,7 +22,7 @@ import { useApp } from "@/store/app";
 import { useSubagents } from "@/store/subagents";
 import { WORKFLOW_AGENT_TYPE } from "@/lib/subagentKind";
 import {
-  installSubagentPreviewArchiveWatch, openSubagentPreview, openTranscriptSession,
+  installSubagentPreviewArchiveWatch, MISSING_RETRY_MS, openSubagentPreview, openTranscriptSession,
   type TranscriptSnapshot,
 } from "@/store/subagentPreview";
 import type { SubagentTab, SubagentTailEvent, Tab, Task, TranscriptEntry, TranscriptPage } from "@/lib/types";
@@ -226,14 +226,60 @@ describe("openTranscriptSession", () => {
     session.dispose();
   });
 
-  it("shows a transcript whose file is gone as expired and lets go of the watch", async () => {
+  it("shows a transcript it never found as missing, not expired, and lets go of the watch", async () => {
     vi.mocked(ipc.subagentWatchOpen).mockRejectedValueOnce("subagent transcript not found");
     vi.mocked(ipc.subagentTranscriptRead).mockResolvedValueOnce(page(0, [], 0, "expired"));
     const { last } = startSession();
     await settle();
 
-    expect(last().status).toBe("expired");
+    expect(last().status).toBe("missing");
     expect(ipc.subagentWatchClose).not.toHaveBeenCalled();
+  });
+
+  it("looks again for a missing transcript while the agent runs, and stops once it is found", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(ipc.subagentWatchOpen).mockRejectedValueOnce("subagent transcript not found");
+      vi.mocked(ipc.subagentTranscriptRead).mockResolvedValueOnce(page(0, [], 0, "expired"));
+      const snapshots: TranscriptSnapshot[] = [];
+      const session = openTranscriptSession(
+        { taskId: TASK, viewTabId: "view-1", sessionId: SESSION, agentId: AGENT_A, isAgentRunning: () => true },
+        snapshot => snapshots.push(snapshot),
+      );
+      await settle();
+      expect(snapshots[snapshots.length - 1].status).toBe("missing");
+
+      await vi.advanceTimersByTimeAsync(MISSING_RETRY_MS);
+      await settle();
+
+      const shown = snapshots[snapshots.length - 1];
+      expect(shown.status).toBe("live");
+      expect(shown.window.rows.map(row => row.text)).toEqual(["a", "b", "c"]);
+      expect(snapshots.some(snapshot => snapshot.status === "loading")).toBe(false);
+      expect(ipc.subagentWatchOpen).toHaveBeenCalledTimes(2);
+      session.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not look again for a missing transcript once the agent has stopped", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(ipc.subagentWatchOpen).mockRejectedValueOnce("subagent transcript not found");
+      vi.mocked(ipc.subagentTranscriptRead).mockResolvedValueOnce(page(0, [], 0, "expired"));
+      const session = openTranscriptSession(
+        { taskId: TASK, viewTabId: "view-1", sessionId: SESSION, agentId: AGENT_A, isAgentRunning: () => false },
+        () => {},
+      );
+      await settle();
+      await vi.advanceTimersByTimeAsync(MISSING_RETRY_MS * 3);
+
+      expect(ipc.subagentWatchOpen).toHaveBeenCalledTimes(1);
+      session.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stops tailing when the file goes away while the view is open", async () => {

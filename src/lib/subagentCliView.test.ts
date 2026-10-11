@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
-  cosineFrameStops, countGroup, displayPath, formatElapsed, formatTokens, groupSummaryParts, lineDiff, spinnerMessage, spinnerSuffix, toolDisplay, toolSummary, transcriptStats, wordSpans,
+  cosineFrameStops, countGroup, displayPath, foldPrompt, modelDisplayName, formatElapsed, formatTokens, groupSummaryParts, lineDiff, spinnerMessage, spinnerSuffix, toolDisplay, toolSummary, transcriptStats, wordSpans,
 } from "@/lib/subagentCliView";
 import { toTranscriptRows } from "@/lib/subagentTranscript";
 
@@ -53,7 +53,7 @@ describe("toolDisplay", () => {
 
     const long = toolDisplay("Bash", input({ command: `echo ${"x".repeat(400)}\nls` }), WORKTREE);
     expect(long.args.includes("\n")).toBe(false);
-    expect(long.args.endsWith("...")).toBe(true);
+    expect(long.args.endsWith("\u2026")).toBe(true);
   });
 });
 
@@ -185,13 +185,14 @@ describe("transcriptStats", () => {
       { kind: "userText", text: "go", truncated: false, name: null, isError: false, timestamp: "2026-01-01T00:00:00.000Z" },
       { kind: "toolUse", text: "{}", truncated: false, name: "Read", isError: false, timestamp: null, model: "m1", outputTokens: 100 },
       { kind: "toolResult", text: "x", truncated: false, name: null, isError: false, timestamp: "bad date" },
-      { kind: "assistantText", text: "ok", truncated: false, name: null, isError: false, timestamp: "2026-01-01T00:01:03.000Z", model: "m2", outputTokens: 50 },
+      { kind: "assistantText", text: "ok", truncated: false, name: null, isError: false, timestamp: "2026-01-01T00:01:03.000Z", model: "m2", outputTokens: 50, version: "9.9.9" },
     ], 0);
 
     expect(transcriptStats(rows)).toEqual({
       toolUses: 1,
       outputTokens: 150,
       model: "m2",
+      version: "9.9.9",
       firstAtMs: Date.parse("2026-01-01T00:00:00.000Z"),
       lastAtMs: Date.parse("2026-01-01T00:01:03.000Z"),
     });
@@ -210,9 +211,9 @@ describe("countGroup and groupSummaryParts", () => {
 
   it("writes Claude Code's clauses in its order, the first capitalised", () => {
     const rows = [
-      thought(1500), thought(900), call("Agent", { description: "x" }), call("Bash", { command: "ls" }),
+      thought(1500), thought(900), call("Agent", { description: "x" }), call("Frobnicate"), call("Bash", { command: "make" }),
     ];
-    expect(sentence(rows)).toBe("Thought for 2s, ran 1 agent, called 1 tool");
+    expect(sentence(rows)).toBe("Thought for 2s, ran 1 agent, called 1 tool, ran 1 shell command");
   });
 
   it("counts reads, searches, lists, edits with their line stat, and MCP servers", () => {
@@ -228,6 +229,11 @@ describe("countGroup and groupSummaryParts", () => {
 
   it("uses the -ing forms while the group is the active one, and a one-second floor on thinking", () => {
     expect(sentence([thought(null), call("Read"), call("Task")], true)).toBe("Thinking for 1s, reading 1 file, running 1 agent");
+  });
+
+  it("counts shell commands last, plural past one, as Claude's summary line does", () => {
+    const rows = [thought(5000), call("Bash"), call("Bash"), call("Read")];
+    expect(sentence(rows)).toBe("Thought for 5s, read 1 file, ran 2 shell commands");
   });
 
   it("names a single MCP call without a count", () => {
@@ -290,5 +296,35 @@ describe("wordSpans", () => {
     expect(wordSpans(lineDiff("abcdef", "abcxyz"))).toEqual([null, null]);
     expect(wordSpans(lineDiff("port = 1\nport = 2", "port = 3"))).toEqual([{ start: 7, end: 8 }, null, { start: 7, end: 8 }]);
     expect(wordSpans(lineDiff("a\nb", "a\nb\nextra line"))).toEqual([null, null, null]);
+  });
+});
+
+describe("modelDisplayName", () => {
+  it("names a model the way Claude's banner does", () => {
+    expect(modelDisplayName("claude-opus-5-5")).toBe("Opus 5.5");
+    expect(modelDisplayName("claude-sonnet-4-5-20250929")).toBe("Sonnet 4.5");
+    expect(modelDisplayName("claude-opus-5[1m]")).toBe("Opus 5");
+    expect(modelDisplayName("us.anthropic.claude-haiku-5-5")).toBe("Haiku 5.5");
+    expect(modelDisplayName("claude-3-5-sonnet-20241022")).toBe("Sonnet 3.5");
+  });
+
+  it("shows an id it does not recognise as it came", () => {
+    expect(modelDisplayName("gpt-test")).toBe("gpt-test");
+    expect(modelDisplayName("<synthetic>")).toBe("<synthetic>");
+  });
+});
+
+describe("foldPrompt", () => {
+  it("leaves a prompt of up to 10,000 characters whole", () => {
+    expect(foldPrompt("x".repeat(10_000))).toBeNull();
+  });
+
+  it("keeps the first and last 2,500 characters of a longer one and counts what it hid", () => {
+    const head = "h".repeat(2_500);
+    const hidden = "a\nb\nc".padEnd(6_000, "m");
+    const tail = "t".repeat(2_500);
+    const folded = foldPrompt(head + hidden + tail);
+
+    expect(folded).toEqual({ head, tail, hiddenLines: 2, hiddenChars: 6_000 });
   });
 });

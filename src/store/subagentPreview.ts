@@ -39,7 +39,9 @@ export function openSubagentPreview(taskId: string, parentTabId: string, agentId
   });
 }
 
-export type TranscriptStatus = "loading" | "live" | "expired" | "unreadable" | "closed";
+/** `missing` is a transcript this view never found; `expired` one it read
+ *  that has since gone. */
+export type TranscriptStatus = "loading" | "live" | "missing" | "expired" | "unreadable" | "closed";
 
 export interface TranscriptSnapshot {
   status: TranscriptStatus;
@@ -55,6 +57,9 @@ export interface SubagentPreviewTarget {
   sessionId: string;
   agentId: string;
   workflowRunId?: string | null;
+  /** While this says the agent runs, a transcript that is not there yet is
+   *  looked for again every MISSING_RETRY_MS. */
+  isAgentRunning?: () => boolean;
 }
 
 export interface TranscriptSession {
@@ -63,6 +68,8 @@ export interface TranscriptSession {
 }
 
 const LOADING: TranscriptSnapshot = Object.freeze({ status: "loading", window: EMPTY_WINDOW, loadingEarlier: false });
+
+export const MISSING_RETRY_MS = 2000;
 
 /** Sessions still holding a watch, per task, so an archive can let go of
  *  every one at once. */
@@ -88,6 +95,10 @@ export function openTranscriptSession(
   // Bumped by a reset, so a page read before it is not stitched onto entries
   // that restarted from zero after it.
   let generation = 0;
+  // A transcript this session has read once can expire; one it never found
+  // is missing.
+  let foundOnce = false;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   const publish = (next: TranscriptSnapshot) => {
     if (disposed || next === snapshot) return;
@@ -101,9 +112,20 @@ export function openTranscriptSession(
     liveSessions.get(target.taskId)?.delete(release);
   };
 
-  const finish = (status: "expired" | "unreadable" | "closed") => {
+  const finish = (status: "missing" | "expired" | "unreadable" | "closed") => {
     releaseWatch();
     publish({ ...snapshot, status, loadingEarlier: false });
+  };
+
+  const finishGone = () => {
+    if (foundOnce) {
+      finish("expired");
+      return;
+    }
+
+    finish("missing");
+    const shouldLookAgain = target.isAgentRunning?.() === true;
+    if (shouldLookAgain && !disposed) retryTimer = setTimeout(startWatch, MISSING_RETRY_MS);
   };
 
   const release = () => finish("closed");
@@ -119,12 +141,13 @@ export function openTranscriptSession(
     }
     if (disposed || readGeneration !== generation) return;
 
-    const isExpired = page.outcome === "expired" && page.entries.length === 0;
-    if (isExpired) {
-      finish("expired");
+    const isGone = page.outcome === "expired" && page.entries.length === 0;
+    if (isGone) {
+      finishGone();
       return;
     }
 
+    foundOnce = true;
     const newest = { start: page.start, rows: toTranscriptRows(page.entries, page.start) };
     publish({ status: "live", window: newest, loadingEarlier: snapshot.loadingEarlier });
 
@@ -141,7 +164,7 @@ export function openTranscriptSession(
     }
 
     if (event.kind === "expired") {
-      finish("expired");
+      finishGone();
       return;
     }
 
@@ -184,6 +207,7 @@ export function openTranscriptSession(
   const dispose = () => {
     if (disposed) return;
     releaseWatch();
+    if (retryTimer !== null) clearTimeout(retryTimer);
     disposed = true;
   };
 
@@ -193,29 +217,36 @@ export function openTranscriptSession(
     return { loadEarlier, dispose };
   }
 
-  const held = liveSessions.get(target.taskId) ?? new Set<() => void>();
-  held.add(release);
-  liveSessions.set(target.taskId, held);
-
   // The tail goes up first and the page is read once it is open, so the
   // page's end is at or past where the first batch starts: the two overlap
   // and never leave a gap. A failed open (the file is not there) still reads,
-  // which is what tells an expired transcript from a slow one.
-  stopWatch = subagentWatchOpen(
-    {
-      taskId: target.taskId,
-      tabId: target.viewTabId,
-      sessionId: target.sessionId,
-      agentId: target.agentId,
-      workflowRunId: target.workflowRunId ?? null,
-    },
-    {
-      onEvent: applyEvent,
-      onOpened: () => void readNewest(),
-      onError: () => void readNewest(),
-    },
-  );
+  // which is what tells a missing transcript from a slow one.
+  function startWatch() {
+    retryTimer = null;
+    if (disposed || isTaskArchived(target.taskId)) return;
 
+    pending = [];
+    const held = liveSessions.get(target.taskId) ?? new Set<() => void>();
+    held.add(release);
+    liveSessions.set(target.taskId, held);
+
+    stopWatch = subagentWatchOpen(
+      {
+        taskId: target.taskId,
+        tabId: target.viewTabId,
+        sessionId: target.sessionId,
+        agentId: target.agentId,
+        workflowRunId: target.workflowRunId ?? null,
+      },
+      {
+        onEvent: applyEvent,
+        onOpened: () => void readNewest(),
+        onError: () => void readNewest(),
+      },
+    );
+  }
+
+  startWatch();
   return { loadEarlier, dispose };
 }
 

@@ -6,7 +6,7 @@
 // are stripped here a second time even though the host strips them, because a
 // view must not depend on another layer having done it.
 
-import type { TranscriptEntry, TranscriptEntryKind } from "@/lib/types";
+import type { TranscriptEntry, TranscriptEntryKind, TranscriptResultNote } from "@/lib/types";
 
 export type TranscriptRowKind = TranscriptEntryKind | "unknown";
 
@@ -30,6 +30,11 @@ export interface TranscriptRow {
   model: string | null;
   outputTokens: number | null;
   timestamp: string | null;
+  version: string | null;
+  /** Dim lines under a tool result, in the order Claude prints them. */
+  notes: readonly TranscriptResultNote[];
+  /** A result whose file diff pulls its call out of a collapsed group. */
+  popsOut: boolean;
 }
 
 const KNOWN_KINDS: ReadonlySet<string> = new Set<TranscriptEntryKind>([
@@ -51,6 +56,29 @@ export function stripAnsi(text: string): string {
   return text.replace(ANSI_PATTERN, "");
 }
 
+const RESULT_NOTES: ReadonlySet<string> = new Set<TranscriptResultNote>([
+  "sharedRepo", "diffSkipped", "diffUnavailable", "autoClassifier",
+]);
+
+const NO_NOTES: readonly TranscriptResultNote[] = Object.freeze([]);
+
+function notesField(value: unknown): readonly TranscriptResultNote[] {
+  if (!Array.isArray(value)) return NO_NOTES;
+
+  const known = value.filter((note): note is TranscriptResultNote => typeof note === "string" && RESULT_NOTES.has(note));
+  return known.length > 0 ? known : NO_NOTES;
+}
+
+const SYSTEM_REMINDER = /<system-reminder>[\s\S]*?(?:<\/system-reminder>|$)/g;
+
+/** A prompt without the system reminders Claude folds into it, which its
+ *  own transcript never draws. */
+export function withoutSystemReminders(text: string): string {
+  if (!text.includes("<system-reminder>")) return text;
+
+  return text.replace(SYSTEM_REMINDER, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function stringField(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -70,11 +98,12 @@ export function toTranscriptRow(entry: unknown, index: number): TranscriptRow {
   const isKnown = KNOWN_KINDS.has(sourceKind);
   const kind: TranscriptRowKind = isKnown ? (sourceKind as TranscriptEntryKind) : "unknown";
   const rawText = stringField(fields.text) ?? "";
+  const isUserText = kind === "userText";
 
   return {
     index,
     kind,
-    text: kind === "redactedThinking" ? "" : stripAnsi(rawText),
+    text: kind === "redactedThinking" ? "" : stripAnsi(isUserText ? withoutSystemReminders(rawText) : rawText),
     toolName: kind === "toolUse" ? stripAnsi(stringField(fields.name) ?? "") || null : null,
     isError: fields.isError === true,
     truncated: fields.truncated === true,
@@ -84,6 +113,9 @@ export function toTranscriptRow(entry: unknown, index: number): TranscriptRow {
     model: stringField(fields.model),
     outputTokens: countField(fields.outputTokens),
     timestamp: stringField(fields.timestamp),
+    version: stringField(fields.version),
+    notes: notesField(fields.notes),
+    popsOut: fields.popsOut === true,
   };
 }
 
@@ -159,7 +191,8 @@ function toolStateOf(result: TranscriptRow | null): ToolCallState {
   return result.isError ? "error" : "ok";
 }
 
-/** Hang each tool result under the call whose id it answers. A result whose
+/** Hang each tool result under the call whose id it answers, and drop a
+ *  prompt that held nothing but system reminders. A result whose
  *  call is not in `rows` (it sits on a page not loaded yet, or the entry
  *  carries no id) stays a row of its own. Row indices are kept, so a row's
  *  key and measured height survive a result arriving. */
@@ -180,6 +213,9 @@ export function pairToolCalls(rows: readonly TranscriptRow[]): ViewRow[] {
 
   const paired: ViewRow[] = [];
   for (const row of rows) {
+    const isBlankPrompt = row.kind === "userText" && row.text.trim() === "";
+    if (isBlankPrompt) continue;
+
     const id = row.toolUseId;
     const isResult = row.kind === "toolResult";
     const callIsHeld = id !== null && callIds.has(id);
@@ -217,13 +253,15 @@ const GROUPED_KINDS: ReadonlySet<TranscriptRowKind> = new Set<TranscriptRowKind>
 const NO_MEMBERS: readonly ViewRow[] = Object.freeze([]);
 
 /** Fold every run of tool calls, lone results and thinking into one group
- *  row; everything else stays a row of its own. */
+ *  row; everything else stays a row of its own, and so does a call whose
+ *  result carries a file diff, which Claude draws in full. */
 export function groupToolRuns(rows: readonly ViewRow[]): DisplayRow[] {
   const display: DisplayRow[] = [];
   let run: ViewRow[] | null = null;
 
   for (const row of rows) {
-    if (!GROUPED_KINDS.has(row.kind)) {
+    const popsOut = row.result?.popsOut === true;
+    if (!GROUPED_KINDS.has(row.kind) || popsOut) {
       run = null;
       display.push({ index: row.index, kind: row.kind, entry: row, members: NO_MEMBERS });
       continue;

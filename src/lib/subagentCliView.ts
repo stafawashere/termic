@@ -29,7 +29,7 @@ function text(fields: Fields | null, key: string): string | null {
 function clipArgs(value: string): string {
   const oneLine = value.replace(/\s+/g, " ").trim();
   if (oneLine.length <= ARGS_MAX) return oneLine;
-  return `${oneLine.slice(0, ARGS_MAX)}...`;
+  return `${oneLine.slice(0, ARGS_MAX)}\u2026`;
 }
 
 /** A path inside the task's worktree, relative to it; anything else as is. */
@@ -474,6 +474,7 @@ export interface TranscriptStats {
   toolUses: number;
   outputTokens: number;
   model: string | null;
+  version: string | null;
   firstAtMs: number | null;
   lastAtMs: number | null;
 }
@@ -491,6 +492,7 @@ export function transcriptStats(rows: readonly TranscriptRow[]): TranscriptStats
   let toolUses = 0;
   let outputTokens = 0;
   let model: string | null = null;
+  let version: string | null = null;
   let firstAtMs: number | null = null;
   let lastAtMs: number | null = null;
 
@@ -498,6 +500,7 @@ export function transcriptStats(rows: readonly TranscriptRow[]): TranscriptStats
     if (row.kind === "toolUse") toolUses++;
     outputTokens += row.outputTokens ?? 0;
     if (row.model) model = row.model;
+    if (row.version) version = row.version;
 
     const at = timeOf(row.timestamp);
     if (at === null) continue;
@@ -505,7 +508,7 @@ export function transcriptStats(rows: readonly TranscriptRow[]): TranscriptStats
     firstAtMs ??= at;
     lastAtMs = at;
   }
-  return { toolUses, outputTokens, model, firstAtMs, lastAtMs };
+  return { toolUses, outputTokens, model, version, firstAtMs, lastAtMs };
 }
 
 /** What one collapsed run of tool calls and thinking adds up to, counted the
@@ -523,11 +526,13 @@ export interface GroupCounts {
   mcpServers: string[];
   agents: number;
   otherTools: number;
+  shellCommands: number;
 }
 
 const EDIT_TOOLS: ReadonlySet<string> = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 const SEARCH_TOOLS: ReadonlySet<string> = new Set(["Grep", "Glob"]);
 const AGENT_TOOLS: ReadonlySet<string> = new Set(["Task", "Agent"]);
+const SHELL_TOOLS: ReadonlySet<string> = new Set(["Bash", "PowerShell"]);
 
 function editLines(name: string, inputJson: string): { added: number; removed: number } {
   const fields = parseFields(inputJson);
@@ -551,7 +556,7 @@ function editLines(name: string, inputJson: string): { added: number; removed: n
 export function countGroup(rows: readonly Pick<TranscriptRow, "kind" | "toolName" | "text" | "durationMs">[]): GroupCounts {
   const counts: GroupCounts = {
     hasThinking: false, thinkingMs: 0, editFiles: 0, linesAdded: 0, linesRemoved: 0, searches: 0, reads: 0,
-    lists: 0, mcpCalls: 0, mcpServers: [], agents: 0, otherTools: 0,
+    lists: 0, mcpCalls: 0, mcpServers: [], agents: 0, otherTools: 0, shellCommands: 0,
   };
 
   for (const row of rows) {
@@ -578,6 +583,8 @@ export function countGroup(rows: readonly Pick<TranscriptRow, "kind" | "toolName
       counts.lists++;
     } else if (AGENT_TOOLS.has(name)) {
       counts.agents++;
+    } else if (SHELL_TOOLS.has(name)) {
+      counts.shellCommands++;
     } else if (mcp) {
       counts.mcpCalls++;
       if (!counts.mcpServers.includes(mcp[1])) counts.mcpServers.push(mcp[1]);
@@ -647,10 +654,65 @@ export function groupSummaryParts(counts: GroupCounts, active: boolean): Summary
   if (counts.otherTools > 0) {
     add(verb("calling", "called"), counts.otherTools, ` ${plural(counts.otherTools, "tool", "tools")}`);
   }
+  if (counts.shellCommands > 0) {
+    const noun = plural(counts.shellCommands, "shell command", "shell commands");
+    add(verb("running", "ran"), counts.shellCommands, ` ${noun}`);
+  }
 
   if (parts.length > 0) {
     const first = parts[0];
     parts[0] = { ...first, lead: first.lead[0].toUpperCase() + first.lead.slice(1) };
   }
   return parts;
+}
+
+const MODEL_ID = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/;
+const LEGACY_MODEL_ID = /^claude-(\d+)(?:-(\d{1,2}))?-([a-z]+)(?:-\d{8})?$/;
+
+function capitalised(word: string): string {
+  return word ? word[0].toUpperCase() + word.slice(1) : word;
+}
+
+/** "claude-opus-5-5" as Claude's banner names it, "Opus 5.5". A provider
+ *  prefix, a date suffix and a "[1m]" context tag are dropped; an id that
+ *  does not look like a Claude model is shown as it came. */
+export function modelDisplayName(id: string): string {
+  const bare = id.replace(/\[[^\]]*\]$/, "").replace(/^(?:[a-z]+\.)?anthropic\./, "").trim();
+
+  const modern = MODEL_ID.exec(bare);
+  if (modern) {
+    const version = modern[3] === undefined ? modern[2] : `${modern[2]}.${modern[3]}`;
+    return `${capitalised(modern[1])} ${version}`;
+  }
+
+  const legacy = LEGACY_MODEL_ID.exec(bare);
+  if (legacy) {
+    const version = legacy[2] === undefined ? legacy[1] : `${legacy[1]}.${legacy[2]}`;
+    return `${capitalised(legacy[3])} ${version}`;
+  }
+
+  return id;
+}
+
+const PROMPT_FOLDS_PAST_CHARS = 10_000;
+const PROMPT_HEAD_CHARS = 2_500;
+const PROMPT_TAIL_CHARS = 2_500;
+
+export interface FoldedPrompt {
+  head: string;
+  tail: string;
+  hiddenLines: number;
+  hiddenChars: number;
+}
+
+/** Claude draws a prompt whole up to 10,000 characters. Past that it keeps
+ *  the first and last 2,500 and rules off what it hid between them. */
+export function foldPrompt(text: string): FoldedPrompt | null {
+  if (text.length <= PROMPT_FOLDS_PAST_CHARS) return null;
+
+  const head = text.slice(0, PROMPT_HEAD_CHARS);
+  const tail = text.slice(text.length - PROMPT_TAIL_CHARS);
+  const hidden = text.slice(PROMPT_HEAD_CHARS, text.length - PROMPT_TAIL_CHARS);
+  const hiddenLines = hidden.split("\n").length - 1;
+  return { head, tail, hiddenLines, hiddenChars: hidden.length };
 }

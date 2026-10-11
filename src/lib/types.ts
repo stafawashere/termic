@@ -2185,7 +2185,16 @@ export interface TranscriptEntry {
    *  that message only. */
   model?: string | null;
   outputTokens?: number | null;
+  /** The Claude Code version that wrote the line, beside `model`. */
+  version?: string | null;
+  /** Dim lines Claude prints under a tool result, on `toolResult` entries. */
+  notes?: TranscriptResultNote[];
+  /** The result carries a file diff, which pulls its call out of a
+   *  collapsed group. */
+  popsOut?: boolean;
 }
+
+export type TranscriptResultNote = "sharedRepo" | "diffSkipped" | "diffUnavailable" | "autoClassifier";
 
 /** What a live transcript watch sends on `subagent-watch://<sessionId>/<agentId>`.
  *  `entries` carries new entries starting at index `start`; `reset` means the

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { TranscriptEntry } from "@/lib/types";
 import {
   appendBatch, formatToolInput, groupToolRuns, pairToolCalls, positionOfEntry, prependPage, rowOffsets, rowsForView, shouldFollowTail,
-  stripAnsi, toTranscriptRow, toTranscriptRows, truncateLines, visibleRange, type TranscriptWindow,
+  stripAnsi, toTranscriptRow, toTranscriptRows, truncateLines, visibleRange, withoutSystemReminders, type TranscriptWindow,
 } from "@/lib/subagentTranscript";
 
 function entry(kind: TranscriptEntry["kind"], text: string, extra: Partial<TranscriptEntry> = {}): TranscriptEntry {
@@ -289,5 +289,48 @@ describe("visibleRange after the content shrinks", () => {
     const offsets = rowOffsets(4, () => 30);
     expect(visibleRange(offsets, 5_000, 200, 0)).toEqual({ first: 0, end: 4 });
     expect(visibleRange(rowOffsets(20, () => 30), 5_000, 90, 0)).toEqual({ first: 17, end: 20 });
+  });
+});
+
+describe("system reminders in a prompt", () => {
+  it("strips each reminder block, an unclosed one to the end", () => {
+    const prompt = "Map the tree.\n<system-reminder>\nbe brief\n</system-reminder>\nThen report.\n<system-reminder>cut off";
+    expect(withoutSystemReminders(prompt)).toBe("Map the tree.\n\nThen report.");
+  });
+
+  it("drops a prompt that was only reminders and keeps the rest", () => {
+    const rows = toTranscriptRows([
+      entry("userText", "<system-reminder>\nreport through the tool\n</system-reminder>"),
+      entry("userText", "go <system-reminder>x</system-reminder>"),
+      entry("assistantText", "<system-reminder>quoted</system-reminder>"),
+    ], 0);
+    const paired = pairToolCalls(rows);
+
+    expect(paired.map(row => [row.index, row.row.text])).toEqual([[1, "go"], [2, "<system-reminder>quoted</system-reminder>"]]);
+  });
+});
+
+describe("result notes and file diffs", () => {
+  const call = (id: string) => entry("toolUse", "{}", { name: "Bash", toolUseId: id });
+  const result = (id: string, extra: Partial<TranscriptEntry> = {}) => entry("toolResult", "out", { toolUseId: id, ...extra });
+
+  it("keeps the notes it knows, in order, and ignores the rest", () => {
+    const row = toTranscriptRow({ ...result("a"), notes: ["sharedRepo", "fromTheFuture", 3, "autoClassifier"] }, 0);
+    const junk = toTranscriptRow({ ...result("a"), notes: "sharedRepo", popsOut: "yes" }, 0);
+
+    expect(row.notes).toEqual(["sharedRepo", "autoClassifier"]);
+    expect(junk.notes).toEqual([]);
+    expect(junk.popsOut).toBe(false);
+  });
+
+  it("draws a call whose result carries a file diff on its own, splitting the run around it", () => {
+    const rows = toTranscriptRows([
+      entry("thinking", "hmm"), call("a"), result("a", { popsOut: true }), call("b"), result("b"), call("c"), result("c"),
+    ], 0);
+    const display = groupToolRuns(pairToolCalls(rows));
+
+    expect(display.map(row => [row.kind, row.index, row.members.length])).toEqual([
+      ["group", 0, 1], ["toolUse", 1, 0], ["group", 3, 2],
+    ]);
   });
 });
