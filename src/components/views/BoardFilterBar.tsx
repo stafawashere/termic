@@ -16,7 +16,8 @@ import { ListFilter, Minus, X } from "lucide-react";
 import { useApp } from "@/store/app";
 import { useUI } from "@/store/ui";
 import { usePrefs } from "@/store/prefs";
-import { bindingMatches, type Binding } from "@/lib/shortcuts";
+import { bindingMatches, bindingText, type Binding } from "@/lib/shortcuts";
+import { SearchGlyph } from "@/components/sidebar/sidebarIcons";
 import { PopoverContent, PopoverRoot, PopoverTrigger } from "@/components/ui/Popover";
 import { Highlighted } from "@/lib/fuzzy";
 import {
@@ -91,10 +92,10 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
   // the always-drawn chips were built to stop). Blurred, it is one clipped
   // line again. `grown` is its measured height, which the list hangs below.
   //
-  // Measured against the ROW, never a pixel constant: the row is h-7, which
-  // is rem, and this app's root font size is 14px, so it is 24.5px and not
-  // the 28 a hardcoded "h-7 = 28" assumed. With that constant a focused
-  // one-line field stood 3.5px taller than its row.
+  // Measured against the ROW, never a pixel constant: the board's row is
+  // h-7, which is rem, and this app's root font size is 14px, so it is
+  // 24.5px and not the 28 a hardcoded "h-7 = 28" assumed. With that
+  // constant a focused one-line field stood 3.5px taller than its row.
   const [focused, setFocused] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
   const [grown, setGrown] = useState<number | null>(null);
@@ -110,7 +111,7 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
     // Null while it still fits one line, so nothing is overridden then.
     setGrown(h > base + 1 ? h : null);
   }, [text, focused, sidebar]);
-  // The palette's "Filter sidebar tasks" (useUI.focusSidebarFilter).
+  // ⇧⌘F and the palette's "Filter sidebar tasks" (useUI.focusSidebarFilter).
   const focusPending = useUI(s => sidebar && s.sidebarFilterFocusPending);
   useEffect(() => {
     if (!focusPending) return;
@@ -174,7 +175,7 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
     <div
       // Sidebar: no vertical padding. The sidebar's head spaces its rows
       // with one gap (Sidebar.tsx), so the bar does not pick its own.
-      className={sidebar ? "flex shrink-0 flex-col gap-0.5 px-2" : "flex shrink-0 items-center gap-2 px-3 pt-3"}
+      className={sidebar ? "flex shrink-0 flex-col gap-0.5 px-[10px]" : "flex shrink-0 items-center gap-2 px-3 pt-3"}
       data-testid={tid}
       data-no-drag
     >
@@ -184,11 +185,12 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
           chips. It worked only while the input was in flow and gave the row
           its height. So the row takes its height from h-7 and does not flex
           there; on the board (a row) flex-1 is its width, as before. */}
-      <div ref={rowRef} className={cn("relative flex h-7 min-w-0 items-center", sidebar ? "shrink-0" : "flex-1")}>
+      <div ref={rowRef} className={cn("relative flex min-w-0 items-center", sidebar ? "h-[30px] shrink-0" : "h-7 flex-1")}>
         <BoardFilterMenu
           text={text}
           setText={setText}
           tid={tid}
+          sidebar={sidebar}
           side={sidebar ? "right" : "bottom"}
           focusHint={!sidebar}
           sections={sections}
@@ -249,11 +251,14 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
           }}
           autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
           className={cn(
-            "w-full resize-none overflow-hidden rounded-md border py-1 pl-8 pr-6 text-[12.5px] leading-[calc(1.25rem-2px)] text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-faint)]",
-            // The line height is the row's content box exactly (h-7 less the
-            // 1px borders and py-1), so ONE line is one row tall and a
-            // focused, unwrapped field does not grow. In rem like the row:
-            // the root font size here is 14px, not 16.
+            "w-full resize-none overflow-hidden border outline-none",
+            // The line height is the row's content box exactly (the row less
+            // the 1px borders and padding), so ONE line is one row tall and a
+            // focused, unwrapped field does not grow. The board's is in rem
+            // like its row: the root font size here is 14px, not 16.
+            sidebar
+              ? "rounded-[7px] py-0 pl-[31px] pr-[52px] text-[13px] leading-[28px] text-[var(--sidebar-input-ink)] shadow-[var(--sidebar-input-shadow)] placeholder:text-[var(--sidebar-placeholder)]"
+              : "rounded-md py-1 pl-8 pr-6 text-[12.5px] leading-[calc(1.25rem-2px)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-faint)]",
             // Out of flow in the sidebar (the wrapper holds the row's height),
             // so growing never moves what is under it. Wrapping only while
             // focused; otherwise, and always on the board, one clipped line.
@@ -263,16 +268,10 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
             // break-all cut every line at the edge, mid-word ("stat" / "us:").
             sidebar && focused ? "z-30 whitespace-pre-wrap [overflow-wrap:anywhere]" : "whitespace-pre",
             // One row tall unless `grown` (inline) says otherwise.
-            !grown && "h-7",
-            // Opaque once it covers the chips, or they show through the text.
-            sidebar && grown !== null && "bg-[var(--color-bg-1)]",
-            // The board's bar sits on --color-bg, so that fill is invisible
-            // there: an outlined field on its own surface. The sidebar is one
-            // step lighter (bg-1, or a profile wash), where the same fill
-            // became a black slot at the top of the list. No fill in the
-            // sidebar gives it the look the board always had, and matches the
-            // outlined chips under it.
-            sidebar ? (grown !== null ? "" : "bg-transparent") : "bg-[var(--color-bg)]",
+            !grown && (sidebar ? "h-[30px]" : "h-7"),
+            // The sidebar's field is sunk into the panel like the toolbar's
+            // wells, and opaque, so a grown field covers the chips under it.
+            sidebar ? "bg-[var(--sidebar-input-bg)]" : "bg-[var(--color-bg)]",
             // Sidebar, list open: square the bottom and quiet its edge, so
             // the field and the list under it draw as ONE outlined shape with
             // a hairline between them (see the listbox below).
@@ -282,9 +281,14 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
             // and louder still once the list hangs off it and doubles the
             // outline's length. The funnel already turns accent to say a
             // filter is on.
-            active ? "border-[var(--color-accent)]/50" : "border-[var(--color-border-soft)] focus:border-[var(--color-accent)]/50",
+            active
+              ? "border-[var(--color-accent)]/50"
+              : sidebar
+                ? "border-[var(--sidebar-input-border)] focus:border-[var(--color-accent)]/50"
+                : "border-[var(--color-border-soft)] focus:border-[var(--color-accent)]/50",
           )}
         />
+        {sidebar && text === "" && <FilterKeycap />}
         {text !== "" && (
           <button
             type="button"
@@ -296,8 +300,8 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
             // text at the PADDING edge, not the content edge an input uses,
             // so a clipped query ran on underneath this button.
             className={cn(
-              "absolute right-1 z-40 rounded p-0.5 text-[var(--color-fg-faint)] hover:text-[var(--color-fg)]",
-              sidebar ? "bg-[var(--color-bg-1)]" : "bg-[var(--color-bg)]",
+              "absolute z-40 rounded p-0.5 text-[var(--color-fg-faint)] hover:text-[var(--color-fg)]",
+              sidebar ? "right-[8px] bg-[var(--sidebar-input-bg)]" : "right-1 bg-[var(--color-bg)]",
             )}
           ><X className="h-3.5 w-3.5" /></button>
         )}
@@ -319,10 +323,10 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
             //
             // Board: the list is narrower than the field, so it cannot join
             // it and stays a menu, in the app's menu chrome (ui/Dropdown.tsx).
-            className={cn("absolute left-0 top-full z-40 overflow-hidden bg-[var(--color-bg-1)] p-1 shadow-xl",
+            className={cn("absolute left-0 top-full z-40 overflow-hidden p-1 shadow-xl",
               sidebar
-                ? "w-full rounded-b-md border border-t-0 border-[var(--color-accent)]/50"
-                : "mt-1 w-[260px] rounded-md border border-[var(--color-border)]")}
+                ? "w-full rounded-b-[7px] border border-t-0 border-[var(--color-accent)]/50 bg-[var(--sidebar-input-bg)]"
+                : "mt-1 w-[260px] rounded-md border border-[var(--color-border)] bg-[var(--color-bg-1)]")}
           >
             {suggestions.map((s, i) => (
               <div
@@ -375,10 +379,12 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
 });
 
 /** The funnel button and its menu. */
-function BoardFilterMenu({ text, setText, tid, side, focusHint, sections, open, onOpenChange, active, onClosed }: {
+function BoardFilterMenu({ text, setText, tid, sidebar, side, focusHint, sections, open, onOpenChange, active, onClosed }: {
   text: string;
   setText: (q: string) => void;
   tid: string;
+  /** The sidebar's trigger is the field's leading magnifier. */
+  sidebar: boolean;
   side: "bottom" | "right";
   /** The `/` hint: only the board's bar answers it. */
   focusHint: boolean;
@@ -399,12 +405,18 @@ function BoardFilterMenu({ text, setText, tid, side, focusHint, sections, open, 
           aria-label={t("board.filterMenuOpen")}
           data-testid={`${tid}-menu-trigger`}
           className={cn(
-            "absolute left-1 z-40 flex rounded p-1 hover:bg-[var(--color-bg-3)]",
-            "data-[state=open]:bg-[var(--color-bg-3)]",
-            active ? "text-[var(--color-accent)]" : "text-[var(--color-fg-faint)] hover:text-[var(--color-fg)]",
+            "absolute z-40 flex rounded",
+            sidebar
+              ? "left-[7px] p-[4px] hover:bg-[var(--sidebar-row-hover)] data-[state=open]:bg-[var(--sidebar-row-hover)]"
+              : "left-1 p-1 hover:bg-[var(--color-bg-3)] data-[state=open]:bg-[var(--color-bg-3)]",
+            active
+              ? "text-[var(--color-accent)]"
+              : sidebar
+                ? "text-[var(--sidebar-placeholder)] hover:text-[var(--sidebar-btn-hover-ink)]"
+                : "text-[var(--color-fg-faint)] hover:text-[var(--color-fg)]",
           )}
         >
-          <ListFilter className="h-3.5 w-3.5" />
+          {sidebar ? <SearchGlyph size={13} /> : <ListFilter className="h-3.5 w-3.5" />}
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -511,5 +523,23 @@ function FacetChip({ option: o, state, onClick }: {
         </span>
       )}
     </button>
+  );
+}
+
+/** The sidebar field's trailing keycap: whatever focus-sidebar-filter is
+ *  bound to (glyphs on macOS, Ctrl+Shift+F elsewhere), so a rebind redraws
+ *  it. Gone while there is text, where the
+ *  clear button takes its place. */
+function FilterKeycap() {
+  const binding = usePrefs(s => s.shortcuts["focus-sidebar-filter"]);
+
+  return (
+    <kbd
+      data-testid="sidebar-filter-keycap"
+      aria-hidden
+      className="pointer-events-none absolute right-[11px] z-30 rounded-[4px] border border-[var(--sidebar-keycap-border)] bg-[var(--sidebar-keycap-bg)] px-[5px] font-sans text-[11px] leading-[17px] text-[var(--sidebar-placeholder)]"
+    >
+      {bindingText(binding)}
+    </kbd>
   );
 }

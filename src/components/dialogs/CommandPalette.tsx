@@ -413,11 +413,11 @@ export function CommandPalette() {
       icon: PanelLeft, shortcutId: "toggle-left-sidebar", keywords: "projects collapse hide",
       run: act(() => useApp.getState().toggleCompactSidebar()),
     });
-    // The sidebar's filter bar has no key of its own (`/` and ⌘F are the
-    // board's, and focus is usually in a terminal), so this is its way in.
+    // The palette's way into the sidebar's filter bar. Unlike the ⇧⌘F key,
+    // it also leaves the icon rail for the full sidebar.
     cmds.push({
       id: "filter-sidebar", section: "View", label: t("commandPalette.cmd.filterSidebar"),
-      icon: ListFilter, keywords: "search find tasks query narrow sidebar projects status",
+      icon: ListFilter, shortcutId: "focus-sidebar-filter", keywords: "search find tasks query narrow sidebar projects status",
       run: act(() => {
         // the icon rail carries no bar, so bring the full sidebar back first
         const app = useApp.getState();

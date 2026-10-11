@@ -1259,7 +1259,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
       ) : (
         <div
           data-testid="sidebar-toolbar"
-          className="flex h-[var(--sidebar-toolbar-h)] shrink-0 items-center gap-[8px] border-b border-[var(--sidebar-divider)] bg-[linear-gradient(180deg,var(--sidebar-sheen),transparent)] px-[10px]"
+          className="flex shrink-0 items-center gap-[8px] border-b border-[var(--sidebar-head-rule)] bg-[linear-gradient(180deg,var(--sidebar-sheen),transparent)] px-[10px] pb-[var(--sidebar-head-pad)] pt-[var(--sidebar-toolbar-pad)]"
         >
           <nav data-testid="sidebar-view-switcher" className="flex gap-[2px] rounded-[8px] bg-[var(--sidebar-well-bg)] p-[3px] shadow-[var(--sidebar-well-shadow)]">
             <ViewSegment icon={<FolderGlyph />} label={t("navDashboard")}
@@ -1287,7 +1287,11 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
           <AgentActivityReadout />
         </div>
       )}
-      <div className={cn("flex flex-col", !compact && "gap-3 pt-3")}>
+      {/* The filter and the chips sit between two rules, the toolbar's and
+          this one, which parts the head from the list, with the same room
+          on both sides of each rule (--sidebar-head-pad). A hidden chips row
+          takes its gap with it. */}
+      <div className={cn("flex flex-col", !compact && "gap-[var(--sidebar-filter-gap)] border-b border-[var(--sidebar-head-rule)] py-[var(--sidebar-head-pad)]")}>
 
       {/* The filter bar: above STATUS and PROJECTS, outside their scroller,
           because it scopes both and must not scroll away from them. */}
@@ -1315,10 +1319,10 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
           so the tree below never shifts. No rule under it: one was tried and
           read as too harsh against the sidebar. */}
       {!compact && (
-        <div className="flex shrink-0 items-center gap-2 px-2 empty:hidden">
+        <div className="flex shrink-0 items-center gap-2 px-[10px] empty:hidden">
           {!showStatusSection && <StatusChips />}
           {queryOn && (
-            <span data-testid="sidebar-filter-count" className="ml-auto shrink-0 text-[11.5px] tabular-nums text-[var(--color-fg-faint)]">
+            <span data-testid="sidebar-filter-count" className="ml-auto shrink-0 text-[11px] tabular-nums text-[var(--sidebar-meta)]">
               {t("filterBar.count", { shown: queryMatchIds?.size ?? 0, total: queryLiveTasks.length })}
             </span>
           )}
@@ -1328,7 +1332,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
       </div>
 
       {/* Projects section */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className={cn("relative flex min-h-0 flex-1 flex-col", !compact && "pt-[var(--sidebar-head-pad)]")}>
       <div
         ref={projectsScrollRef}
         data-testid="sidebar-scroll"

@@ -51,12 +51,18 @@
      scrollbar thumb follow --color-accent everywhere. */
   --sidebar-row-h:          28px;
   --sidebar-task-row-h:     30px;
-  --sidebar-toolbar-h:      44px;
+  /* Above the toolbar's wells; below them is --sidebar-head-pad. */
+  --sidebar-toolbar-pad:    6px;
+  /* Either side of the rules above the filter and below the chips. */
+  --sidebar-head-pad:       8px;
+  --sidebar-filter-gap:     2px;
   --sidebar-bg-top:         #1c1c1c;
   --sidebar-bg-bottom:      #181818;
   --sidebar-border:         #2a2a2a;
   --sidebar-top-highlight:  rgba(255, 255, 255, 0.04);
   --sidebar-divider:        #242424;
+  /* The two rules around the filter and chips: a step stronger than a divider. */
+  --sidebar-head-rule:      #303030;
   --sidebar-sheen:          rgba(255, 255, 255, 0.02);
   --sidebar-well-bg:        #141414;
   --sidebar-well-shadow:    inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -580,6 +586,7 @@
     --sidebar-border:         color-mix(in srgb, var(--color-bg-1) 90%, var(--color-fg));
     --sidebar-top-highlight:  rgba(255, 255, 255, 0.04);
     --sidebar-divider:        color-mix(in srgb, var(--color-bg-1) 93%, var(--color-fg));
+    --sidebar-head-rule:      color-mix(in srgb, var(--color-bg-1) 87%, var(--color-fg));
     --sidebar-sheen:          rgba(255, 255, 255, 0.02);
     --sidebar-well-bg:        var(--color-bg-1);
     --sidebar-well-shadow:    inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -650,6 +657,7 @@
     --sidebar-border:         var(--color-border);
     --sidebar-top-highlight:  rgba(255, 255, 255, 0.7);
     --sidebar-divider:        var(--color-border-soft);
+    --sidebar-head-rule:      var(--color-border);
     --sidebar-sheen:          rgba(255, 255, 255, 0.35);
     --sidebar-well-bg:        color-mix(in srgb, var(--color-bg-1) 92%, var(--color-fg));
     --sidebar-well-shadow:    inset 0 1px 2px rgba(0, 0, 0, 0.12), 0 1px 0 rgba(255, 255, 255, 0.8);
@@ -871,7 +879,7 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 }
 
 /* Overlay / finder entrance — fade in + a short slide down (~22px) from the
-   top. Used by the ⇧⌘P command palette and the ⌘P / ⇧⌘F / ⌘N finder dialogs.
+   top. Used by the ⇧⌘P command palette and the ⌘P / ⌥⌘F / ⌘N finder dialogs.
    The slide animates the `transform` property; the dialogs center themselves
    with Tailwind's `-translate-x-1/2`, which v4 compiles to the SEPARATE
    `translate:` property — the two compose (individual `translate` is applied

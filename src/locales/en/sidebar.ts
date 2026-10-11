@@ -53,7 +53,7 @@ export default {
     tipEmpty: "{{label}}: no tasks",
   },
   filterBar: {
-    placeholder: "Filter tasks",
+    placeholder: "Filter projects and tasks",
     count: "{{shown}} of {{total}} tasks",
     hidden_one: "{{count}} project with no matches hidden",
     hidden_other: "{{count}} projects with no matches hidden",

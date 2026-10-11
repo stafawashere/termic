@@ -18,7 +18,8 @@
 //   ⌘J       → cycle the bottom split: show+focus → focus (if open but unfocused) → hide+refocus agent
 //   ⌘L       → focus the main agent (its terminal or editor) from any pane
 //   ⌘T       → new tab · ⌘K → clear terminal · ⌘P → file finder
-//   ⇧⌘F      → find in files · ⇧⌘B → broadcast · ⌘, → settings
+//   ⌥⌘F      → find in files · ⇧⌘F → focus the sidebar filter
+//   ⇧⌘B      → broadcast · ⌘, → settings
 //   ⇧⌘P      → command palette · ⌥⌘P → prompt palette
 //   ⌃⇥, ⌃⇧⇥ → walk the recently-used tabs (a GESTURE, not a binding: see below)
 //   Shortcuts cheat-sheet: icon-only, no keyboard binding
@@ -288,11 +289,20 @@ export function useShortcuts() {
           useUI.getState().openFileFinder(taskId);
           return;
 
-        // ⇧⌘F → find-in-files. Same no-`isTyping` rationale as the finder.
+        // ⌥⌘F → find-in-files. Same no-`isTyping` rationale as the finder.
         case "find-in-files":
           if (!taskId) return;
           e.preventDefault();
           useUI.getState().openFindInFiles(taskId);
+          return;
+
+        // ⇧⌘F → the sidebar filter. The icon rail mounts no filter, so the
+        // key does nothing there: a pending focus left behind would jump into
+        // the field whenever the full sidebar came back.
+        case "focus-sidebar-filter":
+          if (state.compactSidebar) return;
+          e.preventDefault();
+          useUI.getState().focusSidebarFilter();
           return;
 
         // ⌘1..⌘9 → switch to Nth tab in the active task. Indexes the

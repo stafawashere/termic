@@ -53,7 +53,7 @@ export default {
     tipEmpty: "{{label}}：没有任务",
   },
   filterBar: {
-    placeholder: "筛选任务",
+    placeholder: "筛选项目和任务",
     count: "{{shown}} / {{total}} 个任务",
     hidden_one: "已隐藏 {{count}} 个无匹配的项目",
     hidden_other: "已隐藏 {{count}} 个无匹配的项目",

@@ -1785,7 +1785,7 @@ describe("directory links", () => {
     );
 
     // A preview that claims the key calls preventDefault on it. Nothing else
-    // binds plain Cmd+F at the window (find-in-files is Shift+Cmd+F, and
+    // binds plain Cmd+F at the window (find-in-files is Opt+Cmd+F, and
     // CodeMirror's search keymap lives on the editor's own DOM), so
     // defaultPrevented is exactly "some MarkdownPreview took it".
     const claimed = await browser.execute(() => {

@@ -382,7 +382,7 @@ describe("file finder", () => {
   });
 });
 
-// P1: find-in-files (⇧⌘F) streams results from ripgrep, or git grep where rg
+// P1: find-in-files (⌥⌘F) streams results from ripgrep, or git grep where rg
 // isn't installed (GH #181). Cases: opens with an input; the dialog names the
 // backend that actually ran and offers the install hint only on the fallback;
 // a query that matches the fixture README returns a result row with the match

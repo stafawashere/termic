@@ -248,7 +248,7 @@ interface UIState {
    *  here rather than in TaskGroupBlock because Move to group > New group
    *  starts it from a task's menu, before the block it targets has mounted. */
   groupRenaming: { groupId: string; value: string } | null;
-  /** ⇧⌘F find-in-files dialog — task id, null = closed. */
+  /** ⌥⌘F find-in-files dialog — task id, null = closed. */
   findInFilesTaskId: string | null;
   /** Global "blocking work in flight" message. Shows a centered loader over
    *  the whole window so the user knows the freeze is intentional. Set for

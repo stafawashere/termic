@@ -678,9 +678,9 @@ describe("sidebar filter bar", () => {
   // chips, out of flow: nothing below it may move.
   it("wraps a long query while focused, without moving the chips, and is one line again on blur", async () => {
     const CHIPS = '[data-testid="status-chips"]';
-    // Against the field's own ROW, never a literal 28: h-7 is rem, and the
-    // app's root font size is 14px, so the row is 24.5px. The component made
-    // the same assumption and stood 3.5px taller than its row when focused.
+    // Against the field's own ROW, never a literal height. The row was h-7
+    // once, which is rem at a 14px root font size, so 24.5px, and the
+    // component assumed 28 and stood 3.5px taller than its row when focused.
     const heights = () => browser.execute((inp, chips) => ({
       field: Math.round((document.querySelector(inp) as HTMLElement).getBoundingClientRect().height),
       row: Math.round((document.querySelector(inp) as HTMLElement).parentElement!.getBoundingClientRect().height),

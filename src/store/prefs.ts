@@ -648,7 +648,7 @@ interface PrefsState {
    *  taste about how profiles are drawn, not a fact about one of them.
    *  Settings > Profiles. */
   profileSidebarWash: boolean;
-  /** Find in files (⇧⌘F) treats the query as a POSIX ERE instead of a
+  /** Find in files (⌥⌘F) treats the query as a POSIX ERE instead of a
    *  literal string. Toggled from the search bar itself, persisted so it
    *  survives a relaunch. */
   findInFilesRegex: boolean;
@@ -1131,6 +1131,14 @@ function loadShortcuts(): BindingMap {
         delete parsed["open-shortcuts"];
         try { localStorage.setItem(LS_SHORTCUTS, JSON.stringify(parsed)); } catch {}
       }
+      // Find in files left Shift+Cmd+F for the sidebar filter. A map saved
+      // before the filter had a key holds the old default for it whether or
+      // not anyone chose it, and keeping it would shadow the filter's key.
+      const savedBeforeFilterKey = !("focus-sidebar-filter" in parsed);
+      const findInFiles = parsed["find-in-files"];
+      const holdsOldFindDefault = findInFiles?.key === "f" && findInFiles.cmd === true
+        && findInFiles.shift === true && findInFiles.alt === false;
+      if (savedBeforeFilterKey && holdsOldFindDefault) delete parsed["find-in-files"];
       for (const id of Object.keys(merged) as ShortcutId[]) {
         const b = parsed[id];
         if (b && typeof b.key === "string"
