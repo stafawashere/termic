@@ -202,7 +202,9 @@ it keeps now (the "Lens" concept of the sidebar rethink):
   `pointer-events-none`: without that it takes every click meant for the
   three dots while invisible, which shipped once.
 - **Location glyphs are a choice.** The tree draws a link for the main
-  checkout and a branch for a worktree by default; the `taskLocationIcon`
+  checkout and a branch for a worktree by default, in the branch chip at
+  the row's right end (it fades out under the pointer, and takes the menu
+  button's room when that slot is free); nothing sits after the name; the `taskLocationIcon`
   pref (Settings > Appearance > Sidebar, and a submenu in the Projects
   list options) narrows that to main checkout only, worktree only, or
   none, since whichever one you mostly use is noise. Other surfaces (board
@@ -230,18 +232,63 @@ it keeps now (the "Lens" concept of the sidebar rethink):
   happened while the app was closed into a transition seen live. Under "number", a PR whose number is not
   known yet keeps its glyph, since dropping both would drop the link. The
   status section and the dashboard never drew the number.
-- **Project names stay all caps**, like folder names. A project groups its
-  tasks the way a folder groups projects, and the caps are what set a
-  project's header apart from the task rows under it.
-- **The project header's hover shows the filter, ⋯ and `+`.** ⋯ opens the
-  project's own right-click menu at the button, which is where Settings
-  lives now; the filter (#324) keeps its own icon, pinned while it filters.
+- **Names are drawn as typed.** Project names are no longer capitalised,
+  and a folder group's name is shown in sentence case
+  (`groupDisplayName`, `lib/projectGroups.ts`) although it is stored in
+  caps. What sets a project apart from its tasks is the folder glyph and
+  the filled background an open project keeps.
+- **The project header's hover shows a tray:** the filter, ⋯ and `+` in
+  one bordered box (`.sidebar-tray`). ⋯ opens the project's own
+  right-click menu at the button, which is where Settings lives now; the
+  filter (#324) keeps its own icon, pinned while it filters. A task row's
+  menu button is the same tray holding one button.
 - **One nesting style:** a 1px guide line. A project folder's is neutral (or
   its accent, tinted); a task group's is its colour. Different colour, same
   weight, same meaning: these belong together.
-- **The nav is one strip of icons,** each with its name as a tooltip and as
-  screen-reader text. Four full-width rows took the top of the sidebar
+- **The nav is one segmented control,** a recessed well of icons with the
+  current view raised, each with its name as a tooltip and as
+  screen-reader text. It runs across the toolbar, and down the icon rail. Four full-width rows took the top of the sidebar
   before anything about your work showed.
+
+## The refined tree (GH #90)
+
+The sidebar's look, from the 2026-10 redesign. Every colour is a
+`--sidebar-*` token defined for every theme (docs/themes.md), and the
+accent is the theme's, never a literal.
+
+- **Geometry.** One grid: `treeIndent(depth) = 6 + 18 * depth`. Each
+  project wrapper sets `--sb-task-pad` (its tasks) and `--sb-member-pad`
+  (a task group's members); session rows sit 18px further in, subagent
+  rows 18px per level after that. Guides are 1px lines 4px right of the
+  parent's indent, with a 9px elbow into each child. Rows are
+  `--sidebar-row-h` (28px) for projects, sessions and subagents and
+  `--sidebar-task-row-h` (30px) for tasks.
+- **Selected** is `.sidebar-selected`: a horizontal accent gradient and a
+  2px inset accent bar. It is the same on a task, a session, a subagent and
+  a rail tile.
+- **Counts are keycaps** (`.sidebar-badge`): 16px tall, a 4px radius and
+  the tray's hairline, not pills.
+- **Work state on a session is worded:** a dashed spinner and "running"
+  in `--sidebar-running`, or "done" in `--sidebar-settled`. Subagent rows
+  use the same words.
+- **Menus** opt in with `.sidebar-menu`, which restyles the shared menu
+  primitives (34px items, labelled sections, checked rows) for the sidebar
+  only.
+- **The bottom bar** stays `--bottom-bar-h` (36px, shared with every
+  other bottom bar). Its glyphs are the sidebar's own, 17px, in 30px
+  buttons; the row is shifted so the gear's glyph ends where the tree's
+  badges do.
+- **The icon rail** stacks the views in the same well, over the activity
+  readout in its narrow form. Every row is a 32px tile (`.sidebar-rail-tile`)
+  with a corner dot for what its full row would draw. The hover reveal
+  mounts the rail and the overlay at once, so `activityAnimates` lets only
+  the one on screen run the readout.
+- **Keyboard focus** is one inset ring, `--sidebar-focus-ring`, on every
+  button and `role=button` row in the panel. Inputs keep their accent
+  border (`.sidebar-inline-input`) and menu items their highlight.
+- **Accent presets** (group folders, task groups, profiles) paint with
+  `--color-swatch-*`, the palette at 57% chroma. The raw `--color-palette-*`
+  still drives state marks and links.
 
 ## The sidebar's filter bar
 

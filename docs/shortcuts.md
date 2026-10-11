@@ -289,6 +289,17 @@ changed file", for why the diff is not always the right reader.
 
 `bindingGlyphs(b)` returns `["⌥","⇧","⌘", key]`. Help modal uses raw glyphs (⌘ ⌥ ⇧); settings editor uses `glyphLabel` (Cmd/Ctrl, Option/Alt). `isValidBinding` requires Cmd/Ctrl or Option to prevent swallowing normal typing. The top-bar command-palette button (docs/ui.md) builds its tooltip the same way, so a rebind retitles it.
 
+## Sidebar filter (⇧⌘F) and find in files (⌥⌘F)
+
+`focus-sidebar-filter` holds ⇧⌘F, the keycap the filter field draws (the
+field reads its binding, so a rebind changes the keycap too).
+`find-in-files` moved to ⌥⌘F, which nothing else held. A saved shortcut
+map from before the move still holds find's old default and would clash,
+so that one entry is dropped on load (`store/prefs.ts`) and find takes the
+new default. Off macOS, Ctrl+Shift+F inside a terminal stays that
+terminal's find (`TERMINAL_OWN`), so the filter is reached with it from
+outside a terminal only.
+
 ## Kanban filter bar (`/` and ⌘F)
 
 Contextual, in `BoardFilterBar`'s own capture listener, not `SHORTCUT_DEFS`:
