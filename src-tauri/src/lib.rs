@@ -4064,6 +4064,9 @@ fn pty_spawn(
         if agent_session_marker(&k) { continue }
         cmd.env(k, v);
     }
+    // CommandBuilder::new already seeded the whole parent env, so skipping a
+    // marker above leaves it in place. It has to be removed outright.
+    remove_agent_session_markers(&mut cmd);
     // MINUS a Linux AppImage's own library environment, which would make
     // every system binary in the terminal load OUR bundled libraries (on
     // Ubuntu 25.10+ that kills `env` and `ls`). See appimage_env.rs.
@@ -23457,6 +23460,18 @@ fn agent_session_marker(key: &str) -> bool {
     )
 }
 
+fn remove_agent_session_markers(cmd: &mut CommandBuilder) {
+    let marker_keys: Vec<String> = cmd
+        .iter_full_env_as_str()
+        .map(|(key, _)| key.to_string())
+        .filter(|key| agent_session_marker(key))
+        .collect();
+
+    for key in marker_keys {
+        cmd.env_remove(key);
+    }
+}
+
 /// Stand-in pty id for the command PREVIEW. A preview belongs to no tab,
 /// and the only thing the id feeds is the container's `--name` suffix, so a
 /// fixed marker keeps the rendered name stable between openings instead of
@@ -30161,6 +30176,22 @@ mod tests {
         for k in ["CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "CLAUDE_CODE_NO_FLICKER", "PATH"] {
             assert!(!agent_session_marker(k), "{k} must still be inherited");
         }
+    }
+
+    /// The predicate alone passed while every marker still reached claude:
+    /// CommandBuilder::new copies the parent env before termic filters it.
+    #[test]
+    fn a_marker_already_in_the_builder_env_is_removed() {
+        let mut cmd = CommandBuilder::new("claude");
+        cmd.env("CLAUDE_CODE_CHILD_SESSION", "1");
+        cmd.env("CLAUDE_CODE_MESSAGING_TOKEN", "t");
+        cmd.env("CLAUDE_CONFIG_DIR", "/Users/u/.claude-work");
+
+        remove_agent_session_markers(&mut cmd);
+
+        assert!(cmd.get_env("CLAUDE_CODE_CHILD_SESSION").is_none());
+        assert!(cmd.get_env("CLAUDE_CODE_MESSAGING_TOKEN").is_none());
+        assert!(cmd.get_env("CLAUDE_CONFIG_DIR").is_some());
     }
 
     #[test]
