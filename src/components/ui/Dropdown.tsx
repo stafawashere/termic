@@ -56,7 +56,7 @@ export function DropdownMenu({ children, align = "end", side, sideOffset = 4, co
         // above or below the trigger and spills over the window chrome.
         style={{ maxHeight: "var(--radix-dropdown-menu-content-available-height)" }}
         className={cn(
-          "z-50 min-w-[160px] overflow-y-auto overflow-x-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-bg-1)] p-1 shadow-xl",
+          "z-50 min-w-[160px] overflow-y-auto overflow-x-hidden rounded-[10px] border border-[var(--sidebar-popover-border)] bg-[var(--sidebar-popover-bg)] p-[5px] shadow-[var(--sidebar-popover-shadow)]",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0",
           className,
         )}
@@ -88,8 +88,8 @@ export function DropdownItem({ children, className, onSelect, disabled, ...data 
         // (title + subtitle), centering the icon vertically against the
         // whole block makes it float between the two lines. Top-align lets
         // it sit next to the title where the eye expects it.
-        "flex cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 text-[14px] text-[var(--color-fg)]",
-        "outline-none data-[highlighted]:bg-[var(--color-hover)] data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed",
+        "flex cursor-pointer items-start gap-2 rounded-[6px] px-[9px] py-[6px] text-[14px] text-[var(--sidebar-ink-strong)]",
+        "outline-none data-[highlighted]:bg-[var(--sidebar-menu-hover)] data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed",
         // Nudge leading icons down to sit at the title's optical center
         // (lucide icons are top-heavy at small sizes).
         "[&>svg]:mt-[2px]",
@@ -117,8 +117,8 @@ export function DropdownSubTrigger({ children, className, ...data }: {
       className={cn(
         // Mirrors DropdownItem, minus the cursor: a submenu trigger opens on
         // hover, it isn't a click target that does something.
-        "flex items-center gap-2 rounded-sm px-2 py-1.5 text-[14px] text-[var(--color-fg)]",
-        "outline-none data-[highlighted]:bg-[var(--color-hover)] data-[state=open]:bg-[var(--color-hover)]",
+        "flex items-center gap-2 rounded-[6px] px-[9px] py-[6px] text-[14px] text-[var(--sidebar-ink-strong)]",
+        "outline-none data-[highlighted]:bg-[var(--sidebar-menu-hover)] data-[state=open]:bg-[var(--sidebar-menu-hover)]",
         className,
       )}
     >{children}</DM.SubTrigger>
@@ -141,7 +141,7 @@ export function DropdownSubContent({ children, className }: {
         onPointerDown={(e) => e.stopPropagation()}
         style={{ maxHeight: "var(--radix-dropdown-menu-content-available-height)" }}
         className={cn(
-          "z-50 min-w-[180px] overflow-y-auto overflow-x-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-bg-1)] p-1 shadow-xl",
+          "z-50 min-w-[180px] overflow-y-auto overflow-x-hidden rounded-[10px] border border-[var(--sidebar-popover-border)] bg-[var(--sidebar-popover-bg)] p-[5px] shadow-[var(--sidebar-popover-shadow)]",
           className,
         )}
       >{children}</DM.SubContent>
@@ -150,10 +150,10 @@ export function DropdownSubContent({ children, className }: {
 }
 
 export const DropdownSeparator = () => (
-  <DM.Separator className="my-1 h-px bg-[var(--color-border-soft)]" />
+  <DM.Separator className="-mx-[5px] my-[5px] h-px bg-[var(--sidebar-menu-divider)]" />
 );
 export const DropdownLabel = ({ children }: { children: ReactNode }) => (
-  <DM.Label data-menu-label className="px-2 py-1 text-[11.5px] uppercase tracking-wider text-[var(--color-fg-faint)]">
+  <DM.Label data-menu-label className="px-[9px] pb-1 pt-[6px] text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--sidebar-eyebrow)]">
     {children}
   </DM.Label>
 );

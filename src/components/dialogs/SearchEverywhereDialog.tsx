@@ -395,7 +395,7 @@ export function SearchEverywhereDialog() {
             "flex w-full items-center gap-3 px-3 py-2.5",
             // The row is in the arrow-key order, so it has to show when it is
             // the one Enter would act on, exactly like a result row does.
-            active && "bg-[var(--color-bg-2)]",
+            active && "bg-[var(--sidebar-menu-hover)] shadow-[inset_2px_0_0_var(--color-accent)]",
           )}
         >
           <Compass className="h-5 w-5 shrink-0 text-[var(--color-accent)]" />
@@ -453,7 +453,7 @@ export function SearchEverywhereDialog() {
         onMouseMove={() => setActiveIdx(i)}
         className={cn(
           "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px]",
-          active ? "bg-[var(--color-bg-2)] text-[var(--color-fg)]" : "text-[var(--color-fg)]",
+          active ? "bg-[var(--sidebar-menu-hover)] text-[var(--sidebar-ink-strong)] shadow-[inset_2px_0_0_var(--color-accent)]" : "text-[var(--color-fg)]",
         )}
       >
         {row.kind === "file" ? (
@@ -520,14 +520,14 @@ export function SearchEverywhereDialog() {
         <Dialog.Overlay className="termic-backdrop fixed inset-0 z-40 bg-black/30" />
         <Dialog.Content
           data-testid="search-everywhere"
-          className="termic-pop fixed left-1/2 top-12 z-50 w-[min(760px,92vw)] -translate-x-1/2 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-1)] shadow-2xl outline-none"
+          className="termic-pop fixed left-1/2 top-12 z-50 w-[min(760px,92vw)] -translate-x-1/2 overflow-hidden ui-sheet rounded-[12px] outline-none"
           onKeyDown={onKeyDown}
         >
           <Dialog.Title className="sr-only">{t("searchEverywhere.srTitle")}</Dialog.Title>
           <Dialog.Description className="sr-only">
             {t("searchEverywhere.srDesc", { feature: codeIntelNameLower(typeChecking) })}
           </Dialog.Description>
-          <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-3 py-2.5">
+          <div className="flex items-center gap-2 border-b border-[var(--sidebar-divider)] px-3 py-2.5">
             <Search className="h-4 w-4 shrink-0 text-[var(--color-fg-faint)]" />
             <input
               autoFocus

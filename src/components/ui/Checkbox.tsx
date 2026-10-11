@@ -29,10 +29,10 @@ export const Checkbox = forwardRef<HTMLButtonElement, Props>(
       disabled={disabled}
       onClick={(e) => { e.stopPropagation(); onChange?.(!checked); }}
       className={cn(
-        "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors",
+        "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px]",
         checked
-          ? "border-[var(--color-accent-deep)] bg-[var(--color-accent-deep)] text-white hover:brightness-110"
-          : "border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[var(--color-accent-soft)]",
+          ? "ui-btn-primary"
+          : "ui-sunk-input",
         disabled && "opacity-40 cursor-not-allowed",
         className,
       )}

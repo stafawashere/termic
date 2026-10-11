@@ -316,13 +316,13 @@ export function TaskFinderDialog() {
               returnFocusRef.current.focus();
             }
           }}
-          className="termic-pop fixed left-1/2 top-[56px] z-50 w-[min(760px,92vw)] -translate-x-1/2 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-1)] shadow-2xl outline-none"
+          className="termic-pop fixed left-1/2 top-[56px] z-50 w-[min(760px,92vw)] -translate-x-1/2 overflow-hidden ui-sheet rounded-[12px] outline-none"
           onKeyDown={onKeyDown}
         >
           <Dialog.Title className="sr-only">{t("taskFinder.srTitle")}</Dialog.Title>
           <Dialog.Description className="sr-only">{t("taskFinder.srDesc")}</Dialog.Description>
 
-          <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-3 py-2.5">
+          <div className="flex items-center gap-2 border-b border-[var(--sidebar-divider)] px-3 py-2.5">
             <Search className="h-4 w-4 shrink-0 text-[var(--color-fg-faint)]" />
             <input
               autoFocus
@@ -370,8 +370,8 @@ export function TaskFinderDialog() {
                   className={cn(
                     "flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition-colors",
                     i === activeIdx
-                      ? "bg-[var(--color-bg-2)] text-[var(--color-fg)]"
-                      : "text-[var(--color-fg-dim)] hover:bg-[var(--color-bg-2)]",
+                      ? "bg-[var(--sidebar-menu-hover)] text-[var(--sidebar-ink-strong)] shadow-[inset_2px_0_0_var(--color-accent)]"
+                      : "text-[var(--color-fg-dim)] hover:bg-[var(--sidebar-row-hover)]",
                   )}
                 >
                   {/* Project badge with group color dot */}

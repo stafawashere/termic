@@ -41,7 +41,7 @@ export function PopoverContent({
           // index.css's `:focus-visible` rule deliberately skips
           // `[tabindex="-1"]`, so this is the container's own business.
           // Real controls inside a popover still get the themed ring.
-          "z-50 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-1)] p-3 shadow-2xl outline-none",
+          "ui-sheet z-50 rounded-[12px] p-3 outline-none",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0",
           className,
         )}

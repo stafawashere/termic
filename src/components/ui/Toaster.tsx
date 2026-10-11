@@ -48,18 +48,19 @@ function ToastItem({ t }: { t: Toast }) {
         // icon and action button stay aligned to the first line when
         // the message wraps to multiple lines. break-words so long
         // unbroken segments (paths, URLs) don't blow out the width.
-        "pointer-events-auto flex max-w-[min(640px,calc(100vw-2rem))] items-start gap-2.5 rounded-md border bg-[var(--color-bg-1)] py-2 pl-3 pr-2 shadow-2xl",
+        "pointer-events-auto flex max-w-[min(640px,calc(100vw-2rem))] items-start gap-2.5 rounded-[10px] border bg-[var(--sidebar-popover-bg)] py-2 pl-3 pr-2 shadow-[var(--sidebar-popover-shadow)]",
         TONE[t.kind],
       )}
       role="status"
     >
       <Ic className="mt-0.5 h-4 w-4 shrink-0" />
-      <span className="flex-1 break-words text-[12.5px] leading-snug text-[var(--color-fg)]">{t.msg}</span>
+      <span className="flex-1 break-words text-[12.5px] leading-snug text-[var(--sidebar-ink-strong)]">{t.msg}</span>
       {t.action && (
         <button
           type="button"
           onClick={() => { t.action!.onClick(); dismiss(t.id); }}
-          className="shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-bg-2)] px-2 py-0.5 text-[11.5px] font-medium text-[var(--color-fg)] hover:border-[var(--color-accent-soft)]"
+          className="ui-raised"
+          data-size="sm"
         >
           {t.action.label}
         </button>
@@ -67,7 +68,8 @@ function ToastItem({ t }: { t: Toast }) {
       <button
         type="button"
         onClick={() => dismiss(t.id)}
-        className="shrink-0 rounded p-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+        className="ui-icon-btn"
+        data-size="sm"
         aria-label={tr("dismiss")}
       >
         <X className="h-3.5 w-3.5" />

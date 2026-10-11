@@ -41,14 +41,14 @@ export function Tip({ content, children, side = "top", delay = 0, align = "cente
               // the viewport top/bottom with no way to read it; pre-wrap
               // keeps git stderr's line structure instead of collapsing
               // it into one paragraph.
-              "z-[100] max-w-[min(640px,calc(100vw-2rem))] max-h-[40vh] overflow-auto whitespace-pre-wrap break-words rounded-md border border-[var(--color-border)] bg-[var(--color-bg-2)] px-2.5 py-1.5 text-[13.5px] text-[var(--color-fg)] shadow-lg",
+              "z-[100] max-w-[min(640px,calc(100vw-2rem))] max-h-[40vh] overflow-auto whitespace-pre-wrap break-words ui-sheet rounded-[8px] px-2.5 py-1.5 text-[13.5px]",
               "data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0",
             )}
           >
             {content}
             {pointer
-              ? <RT.Arrow width={12} height={7} className="fill-[var(--color-border)]" />
-              : <RT.Arrow className="fill-[var(--color-bg-2)]" />}
+              ? <RT.Arrow width={12} height={7} className="fill-[var(--sidebar-popover-border)]" />
+              : <RT.Arrow className="fill-[var(--sidebar-popover-bg)]" />}
           </RT.Content>
         </RT.Portal>
       </RT.Root>

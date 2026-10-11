@@ -109,13 +109,13 @@ export function PromptPalette() {
               if ((!ae || ae === document.body) && el && document.contains(el)) el.focus();
             });
           }}
-          style={{ background: "color-mix(in srgb, var(--color-bg-1) 86%, transparent)" }}
-          className="termic-pop fixed left-1/2 top-[14vh] z-50 w-[min(480px,92vw)] -translate-x-1/2 overflow-hidden rounded-xl border border-[var(--color-border)] shadow-2xl outline-none backdrop-blur-lg"
+          style={{ background: "color-mix(in srgb, var(--sidebar-popover-bg) 88%, transparent)" }}
+          className="termic-pop fixed left-1/2 top-[14vh] z-50 w-[min(480px,92vw)] -translate-x-1/2 overflow-hidden ui-palette rounded-[14px] outline-none backdrop-blur-lg"
           onKeyDown={onKeyDown}
         >
           <Dialog.Title className="sr-only">{t("promptPalette.srTitle")}</Dialog.Title>
           <Dialog.Description className="sr-only">{t("promptPalette.srDesc")}</Dialog.Description>
-          <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-3 py-2.5">
+          <div className="flex items-center gap-2 border-b border-[var(--sidebar-divider)] px-3 py-2.5">
             <Search className="h-4 w-4 shrink-0 text-[var(--color-fg-faint)]" />
             <input
               value={query}
@@ -140,7 +140,7 @@ export function PromptPalette() {
                 data-row={i}
                 onClick={() => run(prompt)}
                 onMouseMove={() => setActiveIdx(i)}
-                style={i === activeIdx ? { background: "color-mix(in srgb, var(--color-fg) 13%, transparent)" } : undefined}
+                style={i === activeIdx ? { background: "var(--sidebar-menu-hover)", boxShadow: "inset 2px 0 0 var(--color-accent)" } : undefined}
                 className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left"
               >
                 <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--color-fg)]">

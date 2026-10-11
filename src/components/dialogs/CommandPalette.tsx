@@ -439,6 +439,17 @@ export function CommandPalette() {
     });
     if (task) {
       cmds.push({
+        id: "filter-files", section: "View", label: t("commandPalette.cmd.filterFiles"),
+        icon: ListFilter, shortcutId: "focus-file-filter", keywords: "search find files tree explorer right panel",
+        run: act(() => {
+          const app = useApp.getState();
+          if (app.rightPanelHidden) app.toggleRightPanel();
+          useUI.getState().focusFileFilter();
+        }),
+      });
+    }
+    if (task) {
+      cmds.push({
         id: "toggle-terminal", section: "View", label: t("commandPalette.cmd.toggleTerminal"),
         icon: PanelBottom, shortcutId: "toggle-terminal", keywords: "bottom split shell console hide show",
         run: act(() => useApp.getState().toggleBottomTerminal(task.id)),
@@ -754,13 +765,13 @@ export function CommandPalette() {
           // Translucent so the blurred app shows through (Conductor look). The
           // lower the percentage, the more the (blurred) app behind bleeds
           // through — the strong backdrop-blur keeps it readable.
-          style={{ background: "color-mix(in srgb, var(--color-bg-1) 86%, transparent)" }}
-          className="termic-pop fixed left-1/2 top-[14vh] z-50 w-[min(620px,92vw)] -translate-x-1/2 overflow-hidden rounded-xl border border-[var(--color-border)] shadow-2xl outline-none backdrop-blur-lg"
+          style={{ background: "color-mix(in srgb, var(--sidebar-popover-bg) 88%, transparent)" }}
+          className="termic-pop fixed left-1/2 top-[14vh] z-50 w-[min(620px,92vw)] -translate-x-1/2 overflow-hidden ui-palette rounded-[14px] outline-none backdrop-blur-lg"
           onKeyDown={onKeyDown}
         >
           <Dialog.Title className="sr-only">{t("commandPalette.srTitle")}</Dialog.Title>
           <Dialog.Description className="sr-only">{t("commandPalette.srDesc")}</Dialog.Description>
-          <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-3 py-2.5">
+          <div className="flex items-center gap-2 border-b border-[var(--sidebar-divider)] px-3 py-2.5">
             {view === "theme" ? (
               <button
                 type="button"
@@ -800,7 +811,7 @@ export function CommandPalette() {
                   ? "mb-1 border-b border-[var(--color-border-soft)] pb-1"
                   : undefined}
               >
-                <div className="flex items-center gap-1.5 px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-[var(--color-fg-faint)]">
+                <div className="flex items-center gap-1.5 px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--sidebar-eyebrow)]">
                   {group.section === RECENT_SECTION && <Clock className="h-3 w-3" />}
                   {t(SECTION_LABEL_KEY[group.section])}
                   {group.section === RECENT_SECTION && (
@@ -823,7 +834,7 @@ export function CommandPalette() {
                       onMouseMove={() => setActiveIdx(i)}
                       // Subtle neutral highlight (Conductor-style) — a faint
                       // fg-tinted overlay, theme-aware, no accent/border.
-                      style={i === activeIdx ? { background: "color-mix(in srgb, var(--color-fg) 13%, transparent)" } : undefined}
+                      style={i === activeIdx ? { background: "var(--sidebar-menu-hover)", boxShadow: "inset 2px 0 0 var(--color-accent)" } : undefined}
                       className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left"
                     >
                       <Icon className={cn(

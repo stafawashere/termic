@@ -86,7 +86,7 @@ function FlagToggle(
         "shrink-0 rounded px-1.5 py-0.5 font-mono text-[12px] leading-none",
         on
           ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-          : "text-[var(--color-fg-faint)] hover:bg-[var(--color-bg-2)] hover:text-[var(--color-fg)]",
+          : "text-[var(--color-fg-faint)] hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--color-fg)]",
       )}
     >
       {glyph}
@@ -399,12 +399,12 @@ export function FindInFilesDialog() {
             data-state instead of a snap, for contrast without flicker. */}
         <Dialog.Overlay className="termic-backdrop fixed inset-0 z-40 bg-black/30" />
         <Dialog.Content
-          className="termic-pop fixed left-1/2 top-12 z-50 w-[min(760px,92vw)] -translate-x-1/2 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-1)] shadow-2xl outline-none"
+          className="termic-pop fixed left-1/2 top-12 z-50 w-[min(760px,92vw)] -translate-x-1/2 overflow-hidden ui-sheet rounded-[12px] outline-none"
           onKeyDown={onKeyDown}
         >
           <Dialog.Title className="sr-only">{t("findInFiles.srTitle")}</Dialog.Title>
           <Dialog.Description className="sr-only">{t("findInFiles.srDesc")}</Dialog.Description>
-          <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-3 py-2.5">
+          <div className="flex items-center gap-2 border-b border-[var(--sidebar-divider)] px-3 py-2.5">
             <Search className="h-4 w-4 shrink-0 text-[var(--color-fg-faint)]" />
             <input
               autoFocus
@@ -447,7 +447,7 @@ export function FindInFilesDialog() {
                 title={t("findInFiles.rgHintTitle")}
                 data-testid="fif-rg-hint"
                 data-no-drag
-                className="inline-flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-[11px] text-[var(--color-fg-faint)] hover:bg-[var(--color-bg-2)] hover:text-[var(--color-fg)]"
+                className="inline-flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-[11px] text-[var(--color-fg-faint)] hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--color-fg)]"
               >
                 <Zap className="h-3 w-3" />
                 rg
@@ -475,7 +475,7 @@ export function FindInFilesDialog() {
                   onClick={cancelSearch}
                   title={t("findInFiles.cancelSearchTitle")}
                   data-no-drag
-                  className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-[var(--color-bg-2)] hover:text-[var(--color-fg)]"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--color-fg)]"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -519,7 +519,7 @@ export function FindInFilesDialog() {
                   className={cn(
                     "flex w-full items-baseline gap-3 px-3 py-1 text-left font-mono text-[12.5px]",
                     i === activeIdx
-                      ? "bg-[var(--color-bg-2)] text-[var(--color-fg)]"
+                      ? "bg-[var(--sidebar-menu-hover)] text-[var(--sidebar-ink-strong)] shadow-[inset_2px_0_0_var(--color-accent)]"
                       : "text-[var(--color-fg-dim)]",
                   )}
                 >

@@ -100,7 +100,7 @@ export function AppDialog({ open, onOpenChange, title, description, className, h
               // #126). Flex-column stretch resolves widths on the plain block
               // path, which doesn't have the rounding bug.
               "relative flex flex-col w-full max-w-md pointer-events-auto",
-              "rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-1)] shadow-2xl",
+              "ui-sheet rounded-[14px]",
               // Always cap at viewport height. With no stickyFooter, Content
               // scrolls itself as one block (the pre-existing behavior —
               // gap-2 + p-5 live here so that path is pixel-identical).
@@ -138,18 +138,18 @@ export function AppDialog({ open, onOpenChange, title, description, className, h
                       sits on the ROW, not the title, so title actions clear it
                       too. gap-y keeps the wrapped case from touching. */}
                   <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pr-6">
-                    {title && <Dialog.Title className="min-w-0 text-base font-medium break-words">{title}</Dialog.Title>}
+                    {title && <Dialog.Title className="min-w-0 text-[15px] font-semibold tracking-[-0.01em] text-[var(--sidebar-ink-strong)] break-words">{title}</Dialog.Title>}
                     {titleAction && (
                       <div className="flex shrink-0 items-center gap-3">{titleAction}</div>
                     )}
                   </div>
-                  {description && <Dialog.Description className="text-xs text-[var(--color-fg-dim)] -mt-1">{description}</Dialog.Description>}
+                  {description && <Dialog.Description className="text-[12.5px] text-[var(--sidebar-muted)] -mt-1">{description}</Dialog.Description>}
                 </div>
               )}
               {children}
             </div>
             {stickyFooter && (
-              <div className="shrink-0 border-t border-[var(--color-border-soft)] px-5 py-4">
+              <div className="sidebar-footer shrink-0 rounded-b-[14px] border-t border-[var(--sidebar-divider)] px-5 py-4">
                 {stickyFooter}
               </div>
             )}
@@ -157,7 +157,8 @@ export function AppDialog({ open, onOpenChange, title, description, className, h
               <Dialog.Close
                 data-tauri-drag-region="false"
                 style={appRegionStyle("no-drag")}
-                className="absolute right-3 top-3 rounded-md p-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)]"
+                className="ui-icon-btn absolute right-3 top-3"
+                data-size="sm"
               >
                 <X className="h-4 w-4" />
               </Dialog.Close>

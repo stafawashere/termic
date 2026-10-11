@@ -37,7 +37,7 @@ export function ContextMenuContent({ children, className, onCloseAutoFocus }: {
         onMouseDown={(e) => e.stopPropagation()}
         style={{ maxHeight: "var(--radix-context-menu-content-available-height)" }}
         className={cn(
-          "z-50 min-w-[180px] overflow-y-auto overflow-x-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-bg-1)] p-1 shadow-xl",
+          "z-50 min-w-[180px] overflow-y-auto overflow-x-hidden rounded-[10px] border border-[var(--sidebar-popover-border)] bg-[var(--sidebar-popover-bg)] p-[5px] shadow-[var(--sidebar-popover-shadow)]",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0",
           className,
         )}
@@ -70,11 +70,11 @@ export function ContextMenuItem({ children, className, onSelect, disabled, destr
       onSelect={onSelect}
       disabled={disabled}
       className={cn(
-        "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-[13px]",
+        "flex cursor-pointer items-center gap-2 rounded-[6px] px-[9px] py-[6px] text-[13px]",
         "outline-none data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed",
         destructive
           ? "text-[var(--color-err)] data-[highlighted]:bg-[var(--color-err)] data-[highlighted]:text-white"
-          : "text-[var(--color-fg)] data-[highlighted]:bg-[var(--color-hover)]",
+          : "text-[var(--sidebar-ink-strong)] data-[highlighted]:bg-[var(--sidebar-menu-hover)]",
         "[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0",
         className,
       )}
@@ -83,7 +83,7 @@ export function ContextMenuItem({ children, className, onSelect, disabled, destr
 }
 
 export const ContextMenuSeparator = () => (
-  <CM.Separator className="my-1 h-px bg-[var(--color-border-soft)]" />
+  <CM.Separator className="-mx-[5px] my-[5px] h-px bg-[var(--sidebar-menu-divider)]" />
 );
 
 // Nested submenu (e.g. "Move to group ▸"). Trigger renders like a normal
@@ -97,15 +97,15 @@ export function ContextMenuSubTrigger({ children, className, disabled }: {
     <CM.SubTrigger
       disabled={disabled}
       className={cn(
-        "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-[13px]",
+        "flex cursor-pointer items-center gap-2 rounded-[6px] px-[9px] py-[6px] text-[13px]",
         "outline-none data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed",
-        "text-[var(--color-fg)] data-[highlighted]:bg-[var(--color-hover)] data-[state=open]:bg-[var(--color-hover)]",
+        "text-[var(--sidebar-ink-strong)] data-[highlighted]:bg-[var(--sidebar-menu-hover)] data-[state=open]:bg-[var(--sidebar-menu-hover)]",
         "[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0",
         className,
       )}
     >
       {children}
-      <ChevronRight className="ml-auto text-[var(--color-fg-faint)]" />
+      <ChevronRight className="ml-auto text-[var(--sidebar-chevron)]" />
     </CM.SubTrigger>
   );
 }
@@ -122,7 +122,7 @@ export function ContextMenuSubContent({ children, className }: { children: React
         // engages and a tall submenu (many groups) spills past the window.
         style={{ maxHeight: "var(--radix-context-menu-content-available-height)" }}
         className={cn(
-          "z-50 min-w-[160px] overflow-y-auto overflow-x-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-bg-1)] p-1 shadow-xl",
+          "z-50 min-w-[160px] overflow-y-auto overflow-x-hidden rounded-[10px] border border-[var(--sidebar-popover-border)] bg-[var(--sidebar-popover-bg)] p-[5px] shadow-[var(--sidebar-popover-shadow)]",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0",
           className,
         )}
@@ -131,7 +131,7 @@ export function ContextMenuSubContent({ children, className }: { children: React
   );
 }
 export const ContextMenuLabel = ({ children }: { children: ReactNode }) => (
-  <CM.Label data-menu-label className="px-2 py-1 text-[11.5px] uppercase tracking-wider text-[var(--color-fg-faint)]">
+  <CM.Label data-menu-label className="px-[9px] pb-1 pt-[6px] text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--sidebar-eyebrow)]">
     {children}
   </CM.Label>
 );
