@@ -88,8 +88,8 @@ export default {
   // zh-CN locale intentionally keeps these in English.
   bugIssueTitle: "Bug: ",
   bugIssueBody: "What happened:\n\n\nSteps to reproduce:\n\n\nTermic version: ",
-  contact: "Contact",
-  contactSubject: "Hello from Termic",
+  whatsNewTip: "What's new",
+  whatsNewUnreadTip: "What's new (unread)",
   shortcuts: "Keyboard shortcuts",
   activityTip: "Activity (CPU / memory per agent)",
   settingsTip: "Settings ({{combo}})",
