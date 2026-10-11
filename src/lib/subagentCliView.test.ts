@@ -1,0 +1,191 @@
+import { describe, it, expect } from "vitest";
+import {
+  displayPath, formatElapsed, formatTokens, lineDiff, toolDisplay, toolSummary, transcriptStats,
+} from "@/lib/subagentCliView";
+import { toTranscriptRows } from "@/lib/subagentTranscript";
+
+const WORKTREE = "/Users/u/dev/acme";
+
+function input(fields: Record<string, unknown>): string {
+  return JSON.stringify(fields);
+}
+
+function ok(text: string) {
+  return { text, isError: false };
+}
+
+describe("toolDisplay", () => {
+  const shown = (name: string, fields: Record<string, unknown>) => {
+    const display = toolDisplay(name, input(fields), WORKTREE);
+    return display.args === "" ? display.label : `${display.label}(${display.args})`;
+  };
+
+  it("heads each built-in tool the way Claude Code does", () => {
+    expect(shown("Read", { file_path: `${WORKTREE}/src/config.ts` })).toBe("Read(src/config.ts)");
+    expect(shown("Write", { file_path: `${WORKTREE}/a.md`, content: "x" })).toBe("Write(a.md)");
+    expect(shown("Edit", { file_path: `${WORKTREE}/a.ts` })).toBe("Update(a.ts)");
+    expect(shown("MultiEdit", { file_path: `${WORKTREE}/a.ts`, edits: [] })).toBe("Update(a.ts)");
+    expect(shown("Bash", { command: "npm run build", timeout: 5 })).toBe("Bash(npm run build)");
+    expect(shown("Grep", { pattern: "port", path: `${WORKTREE}/src` })).toBe("Search(pattern: \"port\", path: \"src\")");
+    expect(shown("Glob", { pattern: "**/*.ts" })).toBe("Search(pattern: \"**/*.ts\")");
+    expect(shown("LS", { path: `${WORKTREE}/src` })).toBe("List(src)");
+    expect(shown("WebFetch", { url: "https://acme.com", prompt: "read it" })).toBe("Fetch(https://acme.com)");
+    expect(shown("WebSearch", { query: "acme release" })).toBe("Web Search(\"acme release\")");
+    expect(shown("TodoWrite", { todos: [] })).toBe("Update Todos");
+    expect(shown("Task", { description: "explore acme", prompt: "long" })).toBe("Task(explore acme)");
+    expect(shown("Agent", { description: "explore acme" })).toBe("Task(explore acme)");
+    expect(shown("NotebookEdit", { notebook_path: `${WORKTREE}/n.ipynb` })).toBe("Edit Notebook(n.ipynb)");
+    expect(shown("Skill", { skill: "release" })).toBe("Skill(release)");
+  });
+
+  it("names an MCP tool by server and tool", () => {
+    expect(shown("mcp__acme__find_issue", { id: 7, title: "x" })).toBe("acme - find_issue (MCP)(id: 7, title: \"x\")");
+  });
+
+  it("falls back to the flat values for a tool it does not know", () => {
+    expect(shown("Frobnicate", { level: 3, mode: "fast" })).toBe("Frobnicate(3, fast)");
+  });
+
+  it("keeps a path outside the worktree whole, and clips a long command to one line", () => {
+    expect(shown("Read", { file_path: "/Users/u/dev/other/a.ts" })).toBe("Read(/Users/u/dev/other/a.ts)");
+
+    const long = toolDisplay("Bash", input({ command: `echo ${"x".repeat(400)}\nls` }), WORKTREE);
+    expect(long.args.includes("\n")).toBe(false);
+    expect(long.args.endsWith("...")).toBe(true);
+  });
+});
+
+describe("displayPath", () => {
+  it("does not treat a sibling directory with the same prefix as inside the worktree", () => {
+    expect(displayPath("/Users/u/dev/acme-two/a.ts", WORKTREE)).toBe("/Users/u/dev/acme-two/a.ts");
+    expect(displayPath(WORKTREE, `${WORKTREE}/`)).toBe(".");
+  });
+});
+
+describe("lineDiff", () => {
+  it("keeps common lines as context and marks the rest", () => {
+    const diff = lineDiff("a\nb\nc", "a\nB\nc\nd");
+    expect(diff.map(line => `${line.kind}:${line.text}`)).toEqual(["context:a", "remove:b", "add:B", "context:c", "add:d"]);
+  });
+
+  it("handles an empty side", () => {
+    expect(lineDiff("", "x").map(line => line.kind)).toEqual(["add"]);
+    expect(lineDiff("x", "").map(line => line.kind)).toEqual(["remove"]);
+  });
+
+  it("falls back to remove-all then add-all past the size cap", () => {
+    const big = Array.from({ length: 600 }, (_, n) => `line ${n}`).join("\n");
+    const diff = lineDiff(big, `${big}\nmore`);
+    expect(diff.filter(line => line.kind === "remove")).toHaveLength(600);
+    expect(diff.filter(line => line.kind === "add")).toHaveLength(601);
+  });
+});
+
+describe("toolSummary", () => {
+  it("is pending until a result arrives", () => {
+    expect(toolSummary("Read", "{}", null, WORKTREE)).toEqual({ kind: "pending" });
+  });
+
+  it("puts an error's lines first, with the tool_use_error tags gone", () => {
+    const summary = toolSummary("Bash", "{}", { text: "<tool_use_error>2 tests failed\nat x</tool_use_error>", isError: true }, null);
+    expect(summary).toEqual({ kind: "error", lines: ["2 tests failed", "at x"] });
+  });
+
+  it("counts lines read, without a trailing system reminder", () => {
+    const text = "     1→one\n     2→two\n\n<system-reminder>\nnote\n</system-reminder>";
+    expect(toolSummary("Read", "{}", ok(text), null)).toEqual({ kind: "readLines", count: 2 });
+  });
+
+  it("counts files found from the header, a none message, or the listed paths", () => {
+    expect(toolSummary("Grep", "{}", ok("Found 3 files\na\nb\nc"), null)).toEqual({ kind: "foundFiles", count: 3 });
+    expect(toolSummary("Glob", "{}", ok("No files found"), null)).toEqual({ kind: "foundFiles", count: 0 });
+    expect(toolSummary("Glob", "{}", ok("/a.ts\n/b.ts\n"), null)).toEqual({ kind: "foundFiles", count: 2 });
+  });
+
+  it("builds the checklist from the TodoWrite input", () => {
+    const todos = input({ todos: [
+      { content: "Read config", status: "completed" },
+      { content: "Change the port", status: "in_progress" },
+      { content: "Run the build", status: "pending" },
+      { content: "Odd", status: "later" },
+      { status: "completed" },
+    ] });
+    const summary = toolSummary("TodoWrite", todos, ok("Todos have been modified"), null);
+    expect(summary).toEqual({ kind: "todos", todos: [
+      { content: "Read config", status: "completed" },
+      { content: "Change the port", status: "in_progress" },
+      { content: "Run the build", status: "pending" },
+      { content: "Odd", status: "pending" },
+    ] });
+  });
+
+  it("reports a Write with its line count and the lines written", () => {
+    const summary = toolSummary("Write", input({ file_path: `${WORKTREE}/notes.md`, content: "a\nb\n" }), ok("File created"), WORKTREE);
+    expect(summary).toEqual({ kind: "wrote", path: "notes.md", count: 2, lines: ["a", "b"] });
+  });
+
+  it("diffs an Edit and numbers it from the snippet in the result", () => {
+    const edit = input({
+      file_path: `${WORKTREE}/src/config.ts`,
+      old_string: "const port = 3000",
+      new_string: "const port = 4000\nconst host = \"localhost\"",
+    });
+    const snippet = "The file has been updated. Here's the result:\n    11\t// config\n    12\tconst port = 4000\n    13\tconst host = \"localhost\"";
+    const summary = toolSummary("Edit", edit, ok(snippet), WORKTREE);
+
+    expect(summary.kind).toBe("updated");
+    if (summary.kind !== "updated") return;
+    expect(summary).toMatchObject({ path: "src/config.ts", additions: 2, removals: 1 });
+    expect(summary.diff.map(line => [line.lineNumber, line.kind])).toEqual([[12, "remove"], [12, "add"], [13, "add"]]);
+  });
+
+  it("diffs every edit of a MultiEdit and leaves lines unnumbered when the snippet does not show them", () => {
+    const edits = input({ file_path: "/x.ts", edits: [{ old_string: "a", new_string: "b" }, { old_string: "c", new_string: "" }] });
+    const summary = toolSummary("MultiEdit", edits, ok("Applied 2 edits"), null);
+
+    expect(summary).toMatchObject({ kind: "updated", additions: 1, removals: 2 });
+    if (summary.kind !== "updated") return;
+    expect(summary.diff.every(line => line.lineNumber === null)).toBe(true);
+  });
+
+  it("shows any other output as its lines, and says when there is none", () => {
+    expect(toolSummary("Bash", "{}", ok("> acme@1.0.0 build\n> vite build\n"), null))
+      .toEqual({ kind: "output", lines: ["> acme@1.0.0 build", "> vite build"] });
+    expect(toolSummary("Bash", "{}", ok("  \n"), null)).toEqual({ kind: "noContent" });
+  });
+});
+
+describe("formatElapsed and formatTokens", () => {
+  it("prints times the way Claude Code does", () => {
+    expect(formatElapsed(42_400)).toBe("42s");
+    expect(formatElapsed(63_000)).toBe("1m 3s");
+    expect(formatElapsed(2 * 3600_000 + 5 * 60_000)).toBe("2h 5m");
+    expect(formatElapsed(-5)).toBe("0s");
+  });
+
+  it("prints token counts short", () => {
+    expect(formatTokens(950)).toBe("950");
+    expect(formatTokens(3_100)).toBe("3.1k");
+    expect(formatTokens(34_000)).toBe("34k");
+    expect(formatTokens(1_200_000)).toBe("1.2m");
+  });
+});
+
+describe("transcriptStats", () => {
+  it("counts tool calls, sums output tokens, and spans the timestamps", () => {
+    const rows = toTranscriptRows([
+      { kind: "userText", text: "go", truncated: false, name: null, isError: false, timestamp: "2026-01-01T00:00:00.000Z" },
+      { kind: "toolUse", text: "{}", truncated: false, name: "Read", isError: false, timestamp: null, model: "m1", outputTokens: 100 },
+      { kind: "toolResult", text: "x", truncated: false, name: null, isError: false, timestamp: "bad date" },
+      { kind: "assistantText", text: "ok", truncated: false, name: null, isError: false, timestamp: "2026-01-01T00:01:03.000Z", model: "m2", outputTokens: 50 },
+    ], 0);
+
+    expect(transcriptStats(rows)).toEqual({
+      toolUses: 1,
+      outputTokens: 150,
+      model: "m2",
+      firstAtMs: Date.parse("2026-01-01T00:00:00.000Z"),
+      lastAtMs: Date.parse("2026-01-01T00:01:03.000Z"),
+    });
+  });
+});

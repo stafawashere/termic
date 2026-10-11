@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { TranscriptEntry } from "@/lib/types";
 import {
-  appendBatch, formatToolInput, positionOfEntry, prependPage, rowOffsets, rowsForView, shouldFollowTail,
+  appendBatch, formatToolInput, pairToolCalls, positionOfEntry, prependPage, rowOffsets, rowsForView, shouldFollowTail,
   stripAnsi, toTranscriptRow, toTranscriptRows, truncateLines, visibleRange, type TranscriptWindow,
 } from "@/lib/subagentTranscript";
 
@@ -199,5 +199,65 @@ describe("truncateLines", () => {
 
   it("never cuts with a limit of 0", () => {
     expect(truncateLines("a\nb\nc", 0)).toEqual({ text: "a\nb\nc", cutLines: 0 });
+  });
+});
+
+describe("toTranscriptRow, the fields added for the CLI view", () => {
+  it("keeps the tool use id, thinking duration, model, tokens and timestamp", () => {
+    const row = toTranscriptRow(entry("thinking", "hmm", {
+      toolUseId: "toolu_1", durationMs: 4200, model: "claude-test", outputTokens: 12, timestamp: "2026-01-01T00:00:00.000Z",
+    }), 0);
+
+    expect(row).toMatchObject({
+      toolUseId: "toolu_1", durationMs: 4200, model: "claude-test", outputTokens: 12, timestamp: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("reads an entry from an older host, or with junk in the new fields, as nulls", () => {
+    const old = toTranscriptRow(entry("assistantText", "hi"), 0);
+    const junk = toTranscriptRow({ kind: "thinking", text: "x", toolUseId: 5, durationMs: -1, outputTokens: "many" }, 0);
+
+    for (const row of [old, junk]) {
+      expect(row.toolUseId).toBeNull();
+      expect(row.durationMs).toBeNull();
+      expect(row.outputTokens).toBeNull();
+    }
+  });
+});
+
+describe("pairToolCalls", () => {
+  const call = (id: string | null) => entry("toolUse", "{}", { name: "Read", toolUseId: id });
+  const result = (id: string | null, isError = false) => entry("toolResult", "out", { toolUseId: id, isError });
+
+  it("hangs each result under its call and drops the result's own row", () => {
+    const rows = toTranscriptRows([call("a"), call("b"), result("b", true), result("a")], 0);
+    const paired = pairToolCalls(rows);
+
+    expect(paired.map(row => row.index)).toEqual([0, 1]);
+    expect(paired[0].result).toBe(rows[3]);
+    expect(paired[0].toolState).toBe("ok");
+    expect(paired[1].result).toBe(rows[2]);
+    expect(paired[1].toolState).toBe("error");
+  });
+
+  it("leaves a call without a result pending", () => {
+    const paired = pairToolCalls(toTranscriptRows([call("a")], 0));
+    expect(paired[0]).toMatchObject({ result: null, toolState: "pending" });
+  });
+
+  it("keeps a result whose call is not held, or that carries no id, as its own row", () => {
+    const rows = toTranscriptRows([result("gone"), call(null), result(null)], 40);
+    const paired = pairToolCalls(rows);
+
+    expect(paired.map(row => [row.index, row.kind])).toEqual([[40, "toolResult"], [41, "toolUse"], [42, "toolResult"]]);
+    expect(paired[1].toolState).toBe("pending");
+  });
+
+  it("filters through rowsForView by kind, so hiding outputs hides only lone results", () => {
+    const paired = pairToolCalls(toTranscriptRows([call("a"), result("a"), result("lone")], 0));
+    const shown = rowsForView(paired, { showThinking: true, showToolOutputs: false });
+
+    expect(shown.map(row => row.index)).toEqual([0]);
+    expect(shown[0].toolState).toBe("ok");
   });
 });

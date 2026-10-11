@@ -22,6 +22,14 @@ export interface TranscriptRow {
   truncated: boolean;
   /** The kind as the entry spelled it, kept for an `unknown` row's label. */
   sourceKind: string;
+  /** Links a `toolUse` row to the `toolResult` row that answers it. */
+  toolUseId: string | null;
+  /** How long the model thought, on `thinking` rows. */
+  durationMs: number | null;
+  /** Set on the first row of an assistant message only. */
+  model: string | null;
+  outputTokens: number | null;
+  timestamp: string | null;
 }
 
 const KNOWN_KINDS: ReadonlySet<string> = new Set<TranscriptEntryKind>([
@@ -47,6 +55,11 @@ function stringField(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+function countField(value: unknown): number | null {
+  const isCount = typeof value === "number" && Number.isFinite(value) && value >= 0;
+  return isCount ? value : null;
+}
+
 /** One entry as a row. Anything the mapper does not recognise, including an
  *  entry that is not an object at all, becomes an `unknown` row rather than
  *  a throw, so one odd line cannot take the whole view down. */
@@ -66,6 +79,11 @@ export function toTranscriptRow(entry: unknown, index: number): TranscriptRow {
     isError: fields.isError === true,
     truncated: fields.truncated === true,
     sourceKind,
+    toolUseId: stringField(fields.toolUseId),
+    durationMs: countField(fields.durationMs),
+    model: stringField(fields.model),
+    outputTokens: countField(fields.outputTokens),
+    timestamp: stringField(fields.timestamp),
   };
 }
 
@@ -82,7 +100,10 @@ export interface TranscriptViewOptions {
  *  and truncation change how a row draws, not whether it does, so they are
  *  applied by the row itself. Hands back `rows` itself when nothing is
  *  hidden. */
-export function rowsForView(rows: readonly TranscriptRow[], options: TranscriptViewOptions): readonly TranscriptRow[] {
+export function rowsForView<Row extends { kind: TranscriptRowKind }>(
+  rows: readonly Row[],
+  options: TranscriptViewOptions,
+): readonly Row[] {
   const hidesNothing = options.showThinking && options.showToolOutputs;
   if (hidesNothing) return rows;
 
@@ -108,7 +129,7 @@ export function truncateLines(text: string, maxLines: number): { text: string; c
 
 /** Where entry `index` sits in `rows`, which hold ascending entry indices
  *  with gaps where the view hides some, or -1. */
-export function positionOfEntry(rows: readonly TranscriptRow[], index: number): number {
+export function positionOfEntry(rows: readonly { index: number }[], index: number): number {
   let low = 0;
   let high = rows.length - 1;
   while (low <= high) {
@@ -119,6 +140,62 @@ export function positionOfEntry(rows: readonly TranscriptRow[], index: number): 
     else high = middle - 1;
   }
   return -1;
+}
+
+export type ToolCallState = "pending" | "ok" | "error";
+
+/** One thing the view draws. A `toolUse` row carries the result that answers
+ *  it, which then draws under the call instead of as a row of its own. */
+export interface ViewRow {
+  index: number;
+  kind: TranscriptRowKind;
+  row: TranscriptRow;
+  result: TranscriptRow | null;
+  toolState: ToolCallState | null;
+}
+
+function toolStateOf(result: TranscriptRow | null): ToolCallState {
+  if (!result) return "pending";
+  return result.isError ? "error" : "ok";
+}
+
+/** Hang each tool result under the call whose id it answers. A result whose
+ *  call is not in `rows` (it sits on a page not loaded yet, or the entry
+ *  carries no id) stays a row of its own. Row indices are kept, so a row's
+ *  key and measured height survive a result arriving. */
+export function pairToolCalls(rows: readonly TranscriptRow[]): ViewRow[] {
+  const callIds = new Set<string>();
+  const resultsById = new Map<string, TranscriptRow>();
+
+  for (const row of rows) {
+    const id = row.toolUseId;
+    if (id === null) continue;
+
+    if (row.kind === "toolUse") callIds.add(id);
+
+    const isResult = row.kind === "toolResult";
+    const isFirstResult = isResult && !resultsById.has(id);
+    if (isFirstResult) resultsById.set(id, row);
+  }
+
+  const paired: ViewRow[] = [];
+  for (const row of rows) {
+    const id = row.toolUseId;
+    const isResult = row.kind === "toolResult";
+    const callIsHeld = id !== null && callIds.has(id);
+    const isTheAnswer = id !== null && resultsById.get(id) === row;
+    const answersHeldCall = isResult && callIsHeld && isTheAnswer;
+    if (answersHeldCall) continue;
+
+    if (row.kind === "toolUse") {
+      const result = id === null ? null : resultsById.get(id) ?? null;
+      paired.push({ index: row.index, kind: row.kind, row, result, toolState: toolStateOf(result) });
+      continue;
+    }
+
+    paired.push({ index: row.index, kind: row.kind, row, result: null, toolState: null });
+  }
+  return paired;
 }
 
 const TOOL_INPUT_MAX = 240;
