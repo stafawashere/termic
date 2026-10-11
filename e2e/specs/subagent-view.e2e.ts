@@ -287,6 +287,12 @@ describe("subagent transcript view", () => {
       const row = scroller.querySelector('[data-entry-index="100"]') as HTMLElement | null;
       return row ? row.getBoundingClientRect().top - scroller.getBoundingClientRect().top : null;
     }, paneSelector(agentId));
+    // The virtualizer mounts the rows at the new offset on the render after
+    // the scroll event, so wait for entry 100 rather than reading it at once.
+    await browser.waitUntil(async () => (await anchorTop()) !== null, {
+      timeout: 5_000,
+      timeoutMsg: "entry 100 never mounted at the top of the first page",
+    });
     const before = await anchorTop();
     expect(before).not.toBeNull();
 
@@ -342,6 +348,10 @@ describe("subagent transcript view", () => {
   it("shows an expired transcript instead of an error when the file goes away", async function () {
     this.timeout(30_000);
     const agentId = "e2ebulk1";
+    // The recycle case above reopened this view, so it holds the newest page
+    // again rather than all 600 entries.
+    const read = (await paneFacts(agentId))!.count;
+    expect(read).toBeGreaterThan(0);
     rmSync(transcriptFile(agentId), { force: true });
 
     await waitStatus(agentId, "expired");
@@ -351,7 +361,7 @@ describe("subagent transcript view", () => {
 
     // What was already read stays on screen under the banner.
     const facts = (await paneFacts(agentId))!;
-    expect(facts.count).toBe(600);
+    expect(facts.count).toBe(read);
     expect(facts.mounted).toBeGreaterThan(0);
     await snap("subagent-view-expired.png");
   });

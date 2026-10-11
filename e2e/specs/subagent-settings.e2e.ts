@@ -57,6 +57,17 @@ describe("subagent settings", () => {
     );
   }
 
+  // Claude records each subagent's type in a sidecar, and a rebuild reads it
+  // from there, so rows brought back from disk keep their built-in or custom kind.
+  async function meta(agentId: string, agentType: string): Promise<void> {
+    await directive(`#subagent-meta ${agentId} {"agentType":"${agentType}"}`);
+    const file = path.join(subagentsDir, `agent-${agentId}.meta.json`);
+    await browser.waitUntil(
+      async () => existsSync(file) && readFileSync(file, "utf8").includes(agentType),
+      { timeout: 10_000, interval: 100, timeoutMsg: `the fake agent never wrote ${path.basename(file)}` },
+    );
+  }
+
   async function openTasksSettings(): Promise<void> {
     await browser.execute(() => window.__termic!.useApp.getState().openSettings("tasks"));
     await browser.waitUntil(
@@ -161,6 +172,8 @@ describe("subagent settings", () => {
 
     await transcript(BUILT_IN_AGENT, USER_LINE);
     await transcript(CUSTOM_AGENT, USER_LINE);
+    await meta(BUILT_IN_AGENT, "general-purpose");
+    await meta(CUSTOM_AGENT, "reviewer");
     await directive(`#subagent start ${sessionId} ${BUILT_IN_AGENT} general-purpose`);
     await directive(`#subagent start ${sessionId} ${CUSTOM_AGENT} reviewer`);
     await waitRows([BUILT_IN_AGENT, CUSTOM_AGENT], "the start hooks never drew both rows");

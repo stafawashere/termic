@@ -16,6 +16,7 @@ import path from "node:path";
 import { dataDir } from "../../wdio.conf.js";
 import {
   archiveTask,
+  clickPresent,
   openTask,
   requireTermicApi,
   requireWorkBadges,
@@ -211,19 +212,18 @@ describe("subagent rows", () => {
     this.timeout(30_000);
     const agentId = "e2erun1";
 
-    // Every frame from here on checks for the row, so the time recorded is
-    // the first frame it was on screen, not the moment a poll noticed.
+    // Every DOM commit from here on checks for the row, so the time recorded
+    // is the commit that drew it, not the moment a poll noticed. Not rAF: the
+    // harness window is occluded and WebKit freezes rAF there.
     const startedAt = await browser.execute((sel) => {
       const w = window as unknown as { __subagentSeenAt?: number | null };
       w.__subagentSeenAt = null;
-      const tick = () => {
-        if (document.querySelector(sel)) {
-          w.__subagentSeenAt = Date.now();
-          return;
-        }
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
+      const observer = new MutationObserver(() => {
+        if (!document.querySelector(sel)) return;
+        w.__subagentSeenAt = Date.now();
+        observer.disconnect();
+      });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true });
       return Date.now();
     }, rowSelector(agentId));
 
@@ -313,7 +313,7 @@ describe("subagent rows", () => {
     this.timeout(30_000);
     const fold = `${rowSelector("e2ed1")} [data-testid="subagent-fold"]`;
     const storedBefore = await localStorageDump();
-    await $(fold).click();
+    await clickPresent(fold);
 
     await browser.waitUntil(async () => !(await rows()).some(row => row.id === "e2ed2"), {
       timeout: 5_000,
@@ -325,7 +325,7 @@ describe("subagent rows", () => {
     expect(await localStorageDump()).toBe(storedBefore);
     await snap("subagent-rows-folded.png");
 
-    await $(fold).click();
+    await clickPresent(fold);
     await browser.waitUntil(async () => (await rows()).some(row => row.id === "e2ed5"), {
       timeout: 5_000,
       timeoutMsg: "unfolding e2ed1 never brought its children back",
@@ -341,7 +341,9 @@ describe("subagent rows", () => {
     await browser.waitUntil(async () => (await rows()).length > 0, { timeout: 5_000 });
 
     const keys = (await localStorageDump()).split("\n").map(entry => entry.split("=")[0]);
-    expect(keys.filter(key => /subagent/i.test(key))).toEqual([]);
+    // The settings block persists its own prefs (subagentsEnabled and friends);
+    // fold state is the one thing that must never reach storage.
+    expect(keys.filter(key => /fold/i.test(key))).toEqual([]);
   });
 
   it("moves a row under a parent that arrives late without a frame of flicker", async function () {
@@ -365,15 +367,19 @@ describe("subagent rows", () => {
       const first = document.querySelector(sel);
       const sample = { frames: 0, bad: 0, swapped: 0, stop: false };
       w.__reparent = sample;
-      const tick = () => {
-        if (sample.stop) return;
+      // Checked on every DOM commit rather than per rAF, which WebKit freezes
+      // in the occluded harness window.
+      const observer = new MutationObserver(() => {
+        if (sample.stop) {
+          observer.disconnect();
+          return;
+        }
         const found = document.querySelectorAll(sel);
         sample.frames++;
         if (found.length !== 1) sample.bad++;
         else if (found[0] !== first) sample.swapped++;
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
+      });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true });
     }, rowSelector(child));
 
     await meta(child, { agentType: "general-purpose", spawnDepth: 2, parentAgentId: parent });
