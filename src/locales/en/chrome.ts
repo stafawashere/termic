@@ -48,6 +48,20 @@ export default {
   commandPalette: {
     label: "Command palette",
   },
+  sessionStrip: {
+    openAgent: "Open agent",
+    idle: "No agent running",
+    running: "running",
+    waiting: "waiting",
+    done: "done",
+    allow: "Allow",
+    stop: "Stop",
+    stopAria: "Stop {{name}}",
+    stopTitle: "Stop {{name}}?",
+    stopMessage: "Ends this agent's process. The tab stays open.",
+    moreRunning_one: "{{count}} more agent running in this task. Click to switch to it.",
+    moreRunning_other: "{{count}} more agents running in this task. Click to switch to the next.",
+  },
   waitingPill: {
     jump: "Jump to next waiting agent",
   },

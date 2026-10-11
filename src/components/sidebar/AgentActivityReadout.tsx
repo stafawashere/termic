@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 
 const TRACE_PATH = "M1 12h8l4-9 6 18 5-12 4 6 3-3h20";
 
-function useDocumentVisible(): boolean {
+export function useDocumentVisible(): boolean {
   const [visible, setVisible] = useState(() => document.visibilityState !== "hidden");
 
   useEffect(() => {

@@ -48,6 +48,20 @@ export default {
   commandPalette: {
     label: "命令面板",
   },
+  sessionStrip: {
+    openAgent: "打开智能体",
+    idle: "没有运行中的智能体",
+    running: "运行中",
+    waiting: "等待中",
+    done: "已完成",
+    allow: "允许",
+    stop: "停止",
+    stopAria: "停止 {{name}}",
+    stopTitle: "停止 {{name}}？",
+    stopMessage: "结束此智能体的进程，标签页会保留。",
+    moreRunning_one: "此任务中还有 {{count}} 个智能体在运行，点击切换过去。",
+    moreRunning_other: "此任务中还有 {{count}} 个智能体在运行，点击切换到下一个。",
+  },
   waitingPill: {
     jump: "跳转到下一个等待中的智能体",
   },

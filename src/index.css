@@ -1644,3 +1644,119 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   gap: 6px;
   padding: 0 7px 0 6px;
 }
+/* The session strip: what the open task's agent is doing, in a recessed
+   well. The well is the button; the stop button sits past a groove. */
+.titlebar-well {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  border-radius: 8px;
+  background-color: var(--sidebar-well-bg);
+  box-shadow: var(--titlebar-well-shadow);
+}
+.titlebar-session {
+  height: 30px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+.titlebar-session-main {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px 0 12px;
+  border-radius: 8px;
+}
+.titlebar-session[data-has-stop] .titlebar-session-main {
+  border-radius: 8px 0 0 8px;
+}
+.titlebar-session-name {
+  flex-shrink: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sidebar-ink-strong);
+}
+.titlebar-session-state {
+  flex-shrink: 0;
+  font-size: 11.5px;
+}
+.titlebar-session-state[data-state="running"] { color: var(--color-accent); }
+.titlebar-session-state[data-state="waiting"] { color: var(--sidebar-running); }
+.titlebar-session-state[data-state="done"] { color: var(--sidebar-settled); }
+.titlebar-session-meta {
+  font-size: 11.5px;
+  color: var(--sidebar-muted);
+}
+.titlebar-mono {
+  font-family: "SF Mono", Menlo, var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.titlebar-session-target {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--sidebar-ink);
+}
+.titlebar-session-tool {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  animation: titlebar-fade-in 120ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.titlebar-rule {
+  height: 14px;
+  width: 1px;
+  flex-shrink: 0;
+  background-color: var(--titlebar-divider);
+}
+.titlebar-groove {
+  height: 18px;
+  width: 1px;
+  flex-shrink: 0;
+  background-color: var(--titlebar-groove);
+  box-shadow: 1px 0 0 var(--sidebar-top-highlight);
+}
+.titlebar-session-stop {
+  display: flex;
+  height: 100%;
+  width: 30px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 8px 8px 0;
+  color: var(--sidebar-icon);
+  transition: background-color 120ms, color 120ms;
+}
+.titlebar-session-stop:hover {
+  background-color: var(--sidebar-seg-hover);
+  color: var(--color-err);
+}
+.titlebar-session-more {
+  margin-right: 6px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  background-color: var(--sidebar-card-bg);
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--sidebar-muted);
+  transition: color 120ms;
+}
+.titlebar-session-more:hover {
+  color: var(--sidebar-ink);
+}
+.titlebar-trace-pulse {
+  animation: sidebar-trace 1.4s linear infinite;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--color-accent) 60%, transparent));
+}
+@media (prefers-reduced-motion: reduce) {
+  .titlebar-trace-pulse { display: none; }
+  .titlebar-trace-ghost[data-running] { opacity: 0.6; }
+}
+@keyframes titlebar-fade-in { from { opacity: 0; } to { opacity: 1; } }

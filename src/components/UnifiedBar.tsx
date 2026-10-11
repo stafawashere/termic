@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils";
 import { IS_MAC, DRAWS_WINDOW_CONTROLS, appRegionStyle } from "@/lib/platform";
 import { WindowControls } from "@/components/WindowControls";
 import { SidebarLeftGlyph } from "@/components/titlebar/titlebarIcons";
+import { SessionStrip } from "@/components/titlebar/SessionStrip";
 
 // Reserve enough room for the 3 traffic lights + breathing room before the
 // first interactive control. 16 (x offset) + ~58 (3 buttons + gaps) + 10 pad.
@@ -184,6 +185,7 @@ export function UnifiedBar() {
             dot and name, in the accent wash this bar already carries. */}
         <ProfileChip />
         <div className="ml-[6px] flex min-w-0 items-center gap-[6px]">
+        {task && <SessionStrip taskId={task.id} />}
         <UpdaterBanner />
         {/* Waiting-agents pill (issue #56): appears only when an agent needs
             you, jumps to the next on click. Sits with the other status pills
