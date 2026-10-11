@@ -174,6 +174,23 @@ themes, and their own block for light, where the grain is off. The
 session strip's running word and trace take `--color-accent`. They are not
 keys in a theme file.
 
+## Shared family tokens
+
+Everything outside the sidebar and the title bar (the right panel, the
+main views, dialogs, palettes, settings and pane chrome) paints with the
+same `--sidebar-*` and `--titlebar-*` tokens through the `.ui-*` classes
+in `src/index.css` (docs/ui.md "The shared ui-* family"). The few values
+neither family had live in `--ui-*`: the notification badge's ink and
+glow (`badge-ink`, `badge-glow`), the selected row's hover gradient
+(`sel-hover-from`, `sel-hover-to`), the git colours on file names and
+status letters (`git-added`, `git-modified`, `git-deleted`,
+`git-untracked`), the panel shadow and dialog scrim (`panel-shadow`,
+`scrim`), and the white mixed into accent and danger fills (`lift`,
+`danger-ink`). Same arrangement again: Dark+ literals in `@theme`, one
+block that derives them from `--color-accent-fg` and `--color-palette-*`
+for the other dark themes and custom themes, and a light block. They are
+not keys in a theme file.
+
 ## The subagent view paints with claude's palette
 
 The subagent transcript view (docs/ui.md "The subagent transcript view")

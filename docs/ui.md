@@ -292,6 +292,39 @@ accent is the theme's, never a literal.
   `--color-swatch-*`, the palette at 57% chroma. The raw `--color-palette-*`
   still drives state marks and links.
 
+## The shared ui-* family
+
+The rest of the app wears the refined tree's materials through a small
+set of classes in `src/index.css`, so a new surface composes them rather
+than restating colours:
+
+- **Surfaces.** `.ui-panel` (the right panel), `.ui-well` (a recessed
+  tray for segments), `.ui-card` (a raised sheet on a page; add
+  `data-interactive="true"` for a hover), `.ui-column` (a Kanban column,
+  a well), `.ui-board-card`, `.ui-sheet` (dialogs, popovers, tooltips),
+  `.ui-palette` (the translucent command, prompt and syntax palettes),
+  `.ui-popover` (find bars), `.ui-view-bar` (a main view's top bar).
+- **Controls.** `.ui-seg` with `data-active` inside a `.ui-well`,
+  `.ui-raised` (`data-size="sm"`, `data-tone="accent|danger"`),
+  `.ui-icon-btn` (`data-size="sm"`), `.ui-field` (a sunk field wrapper
+  with a leading glyph and optional `.ui-keycap`), `.ui-input` and
+  `.ui-sunk-input`, `.ui-btn-primary` and `.ui-btn-secondary` (what the
+  shared `Button` variants map to).
+- **Lists.** `.ui-row` (28px, radius 6, `data-selected="true"` for the
+  accent gradient and left bar), `.ui-row-name`, `.ui-row-meta`,
+  `.ui-guide`, `.ui-chevron`, `.ui-status-letter`, `.ui-tray` (hover
+  actions), `.ui-section-head`, `.ui-eyebrow`, `.ui-count`, `.ui-notif`
+  (a corner notification badge), `.ui-scroll`.
+
+The shared primitives (`Button`, `Input`, `Checkbox`, `AppDialog`,
+`Popover`, `Tooltip`, the dropdown and context menus, the toaster) are
+built on these, so most dialogs follow without edits. The sidebar and the
+title bar keep their own `.sidebar-*` and `.titlebar-*` classes; the
+family reuses their tokens, not their selectors.
+
+Not restyled here: the split-pane header (`PaneHeader`), which mirrors the
+main tab strip and moves with it.
+
 ## The sidebar's filter bar
 
 The top of the sidebar, under the nav and above STATUS and PROJECTS,
