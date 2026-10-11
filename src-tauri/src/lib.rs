@@ -15311,6 +15311,11 @@ fn safe_task_path_for_create(ws_path: &Path, rel: &str) -> Result<PathBuf, Strin
             return Err(format!("path escapes task: {rel} -> {}", canon_head.display()));
         }
         let tail: PathBuf = comps[split..].iter().collect();
+        // Joining an empty tail appends a trailing slash, and "file.md/" then
+        // stats as ENOTDIR instead of "already exists".
+        if tail.as_os_str().is_empty() {
+            return Ok(canon_head);
+        }
         return Ok(canon_head.join(tail));
     }
     // `split == 0` is the task root itself, which always exists, so the loop
@@ -15875,14 +15880,22 @@ fn task_path_delete(id: String, path: String) -> Result<(), String> {
 /// and New folder buttons). The last segment must be a plain name and must
 /// not exist yet; its parent must. Member-aware + worktree-constrained.
 #[tauri::command]
-fn task_path_create(id: String, path: String, is_dir: bool) -> Result<(), String> {
-    let w = load_tasks_all().into_iter().find(|w| w.id == id).ok_or("no task")?;
-    let name = path.rsplit('/').next().unwrap_or("").trim();
-    if !is_plain_name(name) {
-        return Err(format!("invalid name: {name:?}"));
-    }
-    let (cwd, rel) = resolve_task_git_path(&w, &path)?;
-    let abs = safe_task_path_for_create(&cwd, &rel)?;
+async fn task_path_create(id: String, path: String, is_dir: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let w = load_tasks_all().into_iter().find(|w| w.id == id).ok_or("no task")?;
+        let name = path.rsplit('/').next().unwrap_or("").trim();
+        if !is_plain_name(name) {
+            return Err(format!("invalid name: {name:?}"));
+        }
+        let (cwd, rel) = resolve_task_git_path(&w, &path)?;
+        create_task_path(&cwd, &rel, is_dir)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn create_task_path(task_root: &Path, rel: &str, is_dir: bool) -> Result<(), String> {
+    let abs = safe_task_path_for_create(task_root, rel)?;
     create_task_entry(&abs, is_dir)
 }
 
@@ -30670,6 +30683,35 @@ mod tests {
         assert!(create_task_entry(&dir, true).unwrap_err().contains("already exists"));
         let orphan = ws.path().join("missing").join("x.md");
         assert!(create_task_entry(&orphan, false).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn create_task_path_stays_inside_the_task_and_never_overwrites() {
+        let outside = tempdir().unwrap();
+        let ws = tempdir().unwrap();
+
+        assert!(create_task_path(ws.path(), "../escape.md", false).is_err());
+        assert!(create_task_path(ws.path(), "/tmp/escape.md", false).is_err());
+
+        std::os::unix::fs::symlink(outside.path(), ws.path().join("out")).unwrap();
+        assert!(create_task_path(ws.path(), "out/escape.md", false).is_err());
+        assert!(create_task_path(ws.path(), "out/escaped", true).is_err());
+
+        let dangling_target = outside.path().join("never-made.md");
+        std::os::unix::fs::symlink(&dangling_target, ws.path().join("dangling.md")).unwrap();
+        assert!(create_task_path(ws.path(), "dangling.md", false).is_err());
+
+        let leaked: Vec<_> = fs::read_dir(outside.path()).unwrap().collect();
+        assert!(leaked.is_empty(), "{leaked:?}");
+
+        fs::write(ws.path().join("kept.md"), "original").unwrap();
+        let err = create_task_path(ws.path(), "kept.md", false).unwrap_err();
+        assert!(err.contains("already exists"), "{err}");
+        assert_eq!(fs::read_to_string(ws.path().join("kept.md")).unwrap(), "original");
+
+        create_task_path(ws.path(), "fresh.md", false).unwrap();
+        assert!(ws.path().join("fresh.md").is_file());
     }
 
     // ARCHIVING A TASK MUST LEAVE ITS PADS ALONE. Archiving is recoverable
