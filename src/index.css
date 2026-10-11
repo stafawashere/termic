@@ -1566,13 +1566,16 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 }
 
 /* The title bar ("Focus title", docs/ui.md "Title bar"). Three columns:
-   the side clusters share flex:1, so the task title sits on the window's
-   centre whatever the clusters hold. The sheen and grain are pseudo layers
-   so nothing has to be excluded from the drag region. */
+   the side clusters share the width equally, so the task title sits on the
+   window's centre whatever the clusters hold: a grid, because flex:1 columns with
+   unequal padding (the traffic lights) come out unequal. The sheen and
+   grain are pseudo layers so nothing has to be excluded from the drag
+   region. */
 .titlebar {
   --focus-ring: var(--sidebar-focus-ring);
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   height: 50px;
   flex-shrink: 0;
   align-items: center;
@@ -1605,9 +1608,10 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 }
 .titlebar-side {
   display: flex;
+  height: 100%;
   min-width: 0;
-  flex: 1 1 0;
   align-items: center;
+  overflow: hidden;
 }
 .titlebar-side[data-side="right"] {
   justify-content: flex-end;
@@ -1760,3 +1764,72 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   .titlebar-trace-ghost[data-running] { opacity: 0.6; }
 }
 @keyframes titlebar-fade-in { from { opacity: 0; } to { opacity: 1; } }
+/* The centred task title. A transparent border is reserved so the hover
+   frame does not shift anything. */
+.titlebar-title {
+  display: flex;
+  height: 32px;
+  min-width: 0;
+  max-width: 560px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 0 10px 0 12px;
+  font-size: 13px;
+  transition: background-color 120ms cubic-bezier(0.2, 0.7, 0.2, 1), border-color 120ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 120ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+button.titlebar-title:hover,
+button.titlebar-title[aria-expanded="true"] {
+  border-color: var(--titlebar-title-hover-border);
+  background-color: var(--titlebar-title-hover-bg);
+  box-shadow: var(--titlebar-title-hover-shadow);
+}
+.titlebar-title-agent {
+  display: flex;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 45%, transparent));
+}
+.titlebar-title-name {
+  min-width: 0;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.1px;
+  color: var(--sidebar-ink-strong);
+  text-shadow: var(--titlebar-title-text-shadow);
+}
+.titlebar-title-rule {
+  height: 14px;
+  width: 1px;
+  flex-shrink: 0;
+  background-color: var(--titlebar-title-divider);
+}
+.titlebar-title-project {
+  flex-shrink: 0;
+  color: var(--sidebar-muted);
+}
+.titlebar-title-branch {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--sidebar-muted);
+}
+.titlebar-title-link {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--sidebar-meta);
+}
+.titlebar-title-chevron {
+  flex-shrink: 0;
+  color: var(--sidebar-placeholder);
+  transition: transform 120ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.titlebar-title[aria-expanded="true"] .titlebar-title-chevron {
+  transform: rotate(180deg);
+}

@@ -44,6 +44,7 @@ export default {
     sbOff: "沙箱：关闭。点击启用",
     archiveTask: "归档任务",
     toggleRightPanel: "切换右侧面板",
+    switchTask: "切换任务",
   },
   commandPalette: {
     label: "命令面板",

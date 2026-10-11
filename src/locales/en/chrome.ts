@@ -44,6 +44,7 @@ export default {
     sbOff: "Sandbox: off. Click to enable",
     archiveTask: "Archive task",
     toggleRightPanel: "Toggle right panel",
+    switchTask: "Switch task",
   },
   commandPalette: {
     label: "Command palette",

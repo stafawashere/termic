@@ -75,3 +75,12 @@ export function TitleBranchGlyph(props: GlyphProps) {
     </Glyph>
   );
 }
+
+export function TitleLinkGlyph(props: GlyphProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1.5 1.5" />
+      <path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1.5-1.5" />
+    </Glyph>
+  );
+}

@@ -20,8 +20,6 @@ import {
   Sun, Moon, Monitor, ArrowUpToLine, Sunrise, Droplet, Binary, Code2, Flower2,
   MessageSquareText, Library, Palette,
 } from "lucide-react";
-import { CliIcon, CLI_BRAND_COLOR, resolveIconId } from "@/icons/cli";
-import { TaskLocationIcon } from "@/components/TaskLocationIcon";
 import { effectiveSandboxMode } from "@/lib/types";
 import { taskLabel } from "@/lib/taskLabel";
 import { SandboxIcon, DockerSandboxIcon } from "@/components/SandboxIcon";
@@ -45,6 +43,7 @@ import { IS_MAC, DRAWS_WINDOW_CONTROLS, appRegionStyle } from "@/lib/platform";
 import { WindowControls } from "@/components/WindowControls";
 import { SidebarLeftGlyph } from "@/components/titlebar/titlebarIcons";
 import { SessionStrip } from "@/components/titlebar/SessionStrip";
+import { FocusTitle } from "@/components/titlebar/FocusTitle";
 
 // Reserve enough room for the 3 traffic lights + breathing room before the
 // first interactive control. 16 (x offset) + ~58 (3 buttons + gaps) + 10 pad.
@@ -54,7 +53,6 @@ const TRAFFIC_LIGHT_WIDTH = 84;
 
 export function UnifiedBar() {
   const { t } = useTranslation("chrome");
-  const agents = useApp(s => s.agents);
   // The profile's accent as a wash across the left of the bar (GH #280).
   // Selected as the finished CSS string so this bar re-renders only when the
   // colour actually changes, not on every profile-store touch.
@@ -143,10 +141,6 @@ export function UnifiedBar() {
       data-inactive={windowFocused ? undefined : ""}
       className="titlebar"
       style={{
-        // Reserve the traffic lights only while they are there: full-screen
-        // hides them, and nothing off macOS draws them at all.
-        paddingLeft: IS_MAC && !isFullscreen ? TRAFFIC_LIGHT_WIDTH : 12,
-        paddingRight: DRAWS_WINDOW_CONTROLS ? 0 : 12,
         ...appRegionStyle("drag"),
         // The profile's accent, washed in from the left and gone by the first
         // third (GH #280). JetBrains tints this exact strip per project: the
@@ -158,7 +152,11 @@ export function UnifiedBar() {
         "--titlebar-wash": profileWash,
       } as any}
     >
-      <div className="titlebar-side" data-side="left">
+      {/* The traffic lights are reserved only while they are there:
+          full-screen hides them, and nothing off macOS draws them at all.
+          The reservation lives inside the left column, so the two side
+          columns stay equal and the title stays on the window's centre. */}
+      <div className="titlebar-side" data-side="left" style={{ paddingLeft: IS_MAC && !isFullscreen ? TRAFFIC_LIGHT_WIDTH : 12 }}>
       <div
         data-tauri-drag-region="false"
         className="flex min-w-0 items-center"
@@ -200,60 +198,9 @@ export function UnifiedBar() {
 
       </div>
 
-      {/* Breadcrumbs / title — text doesn't select on drag (matches AppKit title bar). */}
-      <div data-testid="task-breadcrumb" className="ml-2 flex min-w-0 max-w-[560px] shrink-0 select-none items-baseline gap-2 text-[14px]">
-        {task && proj ? (
-          <>
-            <span className="text-[var(--color-fg-faint)]">{proj.name}</span>
-            <span className="text-[var(--color-fg-faint)]">/</span>
-            {/* self-center pulls the icon off the baseline so it
-                stays vertically centered next to text — items-baseline
-                on the parent would otherwise stick the icon's bottom
-                to the text baseline and float it too high. */}
-            <span className={cn("flex items-center self-center", CLI_BRAND_COLOR[resolveIconId(task.cli, agents)])}>
-              <CliIcon cli={resolveIconId(task.cli, agents)} className="h-4 w-4" />
-            </span>
-            {/* Task name == branch means the user never renamed it, so
-                "<branch> on <branch>" reads as noise: show just the branch
-                plus the location icon. The icon (main checkout vs worktree)
-                makes the task's checkout kind explicit. The same collapse
-                applies when the branch IS the label (GH #260) — the "on"
-                clause would then repeat the crumb it follows. */}
-            {taskCrumb === task.branch ? (
-              <>
-                <span className="truncate font-mono text-[13px] leading-tight text-[var(--color-fg)]">{task.branch}</span>
-                <TaskLocationIcon isMainCheckout={task.is_main_checkout} className="self-center" />
-              </>
-            ) : (
-              <>
-                <span className="min-w-0 truncate pr-0.5 font-medium leading-tight text-[var(--color-fg)]" title={taskCrumb === task.name ? undefined : t("taskNameTitle", { name: task.name })}>{taskCrumb}</span>
-                <span className="leading-tight text-[var(--color-fg-faint)]">{t("unifiedBar.onBranch")}</span>
-                <span className="truncate font-mono text-[12px] leading-tight text-[var(--color-fg-dim)]">{task.branch}</span>
-                <TaskLocationIcon isMainCheckout={task.is_main_checkout} className="self-center" />
-              </>
-            )}
-            {/* Multi-repo: just a small chip with the member count.
-                The full per-member breakdown (which dir_name, which
-                branch, worktree vs live) lives in the right-panel
-                target tabs where it actually matters. Stuffing it
-                into the breadcrumb made the bar unreadable past 2
-                members and pushed real chrome (Review / Send to main)
-                off-screen on narrow windows. */}
-            {(task.composition?.length ?? 0) > 0 && (
-              <span
-                className="ml-1 inline-flex shrink-0 items-center rounded bg-[var(--color-bg-3)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider leading-none text-[var(--color-fg-dim)]"
-                title={task.composition!.map(m => m.mode === "worktree" ? `${m.dir_name} @${m.branch}` : `${m.dir_name} ${t("unifiedBar.live")}`).join(" · ")}
-              >
-                {t("unifiedBar.repoCount", { count: task.composition!.length })}
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="text-[var(--color-fg-faint)]">{t("unifiedBar.noTask")}</span>
-        )}
-      </div>
+      <FocusTitle task={task} project={proj} />
 
-      <div className="titlebar-side" data-side="right">
+      <div className="titlebar-side" data-side="right" style={{ paddingRight: DRAWS_WINDOW_CONTROLS ? 0 : 12 }}>
       {/* Right-aligned actions */}
       <div
         data-tauri-drag-region="false"
@@ -397,11 +344,11 @@ export function UnifiedBar() {
         )}
       </div>
       {/* Windows and Linux: minimize / maximize / close, flush with the
-          window's top-right corner (the bar's own right padding is undone).
-          Nothing on macOS, where the system draws the traffic lights. */}
-      </div>
+          window's top-right corner. Nothing on macOS, where the system draws
+          the traffic lights. */}
       <div className="ml-1 flex self-stretch">
         <WindowControls />
+      </div>
       </div>
     </header>
   );
