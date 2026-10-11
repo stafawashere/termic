@@ -22,13 +22,12 @@ import { DockerBuildPane } from "@/components/task/DockerBuildPane";
 import type { Task, Tab, TerminalTab } from "@/lib/types";
 import { useApp, useTaskTabs, useActiveTabId } from "@/store/app";
 import { usePrefs, currentTerminalTheme } from "@/store/prefs";
-import { TabBar, TabPill } from "./TabBar";
+import { TabBar, TabPill, SESSION_BAR_PX } from "./TabBar";
 import { TabContextMenu } from "./TabContextMenu";
 import { TerminalPane, FooterBar } from "./TerminalPane";
 import { RunPane } from "./RunPane";
 import { SplitNodeView } from "./SplitView";
 import { AuxTerminal } from "./AuxTerminal";
-import { MessageQueueButton } from "./MessageQueueButton";
 import { Plus, ChevronDown, ChevronUp, ChevronRight, LocateFixed, Copy, Check, FolderOpen, Globe, ArrowRightFromLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getAllLeaves, computeLeafBounds, focusedTabId } from "@/lib/splitTree";
@@ -401,16 +400,17 @@ export function TaskView({ task }: { task: Task }) {
 
   // Chrome heights the content must sit below. When there's no split, the
   // TabBar + breadcrumb render ABOVE hRow, so main content fills hRow whole.
-  // With a split they render inside the main wrapper: TabBar h-9 (36px) plus
-  // the breadcrumb h-7 (28px) when it's visible — same condition as
-  // EditorBreadcrumb's own null-return. Pane headers are always h-9.
+  // With a split they render inside the main wrapper: the session bar
+  // (SESSION_BAR_PX) plus the breadcrumb h-7 (28px) when it's visible, same
+  // condition as EditorBreadcrumb's own null-return. Pane headers are the
+  // same session bar.
   const activeMainTab = tabs.find(t => t.id === activeId);
   const bcVisible = !!activeMainTab && (
     activeMainTab.type === "scratch"
     || activeMainTab.type === "external"
     || ((activeMainTab.type === "edit" || activeMainTab.type === "diff") && !!activeMainTab.path)
   );
-  const mainTopPx = splitRoot ? 36 + (bcVisible ? 28 : 0) : 0;
+  const mainTopPx = splitRoot ? SESSION_BAR_PX + (bcVisible ? 28 : 0) : 0;
 
   // One computeLeafBounds over the FULL tree positions everything: the main
   // pane is just another leaf, so it can live anywhere in the tree (e.g.
@@ -429,14 +429,14 @@ export function TaskView({ task }: { task: Task }) {
     }
   }
   // Content rect for a leaf: its tree rect, dropped below its chrome strip
-  // (main: TabBar + optional breadcrumb; panes: the h-9 PaneHeader).
+  // (main: TabBar + optional breadcrumb; panes: the PaneHeader).
   const contentStyle = (leafId: string | null): React.CSSProperties | null => {
     if (!splitRoot || !fullBounds) {
       return leafId === null ? { left: 0, top: 0, width: "100%", height: "100%" } : null;
     }
     const r = fullBounds.get(leafId ?? mainLeafId);
     if (!r) return null;
-    const chromePx = leafId === null ? mainTopPx : 36;
+    const chromePx = leafId === null ? mainTopPx : SESSION_BAR_PX;
     return {
       left:   `${r.x * 100}%`,
       top:    `calc(${r.y * 100}% + ${chromePx}px)`,
@@ -706,7 +706,7 @@ export function TaskView({ task }: { task: Task }) {
                 // h-full + border-b-2, so the strip must give them full height
                 // or they collapse to content height and float as boxy pills
                 // with the active underline stranded mid-bar. The fixed
-                // controls (queue button, separator, collapse toggle) opt back
+                // controls (the new-shell button, collapse toggle) opt back
                 // into vertical centering with self-center. Mirrors the main
                 // TabBar — see its items-stretch comment for the same rationale.
                 "flex h-[var(--bottom-bar-h)] shrink-0 items-stretch gap-0.5 bg-[var(--color-bg-1)] px-2",
@@ -715,11 +715,6 @@ export function TaskView({ task }: { task: Task }) {
                 // border-t when collapsed to avoid a 2px double line.
                 "border-b border-[var(--color-border-soft)]",
               )}>
-                {/* Queue affordance pinned far LEFT so it's always seen; the
-                    shell tabs start after a separator. The bottom status-bar
-                    copy is hidden while the split is open — see FooterBar. */}
-                <MessageQueueButton taskId={task.id} compact className="self-center" />
-                <div className="mx-1.5 h-5 w-px shrink-0 self-center bg-[var(--color-border-soft)]" />
                 {/* Tabs + New scroll horizontally (no scrollbar) so the queue
                     button on the left and the collapse toggle on the right stay
                     fixed and reachable no matter how many shells are open. */}

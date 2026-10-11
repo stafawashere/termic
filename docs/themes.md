@@ -191,6 +191,36 @@ block that derives them from `--color-accent-fg` and `--color-palette-*`
 for the other dark themes and custom themes, and a light block. They are
 not keys in a theme file.
 
+## Session bar tokens
+
+The session bar (docs/ui.md "Session bar") reuses the sidebar's and the
+title bar's tokens for its wells, raised chips, hover inks, divider and
+settled green, and adds `--sessionbar-*` only for its own shell
+(`bg-top`, `bg-bottom`, `border`, `shadow`, and `grain`, the title bar's
+noise tile with its opacity baked in, `none` in light) and two tab
+details, `glyph-dim` (what an idle tab's agent glyph is mixed toward) and
+`close-ink` (the red tint of the close ×, `--color-err` outside Dark+). Dark+
+literals live in their own `@theme` block, the other dark themes and
+custom themes derive theirs from `--color-*`, and light has its own block.
+The underline, the trace and the broadcast toggle take `--color-accent`.
+They are not keys in a theme file.
+
+## Footer tokens
+
+The footer strip (docs/ui.md "The footer strip") reuses the `--sidebar-*`
+wells, raised chips, counts, inks and footer gradient, and adds
+`--footer-*` for the rest: the strip's height (`h`, 46px), the task bar's
+gradient and edges (`bg-top`, `bg-bottom`, `border`, `highlight`, and
+`side-highlight` for the sidebar half), the sandbox chip (`chip-border`,
+`chip-hover`, `tag-bg`), the usage well's hover ring (`well-hover-ring`),
+the meter (`meter-track`, `meter-shadow`, `meter-dash` for the unknown
+state) and the light theme's sun glyph (`sun`). Same arrangement again:
+Dark+ literals in `@theme`, derived from `--color-*` for the other dark
+themes and custom themes, their own block for light. The meter fill, the
+unread dot and the active Queue glyph take `--color-accent`; the sandbox
+states take `--color-ok` and `--color-warn`. They are not keys in a theme
+file.
+
 ## The subagent view paints with claude's palette
 
 The subagent transcript view (docs/ui.md "The subagent transcript view")

@@ -278,10 +278,8 @@ accent is the theme's, never a literal.
 - **Menus** opt in with `.sidebar-menu`, which restyles the shared menu
   primitives (34px items, labelled sections, checked rows) for the sidebar
   only.
-- **The bottom bar** stays `--bottom-bar-h` (36px, shared with every
-  other bottom bar). Its glyphs are the sidebar's own, 17px, in 30px
-  buttons; the row is shifted so the gear's glyph ends where the tree's
-  badges do.
+- **The bottom bar** is the sidebar half of the footer strip (see "The
+  footer strip" below).
 - **The icon rail** stacks the views in the same well. Every row is a 32px
   tile (`.sidebar-rail-tile`) with a corner dot for what its full row would
   draw.
@@ -324,6 +322,70 @@ family reuses their tokens, not their selectors.
 
 Not restyled here: the split-pane header (`PaneHeader`), which mirrors the
 main tab strip and moves with it.
+
+## The footer strip
+
+Two footers read as one strip across the bottom of the window: the
+sidebar's (`SidebarFooter`, `sidebar-footer`) and the task's (`FooterBar`
+in `TerminalPane.tsx`, `task-footer`). Both are `--footer-h` (46px) with a
+1px `--footer-border` top hairline and a white top highlight, and the
+sidebar's right border runs through as the divider. `--bottom-bar-h` stays
+36px for the bars that are not part of the strip: the split terminal's tab
+strip and the right panel's footer. Tokens: docs/themes.md "Footer tokens".
+Glyphs are the design's own paths, in `src/components/footer/footerIcons.tsx`.
+
+Both are built from the sidebar's wells (`.footer-well`, `--sidebar-well-*`):
+3px padding, 8px radius, 2px gap.
+
+**The sidebar half.** One well holds theme (`footer-theme`), bug
+(`footer-bug`), mail (`footer-whats-new`), keyboard (`footer-shortcuts`) and
+activity (`open-activity`); settings (`footer-settings`) sits in its own
+well at the far edge. Each is a 32x26 `.footer-icon-btn` with a 16px,
+1.8-stroke glyph in `--sidebar-footer-icon`, hovering to
+`--sidebar-seg-hover`. The theme glyph is a moon, or in light a sun in
+`--footer-sun`. The icon rail keeps a vertical stack of the same buttons
+(`.sidebar-footer-btn`, 22px glyphs).
+
+The bug button opens a prefilled GitHub issue. The mail button opens the
+Changelog (What's New) dialog and marks the running version seen through
+`dismissWhatsNew`. While `isWhatsNewUnread(currentVersion,
+lastSeenVersion)` holds, a 6px `--color-accent` dot with a glow and a ring
+in the well's colour sits at the glyph's top-right
+(`footer-whats-new-dot`). The watermark is the update store's
+`updateLastSeenVersion`, so the dot stays gone across a reload and comes
+back only when a newer version runs. A fresh install adopts its version
+silently and shows no dot. `dismissWhatsNew` writes nothing when the
+version is already seen. The unread flag is a primitive boolean selected
+inside the footer, a memo component, so a version change re-renders the
+bar and not the sidebar. The contact mailto (`src/lib/contact.ts`, which
+also copies the address, #103) lives in the Changelog dialog's title line
+as `changelog-contact`.
+
+**The task half.** Left, one well with two 26px segments (`.footer-seg`):
+Queue messages (`queue-button`) and Terminal (`footer-terminal`). A
+segment is raised (`data-active`, the sidebar's chip gradient, weight 600)
+while it is in use: Queue while it holds messages or its popover is open,
+with its glyph in `--color-accent` and the count in a 16px pill
+(`queue-count`, hidden at 0); Terminal while the bottom split is open and
+expanded. Terminal runs `toggleBottomTerminal`, the same action as ⌘J. The
+Queue control stays in this bar while the split is open; the split strip no
+longer carries a second copy, so a task has exactly one. Labels drop below
+680px of bar width (a container query), counts never do.
+
+Right, the usage readouts ("The usage readout" below), the "N blocked"
+count when the cage has denied something, and the sandbox chip
+(`footer-sandbox`) pinned rightmost: 30px, 8px radius, a 1px
+`--footer-chip-border`, shield glyph, "Sandbox" and a keycap naming the
+state (`.footer-tag`: OFF, ON, FS, LOG, DOCKER). An enforcing cage tints
+border, wash and keycap with `--color-ok`, monitoring with `--color-warn`.
+A click opens the sandbox dialog, the same action as the title bar's
+sandbox segment, so the two never disagree. `data-sandbox-mode` names the
+mode for specs.
+
+**Window in the background:** `initWindowFocus` mirrors `windowFocused`
+onto `data-window-inactive` on the root, and `.footer-ink` (text and
+glyphs) fades to 55% under it; wells and chips do not. An attribute rather
+than a subscription per bar, so a focus change costs no React render.
 
 ## The sidebar's filter bar
 
@@ -1776,6 +1838,60 @@ Deliberately NOT extended to the file context menus (`CopyPathItems`,
 app"; this acts on the task root. `ContextMenuItem` also drops `data-*`
 attributes, so its rows cannot carry a test id.
 
+## Session bar
+
+The "Session bar" design (2026-10): the tab strip above the terminal, in
+the title bar's material (`TabBar`, `.sessionbar` in `index.css`). Every
+split pane's own strip (`PaneHeader`) is the same bar with a close-pane
+button on the end, and the bottom shell strip reuses the same `TabPill`.
+
+- **Shell**: 42px, a two-stop gradient with the title bar's grain baked
+  into a background layer (`--sessionbar-grain`, no pseudo-element and no
+  z-index games). `SESSION_BAR_PX` in `TabBar.tsx` is the same 42: split
+  panes place their content that far below each pane's top, so the two
+  move together.
+- **Order**: the tab well, the + (opens the new-tab menu, as ⌘T does), a
+  spacer, then the pane-tools well: broadcast, split down, split right.
+  Broadcast is a toggle in the sense the UI can honour: it reads as on
+  (raised chip, accent icon, `aria-pressed`) while that task's broadcast
+  dialog is open, and a click while on closes it. The split buttons turn
+  accent once the task has a split.
+- **Tabs** size to their content, 96 to 200px, and shrink toward 96
+  (ellipsising) before the well scrolls. Vertical wheel turns into
+  horizontal scroll (`scrollSideways`); a trackpad swipe is left alone.
+  Pinned tabs keep a fixed width (200, 180 in pane strips) so a live title
+  cannot reflow the strip, and sit before a rule outside the scroller.
+- **Active**: the raised chip, bold ink, the agent glyph at full brand
+  colour with a soft glow. An idle tab's glyph is its brand colour mixed
+  40% into `--sessionbar-glyph-dim`, so every agent keeps its own hue.
+  The accent underline is drawn only on the active tab of the FOCUSED
+  pane, so across a split one tab reads as current.
+- **Name**: centred on the whole tab, with the glyph and the trailing slot
+  at its edges. The glyph sits in a 30px box so both sides are 40px; a tab
+  with run controls or a queue marker is off centre by their width.
+- **Trailing slot**: one 24x20 cell holding two stacked layers, the state
+  indicator and the close button (a plain red-tinted ×, no pill). Only the
+  tab's right end (a 40px hit area) swaps them, so hovering the name never
+  hides the state and the name's tooltip stays reachable. Indicators in priority order: failed
+  (warning), attention (bell), partial (green ring), done (green dot),
+  working (the ECG trace, `TabTrace`), delegated (background ring), then
+  the unseen pad ring and the dirty dot. A pinned tab has a neutral unpin
+  button in the close layer, shown at rest when no indicator outranks it.
+- **The trace** animates only while a tab is working: its component
+  mounts only then, the pulse is paused (`animation-play-state`, not
+  unmounted) while the window is hidden (`useDocumentVisible`), and
+  reduced motion leaves a static trace. `data-mark` sits on the pulse, so
+  the e2e suite reads the mark and its 1.4s duration off one element. The
+  e2e window is hidden, so a pulse that unmounted when hidden read as no
+  animation at all there.
+
+Window in the background: labels, indicators and icons drop to 55%
+opacity; wells and chips do not. Tokens are `--sessionbar-*` for the bar
+itself (Dark+ values in their own `@theme` block, derived from `--color-*`
+for the other dark themes and custom themes, and for light); wells, chips,
+hover ink and the settled green reuse the sidebar and title bar families.
+`src/lib/sessionBarTokens.test.ts` checks every theme redeclares them.
+
 ## Window chrome / drag
 
 macOS overlay title bar, hidden title, 84px reserved left for traffic lights. Their inset (`traffic_y` in `build_profile_window`) is 27.5, which centres them on the 50px bar: checked by eye on a Darwin 27 Mac, not yet on one before Tahoe (the old 38.5px bar used 21 on Tahoe and 16 before it). `TERMIC_TRAFFIC_Y` overrides it for tuning. Windows and Linux have no native frame at all (`decorations(false)` in `build_profile_window`): the same bar drags the window through `startDragging()`, a double click maximizes (read off the mousedown's click count), and `WindowControls` draws minimize, maximize / restore and close at its right end, in each platform's own look (Windows' caption glyphs and red Close; GNOME's small round buttons on Linux). Linux dropped GTK's title bar because it spent ~58px on the word "Termic" above a bar that already says where you are. The window still resizes from its edges (tao hit-tests the outer 5px of an undecorated window), and `WindowResizeEdges` lays transparent strips over that same 5px purely for the resize CURSOR, which tao sets on the toplevel window and which never shows over the webview. On Linux the window has no shadow, and the title-bar context menu (Move, Always on Top) is gone with the bar; the compositor's own Super+drag still moves it. The Activity window keeps its native title bar everywhere. Three drag mechanisms (each fails differently):
@@ -2420,27 +2536,41 @@ It is localStorage and not a `last_opened_at` on the `Task` record for the same
 reason folder colours are: it is a per-machine UI convenience, and a disk write
 on every task click would be the wrong trade.
 
-## A gauge that is a background, and what it costs the text on it
+## The usage readout: one meter per window, named in words
 
-The task footer's usage chip (GH #277) draws each window's gauge as the fill
-behind its own figure: `85% wk` sits on a box filled 85% of the way across,
-with the unused part left as a visible track. It has been three designs, and
+The task footer's usage chip (GH #277) is a recessed well (`.footer-usage`):
+the agent's brand glyph with a soft glow, then one reading per window. The
+lead window gets a 64x4 meter and its figure in words, `42% of 5h limit`;
+any reading beside it (the week next to the session, the context) is
+compact, a 24px meter and `95% wk`, so a chip carrying everything stays
+near 290px and two agents still fit one bar. It has been four designs, and
 the reasons are worth keeping because they are not about this chip.
 
-The context window (`NN% ctx`) is a third gauge of the same kind, LEADING the
-chip because it is this conversation's number rather than the account's. It
-uses its own thresholds (80 / 90, `contextLevel`), later than the plan's,
+One bar, showing whichever window was closest to its limit, sat hard against
+the 5h number and displayed the OTHER one. Two pill bars fixed that and left
+four marks for two facts. The third design drew each window's gauge as the
+fill BEHIND its own figure, which nothing could misread but which cost the
+text contrast exactly when it mattered (amber on amber measured 3.3:1). The
+footer design brought the bar back, and what makes it safe this time is the
+label: every meter is followed by the window it measures, spelled out, so no
+bar on the row can be read against the other window's number.
+
+The meter's fill is `--color-accent` (a gradient from a darker mix of it),
+`--color-warn` at the warn level and `--color-err` at critical, where the
+label takes the same hue; at `normal` the label is `--sidebar-ink`. A stale
+reading halves the fill's opacity. The width eases over 300ms and nothing
+else animates. Colour comes from `data-level` in `index.css`, never from
+`transition-colors`, which never repaints a themed colour in WKWebView
+(docs/gotchas.md). An agent that can report and has not shows a dashed
+track and "Usage unknown".
+
+The context window (`NN% ctx`) is a third reading of the same kind, LEADING
+the chip because it is this conversation's number rather than the account's.
+It uses its own thresholds (80 / 90, `contextLevel`), later than the plan's,
 because a filling context is a session's normal life and only the approach to
 compaction is news. Each readout can be switched off per agent in Settings >
 Agents (`agentFooterHidden` in prefs, stored as opt-outs); hiding usage also
 stops the pull transports asking, so a hidden number spawns nothing.
-
-One bar, showing whichever window was closest to its limit, sat hard against
-the 5h number and displayed the OTHER one. Two bars fixed that and left four
-marks for two facts, costing 56px of a bar that starts hiding chips at 780px
-(264px with the pills, 219px without). Both were reported by someone looking
-straight at the thing, which is the only evidence that counts for a footer
-meant to be read at a glance.
 
 **A chip is fully shown or not shown at all, and the bar says when it hid
 one.** The original rule was a single hide-below-780px on a secondary agent's
@@ -2469,35 +2599,13 @@ ResizeObserver, scope it to the chip strip and set state only when the fitting
 count changes, never per pixel.
 
 The chips also sit in their own `min-w-0 overflow-hidden` box inside the right
-group, so width is shed from the left and the sandbox status stays pinned as
+group, so width is shed from the left and the sandbox chip stays pinned as
 the rightmost item whatever happens.
 
-**A fill behind text costs that text contrast, and the cost lands where you
-can least afford it.** Amber text on an amber fill measures 3.3:1 in dark
-mode, so the number gets hardest to read exactly when it matters most, and
-tuning the mix does not rescue it (22% still only reaches 4.08). So the BOX
-carries the severity and the text carries the reading: warn and critical inks
-go neutral-bright instead of taking their own hue, which puts every
-level/theme pairing above 4.5:1 and in light mode actually improves on what
-shipped before (warn was 3.71:1 on cream). A red-filled box is louder than red
-text ever was.
-
-**The quiet end is where the real constraint binds.** `normal` keeps a dim ink
-so a calm chip does not shout, and dim ink falls through 4.5:1 once its fill
-passes 18%. That caps how visible a calm gauge's fill EDGE can be (1.40 in
-dark against 5.87 for warn). The trade is stated rather than hidden: the box
-is always plainly a box, so a nearly-empty one is never mistaken for a failed
-render, and the fill earns visibility as it grows.
-
-Two mechanics that generalise: the fill is a **hard stop**, not a fade, because
-a gradient that eases out has no readable edge and "where does it end" is the
-whole question the shape answers; and both layers are `color-mix(...,
-transparent)` over the footer's own ground, so a custom theme's tokens carry
-through without the component knowing any of them.
-
-Measurements live next to the constants in `AgentChip.tsx`. Re-derive them
-before moving a number, and do it in both themes: every one of these values is
-the ceiling of something.
+The footer classes live in `@layer components` in `index.css`. Unlayered,
+`.footer-usage`'s `display: flex` beat the chip's container-query `hidden`
+utility (layered CSS always loses to unlayered), so no chip ever hid and
+two chips ran past a 600px bar.
 
 ## Scheduled queue messages (GH #300)
 
@@ -2706,6 +2814,10 @@ quarter of a ring by making one border transparent reads as a ring with a bite
 out of it, where a track plus a brighter arc reads as one object with a
 highlight going round it. `data-mark` says which mark is drawn, since the two
 are no longer distinguishable by their CSS.
+
+In the session bar the working mark is the ECG trace rather than the spinner,
+and done and partial are green (`--sidebar-settled`) to match the sidebar;
+see "Session bar".
 
 Surfaces: the tab strip (`TabBar`), the expanded sidebar row's per-tab badge,
 and the COLLAPSED sidebar row plus the dashboard through `taskWorkBadge`. The

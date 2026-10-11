@@ -984,7 +984,7 @@ describe("agent extras", () => {
   // terminal before typing. A store-level drive cannot see that wiring.
   it("opens an aux (bottom) terminal from the footer button and focuses it", async () => {
     await ensureActiveTask(taskId!);
-    await clickByText("Terminal");
+    await clickWhenVisible(`[data-task-id="${taskId}"] [data-testid="footer-terminal"]`);
 
     await browser.waitUntil(
       () =>
@@ -1788,7 +1788,8 @@ describe("agent notifications", () => {
         weekText: week.innerText,
         fiveHFill: fiveH.dataset.usageFill,
         weekFill: week.dataset.usageFill,
-        weekBg: getComputedStyle(week).backgroundImage,
+        weekFillImage: getComputedStyle(week.querySelector(".footer-meter-fill")!).backgroundImage,
+        weekFillStyle: (week.querySelector(".footer-meter-fill") as HTMLElement).style.width,
       };
     });
     // The numbers the USER reads, not the store field behind them.
@@ -1798,8 +1799,8 @@ describe("agent notifications", () => {
     expect(seen.level).toBe("critical");
     expect(seen.text).toContain("30%");
     expect(seen.text).toContain("95%");
-    // One gauge per window, and each one is the BACKGROUND of its own number,
-    // so the 5h figure can never be sitting next to the week's bar. Assert the
+    // One gauge per window, each beside its own number and naming its window
+    // in words, so the 5h figure can never be read against the week's bar. Assert the
     // value each gauge was drawn to rather than counting elements: a gauge
     // pointed at the wrong window is the bug this readout exists to prevent,
     // and two elements of any kind would satisfy a count.
@@ -1808,11 +1809,11 @@ describe("agent notifications", () => {
     expect(seen.weekText).toContain("95%");
     expect(seen.fiveHFill).toBe("30");
     expect(seen.weekFill).toBe("95");
-    // The fill is a gradient with a hard stop at the percentage, so the stop
-    // is the thing that has to be there: a background that lost its gradient
-    // (a dropped inline style, a theme token that resolved to nothing) still
-    // renders a perfectly plausible chip.
-    expect(seen.weekBg).toContain("gradient");
+    // Each window draws its own meter, filled to its own percentage: a fill
+    // that lost its gradient (a theme token that resolved to nothing) or its
+    // width (a dropped inline style) still renders a perfectly plausible chip.
+    expect(seen.weekFillImage).toContain("gradient");
+    expect(seen.weekFillStyle).toBe("95%");
   });
 
   // A task runs as many agents as it has tabs. The footer's original rule was
@@ -1909,8 +1910,8 @@ describe("agent notifications", () => {
   // here and this costs one render plus two captures.
   //
   // Screenshots only. Nothing is asserted from a pixel (see the e2e skill);
-  // these exist so a person can check that a gauge which is a BACKGROUND still
-  // renders as one, which is the class of thing no assertion catches and which
+  // these exist so a person can check that each level's meter colour actually
+  // paints, which is the class of thing no assertion catches and which
   // this footer has already been burned by once (`transition-colors` never
   // repaints a themed colour in WKWebView, docs/gotchas.md).
   it("draws a gauge at each level for a human to look at", async () => {
@@ -3125,20 +3126,18 @@ describe("delegated work", () => {
       timeoutMsg: `the badge never said what it was waiting on (saw ${await delegatedLabel(taskId)})`,
     });
 
-    // Measured, not eyeballed. Both marks are small round outlines and a
-    // screenshot cannot tell them apart, so this asserts which one is drawn
-    // and how fast it turns: the working spinner every second, the
-    // background ring eight times slower. That difference is the whole claim
-    // the badge makes, and an agent waiting two hours on a monitor is the
-    // case it exists for.
+    // Measured, not eyeballed. This asserts which mark is drawn and how fast
+    // it moves: the working trace pulses every 1.4s, the background ring
+    // turns every eight. That difference is the whole claim the badge makes,
+    // and an agent waiting two hours on a monitor is the case it exists for.
     const held = await workBadgeMark(taskId);
-    if (plain?.kind !== "spinner" || plain?.duration !== "1s") {
-      throw new Error(`the control is not the working spinner: ${JSON.stringify(plain)}`);
+    if (plain?.kind !== "trace" || plain?.duration !== "1.4s") {
+      throw new Error(`the control is not the working trace: ${JSON.stringify(plain)}`);
     }
     // Reduced motion stops the ring, so a machine with the setting on
     // reports no animation and is still correct.
     if (held?.kind !== "background" || !["8s", "0s"].includes(held?.duration ?? "")) {
-      throw new Error(`delegated work did not swap the spinner for the ring: ${JSON.stringify(held)}`);
+      throw new Error(`delegated work did not swap the trace for the ring: ${JSON.stringify(held)}`);
     }
 
     // And it STAYS. Agent-owned work is excluded from the detached grace, on

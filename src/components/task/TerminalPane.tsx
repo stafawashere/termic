@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { i18n } from "@/lib/i18n";
-import { AlertTriangle, TerminalSquare, Copy, Check, ChevronDown, ChevronRight, X, Loader2 } from "lucide-react";
+import { Copy, Check, ChevronDown, ChevronRight, X, Loader2 } from "lucide-react";
 import { PopoverRoot, PopoverTrigger, PopoverContent } from "@/components/ui/Popover";
 import { useUI } from "@/store/ui";
 import { isArchiving } from "@/store/archivingTasks";
@@ -62,7 +62,8 @@ import { waitForAgentReady, hooksOwnStartupReadiness } from "@/lib/agentReady";
 import { hasDueScheduled, lateBy, pickQueueItem } from "@/lib/scheduledQueue";
 import type { TerminalTab, Task, SandboxMode } from "@/lib/types";
 import { effectiveSandboxMode, isTaskCaged } from "@/lib/types";
-import { SandboxIcon, DockerSandboxIcon } from "@/components/SandboxIcon";
+import { SandboxChip } from "@/components/footer/SandboxChip";
+import { FooterTerminalGlyph } from "@/components/footer/footerIcons";
 import { TerminalExitedBanner } from "@/components/task/TerminalExitedBanner";
 import { SudoTouchIdBanner } from "@/components/task/SudoTouchIdBanner";
 import { TerminalFindBar } from "@/components/task/TerminalFindBar";
@@ -4131,101 +4132,54 @@ export function FooterBar({ task, sandboxWarning }: {
     return () => { cancelled = true; window.clearInterval(id); };
   }, [task.id, mode]);
 
-  // Sandbox half — the "degraded" warning state, else the standard
-  // per-mode icon + label (label from the footer.* locale keys, icon from
-  // SandboxIcon).
-  const sandboxNode = sandboxWarning ? (
-    <>
-      <AlertTriangle className="h-3.5 w-3.5 text-[var(--color-warn)]" />
-      <span className="font-medium">{t("footer.sandboxDegraded")}</span>
-      <span className="text-[var(--color-fg-faint)]">·</span>
-      <span className="truncate">{sandboxWarning}</span>
-    </>
-  ) : task.docker_sandbox_enabled ? (
-    <>
-      <DockerSandboxIcon className="h-3.5 w-3.5" />
-      <span className="@max-[560px]:hidden">{t("footer.sandboxDocker")}</span>
-    </>
-  ) : (
-    <>
-      <SandboxIcon mode={mode} className="h-3.5 w-3.5" />
-      <span className="@max-[560px]:hidden">
-        {mode === "off" ? t("footer.sandboxOff")
-          : mode === "enforce-fs" ? t("footer.sandboxEnforceFs")
-          : mode === "monitor" ? t("footer.sandboxMonitor")
-          : t("footer.sandboxEnforce")}
-      </span>
-    </>
-  );
+  const terminalShown = splitOpen && !splitCollapsed;
+  const terminalTip = splitOpen ? t("footer.bottomTerminalTip") : t("footer.openBottomSplitTip");
 
   return (
     <div
       data-testid="task-footer"
-      className={cn(
-        // --bottom-bar-h is the shared height for every bottom bar. text-[12.5px]
-        // matches the queue/terminal buttons and the right-panel footer tabs.
-        // Suppress border-t when the split is collapsed: the strip's border-b
-        // already provides the separator; two adjacent 1px lines look doubled.
-        // `@container`: the collapse below is CSS, not a ResizeObserver, so a
-        // window drag costs no React render on a bar that sits under a
-        // streaming terminal.
-        "@container flex h-[var(--bottom-bar-h)] shrink-0 items-center gap-1.5 px-3 text-[12.5px]",
-        !(splitOpen && splitCollapsed) && "border-t",
-        sandboxWarning
-          ? "border-[var(--color-warn)]/40 bg-[var(--color-warn)] text-[var(--color-fg)]"
-          : "border-[var(--color-border-soft)] bg-[var(--color-bg-1)] text-[var(--color-fg-dim)]",
-      )}
+      // The split strip's own bottom border already separates them while it is
+      // collapsed; two adjacent 1px lines look doubled.
+      data-seamless={splitOpen && splitCollapsed ? "" : undefined}
+      // `@container`: the collapses below are CSS, not a ResizeObserver, so a
+      // window drag costs no React render on a bar that sits under a
+      // streaming terminal.
+      className="task-footer @container text-[12px] text-[var(--color-fg-dim)]"
     >
-      {/* Queue + Terminal sit on the LEFT (only while the split/aux terminal
-          is closed — when open the queue moves into that strip, see
-          TaskView). The sandbox status is pushed to the RIGHT. */}
-      {!splitOpen && <MessageQueueButton taskId={task.id} />}
-      {/* Pending inline review comments (#28). Self-hides when there are none,
-          so it's safe to render unconditionally — keeps the "N comments · Send"
-          affordance reachable from any tab regardless of split state. */}
-      <ReviewCommentsBar taskId={task.id} />
-      {/* +Terminal opens the bottom split. Hidden when the split is already
-          open — no point offering to add what's there. Goes through
-          toggleBottomTerminal (the ⌘J action) so the new shell also takes
-          focus; a raw toggleTerminalSplit leaves the seeded shell unfocused. */}
-      {!splitOpen && (
+      {/* The bottom panel's two segments. Queue stays here while the split is
+          open, so there is one queue control per task, never two. Terminal
+          goes through toggleBottomTerminal (the ⌘J action): it opens the
+          split, focuses it, and collapses it from there. */}
+      <div className="footer-well">
+        <MessageQueueButton taskId={task.id} />
         <button
           type="button"
+          data-testid="footer-terminal"
+          data-active={terminalShown ? "" : undefined}
           onClick={() => toggleBottomTerminal(task.id)}
-          title={t("footer.openBottomSplitTip")}
-          className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[12.5px] text-[var(--color-fg-faint)] hover:bg-[var(--color-bg-2)] hover:text-[var(--color-fg)]"
+          title={terminalTip}
+          className="footer-seg"
         >
-          <TerminalSquare className="h-3.5 w-3.5" />
+          <FooterTerminalGlyph size={15} className="footer-ink shrink-0" />
           {/* Label goes before the numbers do: the icon is unambiguous next
               to the one beside it, and the usage figures are what the user is
               actually reading in a narrow footer. */}
-          <span className="@max-[680px]:hidden">{t("footer.terminal")}</span>
+          <span className="footer-ink @max-[680px]:hidden">{t("footer.terminal")}</span>
         </button>
-      )}
-      {/* Right group: the blocked-hosts chip on the LEFT, the sandbox status
-          as the rightmost item. Click the chip to see WHICH hosts got
-          blocked; it's a sibling of the edit button so its click doesn't
-          bubble to "open Edit dialog." Chip only shows when sandboxed + we've
-          actually seen denies. */}
-      <div className="ml-auto flex items-center gap-1.5">
-        {/* Subscription usage (GH #277). Leftmost of the right group, so the
-            two things that can APPEAR (usage, "N blocked") grow leftwards and
-            the sandbox status stays pinned as the rightmost item. It self-hides
-            until an account has actually reported, so an agent with no usage
-            feed costs this row no width at all. */}
-        {/* GH #278. Immediately left of the usage chip and one unit with it:
-            usage is THAT account's usage, so with two accounts a bare
-            percentage is ambiguous. Renders nothing until a second credential
-            set exists. */}
-        {/* ONE control: which account this agent runs as, and what that
-            account has spent. They were two chips and two panels, which the
-            account pill's own comment already argued against ("forms one unit
-            with the usage chip"). */}
+      </div>
+      {/* Pending inline review comments (#28). Self-hides when there are none,
+          so it's safe to render unconditionally. */}
+      <ReviewCommentsBar taskId={task.id} />
+      {/* Right group: usage readouts, then "N blocked", then the sandbox chip
+          pinned as the rightmost item. The readouts and the blocked count are
+          the things that can APPEAR, so they grow leftwards. */}
+      <div className="ml-auto flex min-w-0 items-center gap-2">
         {/* The chips get their OWN box so the group can shed width from the
-            left without ever pushing the sandbox status off the end. Without
-            it the chips are all shrink-0 inside an ml-auto group, so five
-            agents simply ran past the bar and under the right panel. */}
-        <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+            left without ever pushing the sandbox chip off the end. Without it
+            five agents simply ran past the bar and under the right panel. Each
+            chip is one control: which account the agent runs as (GH #278) and
+            what that account has spent (GH #277). */}
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden">
           {agentIds.map(id => (
             <FooterAgentChip
               key={id}
@@ -4240,16 +4194,14 @@ export function FooterBar({ task, sandboxWarning }: {
             />
           ))}
           {/* "There are more agents than fit." No count: the breakpoints are
-              CSS container queries rather than a ResizeObserver (this bar sits
-              under a streaming terminal and must not render on a window drag),
-              so nothing here knows how many actually fit. CSS decides whether
-              this shows, by hiding it above the width where the last chip
-              still had room. */}
+              CSS container queries rather than a ResizeObserver, so nothing
+              here knows how many actually fit. CSS decides whether this shows,
+              by hiding it above the width where the last chip still had room. */}
           {moreClass && (
             <span
               data-testid="agent-chips-more"
               title={t("terminal.moreAgentsTip")}
-              className={cn("shrink-0 px-0.5 text-[var(--color-fg-faint)]", moreClass)}
+              className={cn("footer-ink shrink-0 px-0.5 text-[var(--sidebar-muted)]", moreClass)}
             >
               ···
             </span>
@@ -4258,14 +4210,12 @@ export function FooterBar({ task, sandboxWarning }: {
         {mode !== "off" && total > 0 && (
           <DeniedHostsPopover taskId={task.id} cli={task.cli ?? "claude"} count={total} mode={mode} />
         )}
-        <button
-          type="button"
-          onClick={() => useUI.getState().openSandbox(task.id)}
-          title={sandboxWarning ?? (task.sandbox_enabled ? t("footer.editSandboxTip") : t("footer.enableSandboxTip"))}
-          className="flex items-center gap-1.5 truncate hover:text-[var(--color-fg)]"
-        >
-          {sandboxNode}
-        </button>
+        <SandboxChip
+          taskId={task.id}
+          mode={mode}
+          docker={!!task.docker_sandbox_enabled}
+          warning={sandboxWarning}
+        />
       </div>
     </div>
   );

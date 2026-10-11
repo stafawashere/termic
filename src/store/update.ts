@@ -89,6 +89,14 @@ export function cmpVersion(a: string, b: string): number {
   return 0;
 }
 
+/** The running version's notes have not been opened yet. An unresolved
+ *  version (outside Tauri, or before getVersion lands) is never unread. */
+export function isWhatsNewUnread(currentVersion: string, lastSeenVersion: string): boolean {
+  if (!currentVersion) return false;
+
+  return cmpVersion(currentVersion, lastSeenVersion) > 0;
+}
+
 /** Changelog entry for a version, if present. */
 export function entryFor(
   changelog: ChangelogEntry[] | null,
@@ -310,7 +318,9 @@ export const useUpdate = create<UpdateState>((set, get) => ({
 
   dismissWhatsNew: () => {
     const v = get().currentVersion;
-    if (!v) return;
+    const alreadySeen = v === get().lastSeenVersion;
+    if (!v || alreadySeen) return;
+
     lsSet(LS_LAST_SEEN, v);
     set({ lastSeenVersion: v });
   },

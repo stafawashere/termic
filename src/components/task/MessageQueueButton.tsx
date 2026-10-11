@@ -25,8 +25,9 @@ import { Tip } from "@/components/ui/Tooltip";
 import { CliIcon, CLI_BRAND_COLOR, resolveIconId } from "@/icons/cli";
 import { workDoneCapable } from "@/lib/agents";
 import { cn } from "@/lib/utils";
-import { MessageSquarePlus, X, Repeat, CornerDownLeft, Send, SendHorizontal, CalendarClock } from "lucide-react";
+import { X, Repeat, CornerDownLeft, Send, SendHorizontal, CalendarClock } from "lucide-react";
 import type { TerminalTab } from "@/lib/types";
+import { FooterQueueGlyph } from "@/components/footer/footerIcons";
 import { dateInputValue, formatScheduleDate, isScheduled, localDateValue, queueLoopRunning, startOfDayIn } from "@/lib/scheduledQueue";
 
 /** "Send after" presets, in days from today. Each resolves to local midnight
@@ -44,13 +45,8 @@ function tabLabel(t: TerminalTab): string {
   return t.customTitle ? t.title : (t.liveTitle || t.title);
 }
 
-export function MessageQueueButton({ taskId, compact = false, className, preferTabId }: {
+export function MessageQueueButton({ taskId, preferTabId }: {
   taskId: string;
-  /** Icon-only rendering for tight spots like the split terminal's tab strip
-   *  (vs. icon + "Queue messages" text in the bottom status bar). */
-  compact?: boolean;
-  /** Extra classes for the trigger wrapper (e.g. `ml-auto` to sit by a caret). */
-  className?: string;
   /** Override which agent this button defaults to (badge + pre-selected
    *  target). Used by the right-split footer button so it targets the right
    *  pane's agent instead of the main pane's active tab. */
@@ -94,6 +90,7 @@ export function MessageQueueButton({ taskId, compact = false, className, preferT
     : t("queue.scheduledBadge", { count: scheduledCount });
 
   const [open, setOpen] = useState(false);
+  const segmentActive = open || showBadge;
   // Selected target defaults to the active agent (if capable) each time the
   // popover opens; falls back to the first capable agent.
   const [selectedTabId, setSelectedTabId] = useState<string | null>(null);
@@ -199,7 +196,7 @@ export function MessageQueueButton({ taskId, compact = false, className, preferT
     <PopoverRoot open={open} onOpenChange={onOpenChange}>
       <Tip content={tip} side="top">
         {/* span wrapper so the tooltip still fires while disabled */}
-        <span className={cn("inline-flex shrink-0", className)}>
+        <span className="inline-flex shrink-0">
           <PopoverTrigger asChild>
             <button
               type="button"
@@ -210,26 +207,19 @@ export function MessageQueueButton({ taskId, compact = false, className, preferT
               data-queued={queuedCount}
               data-scheduled={scheduledCount}
               data-queue-running={queueRunning ? "1" : "0"}
-              className={cn(
-                // Filled chip (no border — keeps the footer clean) so it reads
-                // as a button via its background, not a faint label. text-[12.5px]
-                // matches the right-panel footer tabs (Run/Setup) and the aux
-                // strip; `compact` only adjusts the box, not the font.
-                "flex shrink-0 items-center gap-1.5 rounded-md whitespace-nowrap text-[12.5px] transition-colors",
-                compact ? "h-7 px-2" : "px-2 py-0.5",
-                queueRunning
-                  ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                  : "bg-[var(--color-bg-2)] text-[var(--color-fg)] hover:bg-[var(--color-bg-3)]",
-                !canQueue && "cursor-not-allowed opacity-40 hover:bg-[var(--color-bg-2)]",
-              )}
+              // The raised segment: a queue is holding messages, or you are
+              // in its popover. Nothing animates while it sends.
+              data-active={segmentActive ? "" : undefined}
+              className="footer-seg"
             >
-              <MessageSquarePlus className={cn("h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]", queueRunning && "animate-pulse")} />
-              {/* The COUNT survives the collapse, the words do not: "3
-                  queued" is a number you are watching, "Queue messages" is a
-                  label for a button whose icon already says it. */}
-              <span className={cn("tabular-nums", !showBadge && "@max-[680px]:hidden")}>
-                {showBadge ? badgeLabel : t("queue.button")}
-              </span>
+              <FooterQueueGlyph size={15} className="footer-seg-accent footer-ink shrink-0" />
+              {/* The COUNT survives the collapse, the words do not: the count
+                  is a number you are watching, "Queue messages" is a label for
+                  a button whose icon already says it. */}
+              <span className="footer-ink @max-[680px]:hidden">{t("queue.button")}</span>
+              {showBadge && (
+                <span data-testid="queue-count" title={badgeLabel} className="footer-count footer-ink">{queuedCount}</span>
+              )}
             </button>
           </PopoverTrigger>
         </span>

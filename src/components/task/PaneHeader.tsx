@@ -1,5 +1,5 @@
 // Per-pane tab strip for split panes.
-// Matches the main TabBar exactly (h-9, same TabPill components, same + dropdown)
+// The same session bar as the main TabBar (shell, well, TabPill, + dropdown)
 // so every pane looks like a first-class pane, not a secondary chrome strip.
 //
 // Tab pills can be dragged onto another pane's header (move tab to that pane)
@@ -12,14 +12,14 @@ import type { Task, Tab } from "@/lib/types";
 import type { PaneLeaf } from "@/lib/splitTree";
 import { useApp } from "@/store/app";
 import { useShallow } from "zustand/react/shallow";
-import { TabPill } from "./TabBar";
-import { Button } from "@/components/ui/Button";
+import { TabPill, scrollSideways } from "./TabBar";
+import { CloseGlyph, PlusGlyph } from "./sessionBarIcons";
+import { useUI } from "@/store/ui";
 import {
   DropdownRoot, DropdownTrigger, DropdownMenu,
   DropdownItem, DropdownLabel, DropdownSeparator,
 } from "@/components/ui/Dropdown";
 import { CliIcon, CLI_BRAND_COLOR } from "@/icons/cli";
-import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { visibleCliIds, isTerminalEntry } from "@/lib/agents";
 import { focusPaneTab } from "@/lib/tabFocus";
@@ -212,6 +212,7 @@ export function PaneHeader({ leaf, task, onClose }: PaneHeaderProps) {
 
   const activeTaskPaneId = useApp(s => s.activePaneId[task.id] ?? "");
   const isPaneFocused = activeTaskPaneId === paneId;
+  const windowFocused = useUI(s => s.windowFocused);
 
   const registry        = useApp(s => s.agents);
   const detectedClis    = useApp(s => s.detectedClis);
@@ -294,92 +295,94 @@ export function PaneHeader({ leaf, task, onClose }: PaneHeaderProps) {
     </TabContextMenu>
   );
 
+  const tabsDragging = !!dragTabId;
+
   return (
     <div
       data-pane-header=""
       data-pane-id={paneId}
-      className="termic-tabstrip flex h-9 shrink-0 items-stretch border-b border-[var(--color-border-soft)] bg-[var(--color-bg-1)] select-none"
+      data-inactive={windowFocused ? undefined : ""}
+      className="sessionbar"
     >
-      {/* Tab pills — same geometry as the main TabBar, including its fixed
-          pinned region + scrolling remainder. */}
-      <div className="flex min-w-0 flex-1 items-stretch pl-2">
+      {/* Same well as the main session bar, including its fixed pinned
+          region and scrolling remainder. */}
+      <div className="sessionbar-main">
         {paneTabs.length === 0 ? (
-          <span className="flex items-center px-2 text-[12.5px] italic text-[var(--color-fg-faint)]">
-            {t("paneHeader.newPane")}
-          </span>
+          <span className="sessionbar-empty">{t("paneHeader.newPane")}</span>
         ) : (
-          <>
+          <div className="sessionbar-well" data-dragging={tabsDragging ? "" : undefined}>
             {pinnedTabs.length > 0 && (
               <>
-                <div data-pinned-strip="" className="flex shrink-0 items-stretch overflow-x-auto no-scrollbar max-w-[55%]">
+                <div data-pinned-strip="" className="sessionbar-pinned" onWheel={scrollSideways}>
                   {pinnedTabs.map(renderPill)}
                 </div>
-                <div className="mx-1 h-5 w-px shrink-0 self-center bg-[var(--color-border-soft)]" />
+                <span className="sessionbar-well-rule" />
               </>
             )}
-            <div data-scroll-strip="" className="flex min-w-0 flex-1 items-stretch overflow-x-auto no-scrollbar">
+            <div data-scroll-strip="" className="sessionbar-scroll" onWheel={scrollSideways}>
               {looseTabs.map(renderPill)}
             </div>
-          </>
+          </div>
         )}
+
+        {/* + dropdown: same agent/shell menu as the main TabBar. */}
+        <DropdownRoot open={open} onOpenChange={setOpen}>
+          <DropdownTrigger asChild>
+            <button type="button" data-testid="pane-strip-new" aria-label={t("tabBar.newAria")} className="sessionbar-new">
+              <PlusGlyph size={15} />
+            </button>
+          </DropdownTrigger>
+          <DropdownMenu
+            align="start"
+            onCloseAutoFocus={(e) => {
+              if (suppressDropdownReturn.current) {
+                suppressDropdownReturn.current = false;
+                e.preventDefault();
+              }
+            }}
+          >
+            <DropdownLabel>{t("newTab.newTerminal")}</DropdownLabel>
+            <DropdownItem onSelect={() => spawnPaneTab('shell')}>
+              <span className="shrink-0 text-[var(--color-fg-dim)]">
+                <CliIcon cli="shell" className="h-4 w-4" />
+              </span>
+              {t("newTab.terminal")}
+            </DropdownItem>
+            {customTerminals.map(a => (
+              <DropdownItem key={a.id} onSelect={() => spawnPaneTab(a.id)}>
+                <span className={cn("shrink-0", CLI_BRAND_COLOR[a.icon_id] || "text-[var(--color-fg-dim)]")}>
+                  <CliIcon cli={a.icon_id} className="h-4 w-4" />
+                </span>
+                {a.display_name}
+              </DropdownItem>
+            ))}
+            {agentEntries.length > 0 && (
+              <>
+                <DropdownSeparator />
+                <DropdownLabel>{t("newTab.newAgent")}</DropdownLabel>
+                {agentEntries.map(a => (
+                  <DropdownItem key={a.id} onSelect={() => spawnPaneTab(a.id)}>
+                    <span className={cn("shrink-0", CLI_BRAND_COLOR[a.icon_id] || "text-[var(--color-fg-dim)]")}>
+                      <CliIcon cli={a.icon_id} className="h-4 w-4" />
+                    </span>
+                    {a.display_name}
+                  </DropdownItem>
+                ))}
+              </>
+            )}
+          </DropdownMenu>
+        </DropdownRoot>
       </div>
 
-      {/* + dropdown: same agent/shell menu as the main TabBar. */}
-      <DropdownRoot open={open} onOpenChange={setOpen}>
-        <DropdownTrigger asChild>
-          <Button size="icon" variant="icon" className="h-8 w-8 shrink-0 self-center">
-            <Plus className="h-4 w-4" />
-          </Button>
-        </DropdownTrigger>
-        <DropdownMenu
-          align="end"
-          onCloseAutoFocus={(e) => {
-            if (suppressDropdownReturn.current) {
-              suppressDropdownReturn.current = false;
-              e.preventDefault();
-            }
-          }}
-        >
-          <DropdownLabel>{t("newTab.newTerminal")}</DropdownLabel>
-          <DropdownItem onSelect={() => spawnPaneTab('shell')}>
-            <span className="shrink-0 text-[var(--color-fg-dim)]">
-              <CliIcon cli="shell" className="h-4 w-4" />
-            </span>
-            {t("newTab.terminal")}
-          </DropdownItem>
-          {customTerminals.map(a => (
-            <DropdownItem key={a.id} onSelect={() => spawnPaneTab(a.id)}>
-              <span className={cn("shrink-0", CLI_BRAND_COLOR[a.icon_id] || "text-[var(--color-fg-dim)]")}>
-                <CliIcon cli={a.icon_id} className="h-4 w-4" />
-              </span>
-              {a.display_name}
-            </DropdownItem>
-          ))}
-          {agentEntries.length > 0 && (
-            <>
-              <DropdownSeparator />
-              <DropdownLabel>{t("newTab.newAgent")}</DropdownLabel>
-              {agentEntries.map(a => (
-                <DropdownItem key={a.id} onSelect={() => spawnPaneTab(a.id)}>
-                  <span className={cn("shrink-0", CLI_BRAND_COLOR[a.icon_id] || "text-[var(--color-fg-dim)]")}>
-                    <CliIcon cli={a.icon_id} className="h-4 w-4" />
-                  </span>
-                  {a.display_name}
-                </DropdownItem>
-              ))}
-            </>
-          )}
-        </DropdownMenu>
-      </DropdownRoot>
-
-      {/* Close pane. */}
       <button
+        type="button"
         data-pane-close=""
         title={t("paneHeader.closePaneTip")}
+        aria-label={t("paneHeader.closePaneTip")}
         onClick={(e) => { e.stopPropagation(); onClose(); }}
-        className="shrink-0 self-center rounded p-1 mr-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+        className="sessionbar-new"
       >
-        <X className="h-4 w-4" />
+        <CloseGlyph size={13} strokeWidth={1.8} />
       </button>
     </div>
   );
