@@ -984,7 +984,7 @@ describe("agent extras", () => {
   // terminal before typing. A store-level drive cannot see that wiring.
   it("opens an aux (bottom) terminal from the footer button and focuses it", async () => {
     await ensureActiveTask(taskId!);
-    await clickByText("Terminal");
+    await clickWhenVisible(`[data-task-id="${taskId}"] [data-testid="footer-terminal"]`);
 
     await browser.waitUntil(
       () =>

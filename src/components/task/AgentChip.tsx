@@ -422,7 +422,8 @@ export function AgentChip({ taskId, agentId, cwd, docker, accounts, visible, cla
           )}
           {entry?.weekly && (
             <UsageWindowReadout
-              window={entry.weekly} unit={t("agentChip.weeklyUnit")} stale={stale} testid="wk"
+              window={entry.weekly} unit={entry.session ? t("agentChip.weeklyShort") : t("agentChip.weeklyUnit")} stale={stale} testid="wk"
+              compact={!!entry.session}
             />
           )}
           {/* Spend since launch, and ONLY for an account with no plan, which
@@ -981,7 +982,10 @@ function sessionUnit(words: ReturnType<typeof shortWindowWords>): string {
   return words.chip === "5h" ? words.chip : words.limit;
 }
 
-/** One window's reading: a 64px meter, then "42% of 5h limit".
+/** One window's reading: a 64px meter, then "42% of 5h limit". A window
+ *  that is not the chip's lead (the week beside the session, the context)
+ *  is `compact`: a 24px meter and "95% wk", so a chip carrying every
+ *  reading still fits the bar beside a second agent's.
  *
  *  A window used to be a filled background behind its own figure, after a
  *  single bar beside the 5h number was read as that number's gauge while it
@@ -992,8 +996,8 @@ function sessionUnit(words: ReturnType<typeof shortWindowWords>): string {
  *  The meter's width eases over 300ms; its colour comes from `data-level` in
  *  index.css (accent, then warn, then err), never from `transition-colors`,
  *  which never repaints a themed colour in WKWebView (docs/gotchas.md). */
-function UsageWindowReadout({ window: w, unit, stale, testid }: {
-  window: UsageWindow; unit: string; stale: boolean; testid: string;
+function UsageWindowReadout({ window: w, unit, stale, testid, compact = false }: {
+  window: UsageWindow; unit: string; stale: boolean; testid: string; compact?: boolean;
 }) {
   const { t } = useTranslation("task");
   const level = usageLevel(w.usedPercent);
@@ -1010,13 +1014,16 @@ function UsageWindowReadout({ window: w, unit, stale, testid }: {
       data-usage-fill={fill}
       data-level={level}
       data-stale={stale ? "" : undefined}
+      data-compact={compact ? "" : undefined}
       className="footer-usage-window"
     >
       <span aria-hidden className="footer-meter">
         <span className="footer-meter-fill" style={{ width: `${fill}%` }} />
       </span>
       <span className="footer-usage-label footer-ink">
-        {t("agentChip.windowLimit", { percent: formatPercent(w), unit })}
+        {compact
+          ? <>{formatPercent(w)} <Unit>{unit}</Unit></>
+          : t("agentChip.windowLimit", { percent: formatPercent(w), unit })}
       </span>
     </span>
   );
@@ -1035,6 +1042,7 @@ function ContextReadout({ entry }: { entry: ContextEntry }) {
       data-testid="context-gauge"
       data-usage-fill={fill}
       data-level={level}
+      data-compact=""
       title={t("agentChip.contextChipTip", { used: formatTokens(entry.usedTokens), total: formatTokens(entry.windowTokens) })}
       className="footer-usage-window"
     >

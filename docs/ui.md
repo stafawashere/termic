@@ -2450,10 +2450,12 @@ on every task click would be the wrong trade.
 ## The usage readout: one meter per window, named in words
 
 The task footer's usage chip (GH #277) is a recessed well (`.footer-usage`):
-the agent's brand glyph with a soft glow, then one reading per window, each a
-64x4 meter followed by its figure in words, `42% of 5h limit` and `95% of
-weekly limit`. It has been four designs, and the reasons are worth keeping
-because they are not about this chip.
+the agent's brand glyph with a soft glow, then one reading per window. The
+lead window gets a 64x4 meter and its figure in words, `42% of 5h limit`;
+any reading beside it (the week next to the session, the context) is
+compact, a 24px meter and `95% wk`, so a chip carrying everything stays
+near 290px and two agents still fit one bar. It has been four designs, and
+the reasons are worth keeping because they are not about this chip.
 
 One bar, showing whichever window was closest to its limit, sat hard against
 the 5h number and displayed the OTHER one. Two pill bars fixed that and left
@@ -2510,6 +2512,11 @@ count changes, never per pixel.
 The chips also sit in their own `min-w-0 overflow-hidden` box inside the right
 group, so width is shed from the left and the sandbox chip stays pinned as
 the rightmost item whatever happens.
+
+The footer classes live in `@layer components` in `index.css`. Unlayered,
+`.footer-usage`'s `display: flex` beat the chip's container-query `hidden`
+utility (layered CSS always loses to unlayered), so no chip ever hid and
+two chips ran past a 600px bar.
 
 ## Scheduled queue messages (GH #300)
 

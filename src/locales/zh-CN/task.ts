@@ -402,6 +402,7 @@ export default {
     usageUnknown: "用量未知",
     windowLimit: "{{unit}}额度已用 {{percent}}",
     weeklyUnit: "每周",
+    weeklyShort: "周",
     weekly: "每周",
     weeklySub: "滚动 7 天",
     consumedLabel: "本计费周期已用 {{unit}}",

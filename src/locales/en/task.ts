@@ -407,6 +407,7 @@ export default {
     usageUnknown: "Usage unknown",
     windowLimit: "{{percent}} of {{unit}} limit",
     weeklyUnit: "weekly",
+    weeklyShort: "wk",
     weekly: "Weekly",
     weeklySub: "rolling 7 days",
     consumedLabel: "{{unit}}s this billing period",

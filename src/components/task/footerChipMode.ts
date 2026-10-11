@@ -21,16 +21,16 @@
 // carry a NUMBER, because nothing here knows how many chips actually fit. It
 // says "there are more", which is the honest thing CSS can express.
 
-/** Width a full chip needs, gap included. Measured in the e2e window: a chip
- *  with both plan windows and no account name renders at 174px, and the strip
- *  puts 6px between them. */
-const CHIP_W = 180;
+/** Width a full chip needs, gap included. Measured in the preview: a chip
+ *  with the session meter, the compact weekly one and no account name renders
+ *  at 291px, and the strip puts 8px between them. */
+const CHIP_W = 300;
 
-/** What the bar owes everything that is not a secondary chip: the queue and
- *  Terminal controls on the left (~214px with their labels), the ACTIVE
- *  agent's chip (~174px, never hidden), the sandbox status pinned right
- *  (~92px), and the overflow marker (~28px). */
-const BAR_CHROME_W = 508;
+/** What the bar owes everything that is not a secondary chip: the Queue and
+ *  Terminal well on the left (~247px with their labels), the ACTIVE agent's
+ *  chip (~291px, never hidden), the sandbox chip pinned right (~135px), the
+ *  overflow marker (~28px) and the bar's padding and gaps (~46px). */
+const BAR_CHROME_W = 750;
 
 // Tailwind needs these as literal strings, so the table is written out rather
 // than computed: `BAR_CHROME_W + CHIP_W * k`, k = 1..8. Past the table's end
@@ -41,27 +41,27 @@ const BAR_CHROME_W = 508;
 /** Hide the k-th secondary chip (1-based) below the width at which it stops
  *  fitting, so the bar sheds from the tail as it narrows. */
 const SECONDARY_HIDE = [
-  "@max-[688px]:hidden",
-  "@max-[868px]:hidden",
-  "@max-[1048px]:hidden",
-  "@max-[1228px]:hidden",
-  "@max-[1408px]:hidden",
-  "@max-[1588px]:hidden",
-  "@max-[1768px]:hidden",
-  "@max-[1948px]:hidden",
+  "@max-[1050px]:hidden",
+  "@max-[1350px]:hidden",
+  "@max-[1650px]:hidden",
+  "@max-[1950px]:hidden",
+  "@max-[2250px]:hidden",
+  "@max-[2550px]:hidden",
+  "@max-[2850px]:hidden",
+  "@max-[3150px]:hidden",
 ] as const;
 
 /** Hide the overflow marker ABOVE the width at which the last secondary chip
  *  fits, i.e. show it exactly while at least one chip is missing. */
 const MORE_HIDE = [
-  "@min-[688px]:hidden",
-  "@min-[868px]:hidden",
-  "@min-[1048px]:hidden",
-  "@min-[1228px]:hidden",
-  "@min-[1408px]:hidden",
-  "@min-[1588px]:hidden",
-  "@min-[1768px]:hidden",
-  "@min-[1948px]:hidden",
+  "@min-[1050px]:hidden",
+  "@min-[1350px]:hidden",
+  "@min-[1650px]:hidden",
+  "@min-[1950px]:hidden",
+  "@min-[2250px]:hidden",
+  "@min-[2550px]:hidden",
+  "@min-[2850px]:hidden",
+  "@min-[3150px]:hidden",
 ] as const;
 
 const at = (table: readonly string[], k: number) => table[Math.min(k, table.length - 1)]!;
