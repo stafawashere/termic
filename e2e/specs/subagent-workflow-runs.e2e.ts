@@ -61,6 +61,10 @@ interface DrawnRow {
   label: string;
   depth: string;
   left: number;
+  icon: string | null;
+  iconLeft: number;
+  labelLeft: number;
+  height: number;
 }
 
 describe("subagent workflow runs", () => {
@@ -131,12 +135,17 @@ describe("subagent workflow runs", () => {
         const testId = el.getAttribute("data-testid");
         const kind = testId === "workflow-run-row" ? "run" : testId === "workflow-phase-row" ? "phase" : "agent";
         const id = el.getAttribute("data-run-id") ?? el.getAttribute("data-phase-key") ?? el.getAttribute("data-agent-id") ?? "";
+        const icon = el.querySelector<HTMLElement>('[data-testid="subagent-row-icon"]');
         return {
           kind,
           id,
           label: (el.textContent ?? "").trim(),
           depth: el.getAttribute("data-depth") ?? "",
           left: el.getBoundingClientRect().left,
+          icon: icon?.getAttribute("data-icon") ?? null,
+          iconLeft: icon?.getBoundingClientRect().left ?? -1,
+          labelLeft: el.querySelector("span.truncate")!.getBoundingClientRect().left,
+          height: el.getBoundingClientRect().height,
         } as DrawnRow;
       });
     }, taskId, RUN_ROW, PHASE_ROW, AGENT_ROW);
@@ -332,6 +341,18 @@ describe("subagent workflow runs", () => {
     expect(loose.left).toBe(plan.left);
     expect(byId(BUILD_AGENT).left).toBe(phased.left);
     expect(byId(ORPHAN_RUN).left).toBe(run.left);
+
+    const iconOf = (row: DrawnRow) => row.icon;
+    expect(rows.map(iconOf)).toEqual(["workflow", "layers", "bot", "layers", "bot", "bot", "workflow"]);
+    // Every kind leads with its icon the same distance into the row, so a
+    // phase and the loose agent beside it line up icon for icon and label
+    // for label.
+    const iconInset = run.iconLeft - run.left;
+    expect(rows.every(row => row.iconLeft - row.left === iconInset)).toBe(true);
+    expect(loose.iconLeft).toBe(plan.iconLeft);
+    expect(loose.labelLeft).toBe(plan.labelLeft);
+    expect(phased.labelLeft - plan.labelLeft).toBe(plan.labelLeft - run.labelLeft);
+    expect(new Set(rows.map(row => row.height)).size).toBe(1);
     await snap("workflow-run-expanded.png");
   });
 

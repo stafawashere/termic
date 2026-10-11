@@ -14,7 +14,7 @@ import { useSubagents, type SubagentState } from "@/store/subagents";
 import {
   createWorkflowRunCountsSelector, selectWorkflowRunName, type SubagentRowRules,
 } from "./subagentTree";
-import { FoldChevron, indentClass, StateMark } from "./subagentRowParts";
+import { FoldChevron, indentClass, RowIcon, StateMark } from "./subagentRowParts";
 
 type RunState = Extract<SubagentState, "running" | "failed" | "done">;
 
@@ -86,6 +86,7 @@ export const WorkflowRunRow = memo(function WorkflowRunRow({ tabId, runId, inden
       )}
     >
       <FoldChevron testId="workflow-run-fold" folded={!open} label={foldLabel} onToggle={toggle} />
+      <RowIcon name="workflow" />
       <span className="min-w-0 flex-1 truncate" title={name}>{name}</span>
       <span
         data-testid="workflow-run-count"
