@@ -368,6 +368,8 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   const endsAfterStart = endedAt !== null && endedAt > startedAt;
   const durationMs = endsAfterStart ? endedAt - startedAt : null;
 
+  const modeLine = <BottomBar verbose={verbose} onToggleVerbose={toggleVerbose} t={t} />;
+
   const goneTitle =
     status === "expired" ? t("subagentView.expired")
       : isRunning ? t("subagentView.missing")
@@ -498,14 +500,13 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
             durationMs={durationMs}
             toolUses={stats.toolUses}
             outputTokens={stats.outputTokens}
+            modeLine={modeLine}
             t={t}
           />
         </div>
       )}
 
-      <div className="shrink-0 w-[var(--content)]">
-        <BottomBar verbose={verbose} onToggleVerbose={toggleVerbose} t={t} />
-      </div>
+      {!footerState && <div className="shrink-0 w-[var(--content)]">{modeLine}</div>}
 
       {!following && rows.length > 0 && (
         <button

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import type { TFunction } from "i18next";
 import { cn } from "@/lib/utils";
 import { formatElapsed, formatTokens, spinnerSuffix } from "@/lib/subagentCliView";
@@ -112,7 +112,7 @@ const STATE_DOT: Record<FooterState, string> = {
  *  elapsed time and output tokens on the right. */
 export function Footer({
   state, agentType, activity, message, toolRunning, thinking, lastAtMs, stallStepped, startedAt, durationMs, toolUses,
-  outputTokens, t,
+  outputTokens, modeLine, t,
 }: {
   state: FooterState;
   agentType: string;
@@ -131,6 +131,8 @@ export function Footer({
   durationMs: number | null;
   toolUses: number;
   outputTokens: number;
+  /** Claude's mode line, drawn between the spinner and the agent list. */
+  modeLine?: ReactNode;
   t: TFunction<"task">;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -187,6 +189,7 @@ export function Footer({
           </span>
         </div>
       )}
+      {modeLine}
       <div
         data-testid="subagent-agent-list"
         className="pt-[var(--row)]"

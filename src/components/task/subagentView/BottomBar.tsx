@@ -30,8 +30,9 @@ function Toggle({ id, label, on, onFlip, value, t }: {
   );
 }
 
-/** The view's own settings as one dim row under the agent list, in the
- *  place and style claude keeps its mode line. Every toggle writes the
+/** The view's own settings as one dim row in the place and style claude
+ *  keeps its mode line: a blank row above, two cells in, one line, parts
+ *  joined by a middle dot, then a blank row before the agent list. Every toggle writes the
  *  same pref Settings does, so the two always agree. Verbose is ctrl+o's
  *  state and belongs to this pane only. */
 export function BottomBar({ verbose, onToggleVerbose, t }: {
@@ -59,7 +60,7 @@ export function BottomBar({ verbose, onToggleVerbose, t }: {
       data-testid="subagent-bottom-bar"
       role="toolbar"
       aria-label={t("subagentView.barLabel")}
-      className="flex min-w-0 flex-wrap pt-[var(--row)]"
+      className="flex min-w-0 overflow-hidden whitespace-pre pt-[var(--row)]"
       style={{ paddingLeft: "calc(var(--cell) * 2)", paddingRight: "calc(var(--cell) * 2)" }}
     >
       <Toggle id="verbose" label={t("subagentView.barVerbose")} on={verbose} onFlip={onToggleVerbose} t={t} />

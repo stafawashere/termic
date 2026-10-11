@@ -590,8 +590,10 @@ terminal tabs are durable.
   so before every earlier page is loaded they cover the newest part only;
   times come from the transcript's own timestamps when entry 0 is held,
   else from the record.
-- **Bottom bar.** Under the agent list, one dim row two cells in holds the
-  view's settings as clickable toggles (`subagentView/BottomBar.tsx`):
+- **Bottom bar.** In the place of claude's mode line ("auto mode on
+  (shift+tab to cycle)"), between the spinner row and the agent list with
+  a blank row on each side, one dim line two cells in, never wrapped,
+  holds the view's settings as clickable toggles (`subagentView/BottomBar.tsx`):
   verbose (ctrl+o's state, this pane only), thinking, tool inputs, tool
   outputs, the output cap (stepping 20, 40, 100, off through
   `nextTruncateLines`) and follow. Each writes the same pref as Settings,
