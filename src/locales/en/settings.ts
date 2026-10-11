@@ -174,7 +174,7 @@ export default {
         },
         workflow: {
           label: "Workflow agents",
-          hint: "Workflow agents are not shown in the sidebar yet.",
+          hint: "Workflow runs and the agents they start. Off hides each run's row and every agent under it.",
         },
       },
       retention: {

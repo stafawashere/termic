@@ -36,7 +36,9 @@ import { subagentsEnabled } from "@/lib/subagentGate";
 import { installSubagentsEnabledWatch } from "@/lib/subagentSettingsWatch";
 import { useApp } from "@/store/app";
 import { usePrefs } from "@/store/prefs";
-import { receiveSubagentEvent, selectTabSubagents, useSubagents } from "@/store/subagents";
+import { receiveSubagentEvent, selectTabSubagents, useSubagents, type SubagentRecord, type TabSubagents } from "@/store/subagents";
+import { createSubagentStructureSelector, subagentGroupStartsCollapsed } from "@/components/sidebar/subagentTree";
+import { SUBAGENT_TYPE_FILTER_VERSION, parseSubagentTypeFilter, retentionWindowMs } from "@/lib/subagentPrefs";
 import { openTranscriptSession, type TranscriptSnapshot } from "@/store/subagentPreview";
 import type { Tab, Task } from "@/lib/types";
 
@@ -215,5 +217,98 @@ describe("claude subagents switched back on", () => {
     openView(TASK, "view-1", SESSION, AGENT_A);
 
     expect(subagentWatchOpen).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the stored type filter", () => {
+  const PHASE_ONE_FILTER = '{"builtIn":false,"custom":true,"fork":true,"workflow":false}';
+
+  it("reads a phase 1 filter with workflow forced on, and keeps the kinds the user chose", () => {
+    expect(parseSubagentTypeFilter(PHASE_ONE_FILTER)).toEqual({ builtIn: false, custom: true, fork: true, workflow: true });
+  });
+
+  it("honours workflow off in a filter that carries the version marker", () => {
+    const stored = '{"v":2,"builtIn":true,"custom":true,"fork":true,"workflow":false}';
+
+    expect(parseSubagentTypeFilter(stored).workflow).toBe(false);
+  });
+
+  it("writes the marker, so a workflow choice made now survives the next read", () => {
+    usePrefs.getState().setSubagentTypeFilter("workflow", false);
+    const written = localStorage.getItem("subagentTypeFilter");
+
+    expect(JSON.parse(written!).v).toBe(SUBAGENT_TYPE_FILTER_VERSION);
+    expect(parseSubagentTypeFilter(written).workflow).toBe(false);
+    usePrefs.getState().setSubagentTypeFilter("workflow", true);
+  });
+});
+
+describe("the sidebar following a settings change", () => {
+  const WORKFLOW_AGENT = "a2123456789abcdef";
+
+  function record(agentId: string, agentType: string, isWorkflow: boolean): SubagentRecord {
+    return {
+      agentId, agentType, isWorkflow, state: "done", startedAt: 1_000, endedAt: 2_000, source: "hook",
+      parentAgentId: null, workflowRunId: isWorkflow ? "wf_run1" : null, workflowPhase: null,
+    };
+  }
+
+  const entry: TabSubagents = {
+    taskId: TASK,
+    sessionId: SESSION,
+    agents: {
+      [AGENT_A]: record(AGENT_A, "Explore", false),
+      [WORKFLOW_AGENT]: record(WORKFLOW_AGENT, "workflow-step", true),
+    },
+    order: [AGENT_A, WORKFLOW_AGENT],
+    runs: {},
+  };
+  const state = { byTab: { [TAB]: entry } };
+
+  // What useVisibleSubagentStructure does on every pref change: fresh rules
+  // from the store, a fresh selector, and the key it reads.
+  function visibleKey(): string {
+    const { subagentTypeFilter, subagentRetention } = usePrefs.getState();
+    const rules = { typeFilter: subagentTypeFilter, retentionMs: retentionWindowMs(subagentRetention), now: 3_000 };
+    return createSubagentStructureSelector(TAB, rules)(state);
+  }
+
+  beforeEach(() => {
+    const s = usePrefs.getState();
+    s.setSubagentTypeFilter("builtIn", true);
+    s.setSubagentTypeFilter("workflow", true);
+    s.setSubagentAutoCollapse("never");
+  });
+
+  it("hands the sidebar a new filter object when workflow flips, so its rules rebuild", () => {
+    const before = usePrefs.getState().subagentTypeFilter;
+    usePrefs.getState().setSubagentTypeFilter("workflow", false);
+    const after = usePrefs.getState().subagentTypeFilter;
+
+    expect(after).not.toBe(before);
+    expect(after.workflow).toBe(false);
+    expect(before.workflow).toBe(true);
+  });
+
+  it("drops and restores a row when its kind is switched off and on, with no reload", () => {
+    const shown = visibleKey();
+    expect(shown).toContain(AGENT_A);
+
+    usePrefs.getState().setSubagentTypeFilter("builtIn", false);
+    expect(visibleKey()).not.toContain(AGENT_A);
+
+    usePrefs.getState().setSubagentTypeFilter("builtIn", true);
+    expect(visibleKey()).toBe(shown);
+  });
+
+  it("folds a finished group as soon as auto-collapse changes", () => {
+    const startsCollapsed = () => subagentGroupStartsCollapsed(entry, usePrefs.getState().subagentAutoCollapse);
+    expect(startsCollapsed()).toBe(false);
+
+    usePrefs.getState().setSubagentAutoCollapse("allFinished");
+    expect(startsCollapsed()).toBe(true);
+
+    usePrefs.getState().setSubagentAutoCollapse("never");
+    expect(startsCollapsed()).toBe(false);
   });
 });

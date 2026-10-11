@@ -173,7 +173,7 @@ export default {
         },
         workflow: {
           label: "工作流智能体",
-          hint: "工作流智能体暂不在侧边栏中显示。",
+          hint: "工作流运行及其启动的智能体。关闭后隐藏每个运行的行及其下的所有智能体。",
         },
       },
       retention: {

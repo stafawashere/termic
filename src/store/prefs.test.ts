@@ -867,7 +867,7 @@ describe("prefs: claude subagents", () => {
     const s = usePrefs.getState();
 
     expect(s.subagentsEnabled).toBe(true);
-    expect(s.subagentTypeFilter).toEqual({ builtIn: true, custom: true, fork: true, workflow: false });
+    expect(s.subagentTypeFilter).toEqual({ builtIn: true, custom: true, fork: true, workflow: true });
     expect(s.subagentRetention).toBe("session");
     expect(s.subagentAutoCollapse).toBe("never");
     expect(s.subagentViewShowThinking).toBe(true);
@@ -879,7 +879,7 @@ describe("prefs: claude subagents", () => {
 
   it("reads persisted values back on load", async () => {
     localStorage.setItem("subagentsEnabled", "0");
-    localStorage.setItem("subagentTypeFilter", '{"builtIn":false,"custom":true,"fork":false,"workflow":true}');
+    localStorage.setItem("subagentTypeFilter", '{"v":2,"builtIn":false,"custom":true,"fork":false,"workflow":false}');
     localStorage.setItem("subagentRetention", "tenMinutes");
     localStorage.setItem("subagentAutoCollapse", "allFinished");
     localStorage.setItem("subagentViewShowThinking", "0");
@@ -891,7 +891,7 @@ describe("prefs: claude subagents", () => {
     const s = usePrefs.getState();
 
     expect(s.subagentsEnabled).toBe(false);
-    expect(s.subagentTypeFilter).toEqual({ builtIn: false, custom: true, fork: false, workflow: true });
+    expect(s.subagentTypeFilter).toEqual({ builtIn: false, custom: true, fork: false, workflow: false });
     expect(s.subagentRetention).toBe("tenMinutes");
     expect(s.subagentAutoCollapse).toBe("allFinished");
     expect(s.subagentViewShowThinking).toBe(false);
@@ -913,7 +913,7 @@ describe("prefs: claude subagents", () => {
     const s = usePrefs.getState();
 
     expect(s.subagentsEnabled).toBe(true);
-    expect(s.subagentTypeFilter).toEqual({ builtIn: true, custom: false, fork: true, workflow: false });
+    expect(s.subagentTypeFilter).toEqual({ builtIn: true, custom: false, fork: true, workflow: true });
     expect(s.subagentRetention).toBe("session");
     expect(s.subagentAutoCollapse).toBe("never");
     expect(s.subagentViewShowThinking).toBe(true);
@@ -926,7 +926,7 @@ describe("prefs: claude subagents", () => {
     localStorage.setItem("subagentViewTruncateLines", "2.5");
     const { usePrefs } = await import("./prefs");
 
-    expect(usePrefs.getState().subagentTypeFilter).toEqual({ builtIn: true, custom: true, fork: true, workflow: false });
+    expect(usePrefs.getState().subagentTypeFilter).toEqual({ builtIn: true, custom: true, fork: true, workflow: true });
     expect(usePrefs.getState().subagentViewTruncateLines).toBe(40);
   });
 
@@ -948,7 +948,7 @@ describe("prefs: claude subagents", () => {
     const reloaded = usePrefs.getState();
 
     expect(reloaded.subagentsEnabled).toBe(false);
-    expect(reloaded.subagentTypeFilter).toEqual({ builtIn: true, custom: false, fork: true, workflow: false });
+    expect(reloaded.subagentTypeFilter).toEqual({ builtIn: true, custom: false, fork: true, workflow: true });
     expect(reloaded.subagentRetention).toBe("hour");
     expect(reloaded.subagentAutoCollapse).toBe("always");
     expect(reloaded.subagentViewShowThinking).toBe(false);
@@ -1000,7 +1000,7 @@ describe("prefs: claude subagents", () => {
     const notified = countNotifications(usePrefs, () => {
       s.setSubagentsEnabled(true);
       s.setSubagentTypeFilter("builtIn", true);
-      s.setSubagentTypeFilter("workflow", false);
+      s.setSubagentTypeFilter("workflow", true);
       s.setSubagentRetention("session");
       s.setSubagentAutoCollapse("never");
       s.setSubagentViewShowThinking(true);

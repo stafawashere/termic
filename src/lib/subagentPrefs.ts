@@ -7,14 +7,21 @@ import type { SubagentKind } from "@/lib/subagentKind";
 
 export type SubagentTypeFilter = Readonly<Record<SubagentKind, boolean>>;
 
-/** Workflow agents are recorded but never drawn yet, so their filter ships
- *  off and the settings page does not let it change. */
 export const DEFAULT_SUBAGENT_TYPE_FILTER: SubagentTypeFilter = Object.freeze({
   builtIn: true,
   custom: true,
   fork: true,
-  workflow: false,
+  workflow: true,
 });
+
+/** The `v` a stored filter carries. A filter with no `v` was written while
+ *  the workflow switch was disabled, so its workflow value was never a
+ *  choice and reads as the default. */
+export const SUBAGENT_TYPE_FILTER_VERSION = 2;
+
+export function serializeSubagentTypeFilter(filter: SubagentTypeFilter): string {
+  return JSON.stringify({ v: SUBAGENT_TYPE_FILTER_VERSION, ...filter });
+}
 
 export type SubagentRetention = "session" | "hour" | "tenMinutes" | "finished";
 
@@ -80,7 +87,11 @@ export function parseSubagentTypeFilter(raw: string | null): SubagentTypeFilter 
   if (!isRecord) return DEFAULT_SUBAGENT_TYPE_FILTER;
 
   const stored = parsed as Record<string, unknown>;
+  const isVersioned = stored.v === SUBAGENT_TYPE_FILTER_VERSION;
   const pick = (kind: SubagentKind): boolean => {
+    const isUnchosenWorkflow = kind === "workflow" && !isVersioned;
+    if (isUnchosenWorkflow) return DEFAULT_SUBAGENT_TYPE_FILTER.workflow;
+
     const value = stored[kind];
     return typeof value === "boolean" ? value : DEFAULT_SUBAGENT_TYPE_FILTER[kind];
   };

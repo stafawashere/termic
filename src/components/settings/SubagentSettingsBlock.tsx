@@ -4,8 +4,7 @@
 // applies to the running window at once.
 //
 // The row settings are profile-scoped and the view settings are global; see
-// the prefs they write in store/prefs.ts. The workflow filter is shown but
-// cannot change, because workflow agents have no row yet.
+// the prefs they write in store/prefs.ts.
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -68,7 +67,7 @@ function ChoiceRow({ label, hint, children }: { label: string; hint: string; chi
   );
 }
 
-const EDITABLE_KINDS: readonly Exclude<SubagentKind, "workflow">[] = ["builtIn", "custom", "fork"];
+const EDITABLE_KINDS: readonly SubagentKind[] = ["builtIn", "custom", "fork", "workflow"];
 
 export function SubagentSettingsBlock() {
   const { t } = useTranslation("settings");
@@ -143,15 +142,6 @@ export function SubagentSettingsBlock() {
               />
             </div>
           ))}
-          <div data-testid="subagent-setting-type-workflow">
-            <Toggle
-              label={t("tasks.subagents.types.workflow.label")}
-              hint={t("tasks.subagents.types.workflow.hint")}
-              value={typeFilter.workflow}
-              onChange={() => {}}
-              disabled
-            />
-          </div>
         </div>
 
         <ChoiceRow label={t("tasks.subagents.retention.label")} hint={t("tasks.subagents.retention.hint")}>

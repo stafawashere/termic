@@ -38,7 +38,7 @@ import { scoped } from "@/lib/profileScope";
 import type { SubagentKind } from "@/lib/subagentKind";
 import {
   parseStoredFlag, parseSubagentAutoCollapse, parseSubagentRetention, parseSubagentTypeFilter,
-  parseTruncateLines, type SubagentAutoCollapse, type SubagentRetention, type SubagentTypeFilter,
+  parseTruncateLines, serializeSubagentTypeFilter, type SubagentAutoCollapse, type SubagentRetention, type SubagentTypeFilter,
 } from "@/lib/subagentPrefs";
 import { encodeOpenWithPick, parseOpenWithPick } from "@/lib/openWith";
 import type { OpenWithPick } from "@/lib/types";
@@ -1751,7 +1751,7 @@ export const usePrefs = create<PrefsState>(set => ({
     if (current[kind] === v) return;
 
     const next: SubagentTypeFilter = Object.freeze({ ...current, [kind]: v });
-    try { localStorage.setItem(LS_SUBAGENT_TYPE_FILTER, JSON.stringify(next)); } catch {}
+    try { localStorage.setItem(LS_SUBAGENT_TYPE_FILTER, serializeSubagentTypeFilter(next)); } catch {}
     set({ subagentTypeFilter: next });
   },
   setSubagentRetention: (v) => {
