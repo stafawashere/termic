@@ -56,7 +56,7 @@ import { SubagentGroupToggle, SubagentRows, useSubagentFold, useSubagentHasRow }
 import { childRowCarriesSelection, subagentIdOfTab } from "./subagentTree";
 import { StatusChips } from "./StatusChips";
 import { AgentActivityReadout } from "./AgentActivityReadout";
-import { BranchGlyph, ChecklistGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, DotsVerticalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
+import { BranchGlyph, ChecklistGlyph, CritterGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, DotsVerticalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
 import { STATUS_BUCKETS } from "@/lib/sidebarStatus";
 import { StatusSection, StatusViewCount } from "./StatusSection";
 import { RollupMarks } from "./RollupMarks";
@@ -3856,8 +3856,12 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
         </span>
       </div>
 
-      {/* Tab children — terminal tabs only; edit/diff are transient file views */}
-      {!collapsed && terminalTabs.map(tab => {
+      {/* Session rows: terminal tabs only; edit/diff are transient file views.
+          Each block draws its own stretch of the guide, so the line stops at
+          the last session's elbow instead of running past its subagents. */}
+      {!collapsed && terminalTabs.length > 0 && (
+      <div className="mb-[4px] mt-[2px]">
+      {terminalTabs.map((tab, tabIndex) => {
         const isTabActive = isActive && tab.id === activeTabId;
         const isTabHot = isTabActive;
         const showBell    = attentionIndicator && tab.unread?.reason === "attention";
@@ -3873,9 +3877,21 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
           : formatTerminalTitle(rawTitle, resolveIconId(tab.cli, agents), workingIndicator);
         const isTabRenaming = tabRenaming?.id === tab.id;
         const isClaudeTab = builtinBaseId(tab.cli, agents) === "claude";
+        const isFirstSession = tabIndex === 0;
+        const isLastSession = tabIndex === terminalTabs.length - 1;
 
         return (
-          <Fragment key={tab.id}>
+          <div key={tab.id} className="relative">
+            <span
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute w-px bg-[var(--sidebar-connector)]",
+                isFirstSession ? "top-[-2px]" : "top-0",
+                isLastSession ? "h-[16px]" : "bottom-0",
+                isFirstSession && isLastSession && "h-[16px]",
+              )}
+              style={{ left: "calc(var(--sb-task-pad, 42px) + 4px)" }}
+            />
             <div
               onClick={() => {
                 setActive(w.id);
@@ -3885,21 +3901,30 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                 e.stopPropagation();
                 if (!isTabRenaming) setTabRenaming({ id: tab.id, value: title });
               }}
+              data-sidebar-tab-id={tab.id}
+              data-selected={isTabHot || undefined}
               className={cn(
-                "group/tab ml-8 flex items-center gap-1.5 rounded-md px-1.5 py-[3px] text-[12.5px] cursor-pointer select-none transition-colors",
+                "group/tab relative flex h-[var(--sidebar-row-h)] items-center gap-[8px] rounded-[6px] pl-[calc(var(--sb-task-pad,42px)+18px)] pr-[8px] text-[13px] cursor-pointer select-none transition-[color,background-color] duration-[120ms]",
                 isTabHot
-                  ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
-                  : isTabActive
-                    ? "bg-[var(--color-bg-2)] text-[var(--color-fg)]"
-                    : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
+                  ? "sidebar-selected text-[var(--sidebar-sel-ink)]"
+                  : "text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-row-hover)]",
               )}
             >
-              {/* Brand icon stays at the start; the work-state badge moves
-                  to the end of the row (after the title) per iTerm2's
-                  tab-bullet placement. */}
-              <span className={cn("shrink-0", CLI_BRAND_COLOR[resolveIconId(tab.cli, agents)] || "text-[var(--color-fg-dim)]")}>
-                <CliIcon cli={resolveIconId(tab.cli, agents)} className="h-3.5 w-3.5" />
-              </span>
+              <span
+                aria-hidden
+                className="pointer-events-none absolute top-[14px] h-px w-[9px] bg-[var(--sidebar-connector)]"
+                style={{ left: "calc(var(--sb-task-pad, 42px) + 4px)" }}
+              />
+              {/* The agent's mark leads; the work state trails at the end of
+                  the row, iTerm2's tab-bullet placement. Claude draws the
+                  critter in the accent, every other agent its own icon. */}
+              {isClaudeTab ? (
+                <CritterGlyph size={16} className="shrink-0 text-[var(--color-accent)]" />
+              ) : (
+                <span className={cn("shrink-0", CLI_BRAND_COLOR[resolveIconId(tab.cli, agents)] || "text-[var(--sidebar-icon)]")}>
+                  <CliIcon cli={resolveIconId(tab.cli, agents)} className="h-[15px] w-[15px]" />
+                </span>
+              )}
 
               {isTabRenaming ? (
                 <input
@@ -3920,7 +3945,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                   // (the row jumped a few px when entering rename mode).
                   // `leading-tight` keeps the text vertically centred against
                   // the surrounding non-renaming rows.
-                  className="min-w-0 flex-1 rounded border-0 bg-[var(--color-bg-2)] px-1 py-0 leading-tight text-[12.5px] text-[var(--color-fg)] outline-none ring-1 ring-inset ring-[var(--color-accent)]"
+                  className="sidebar-inline-input min-w-0 flex-1"
                 />
               ) : (
                 // Same reason as the tab pill: the badge slot is taken over by
@@ -3938,7 +3963,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                 <span
                   data-testid="tab-props"
                   title={tab.props.map(p => `${p.key}: ${p.value}`).join("\n")}
-                  className="min-w-0 max-w-[45%] shrink truncate text-[11px] text-[var(--color-fg-dim)]"
+                  className="min-w-0 max-w-[45%] shrink truncate text-[11px] text-[var(--sidebar-meta)]"
                 >{tab.props.map(p => p.value).join(" · ")}</span>
               )}
               {/* Run tabs (GH #54): the same two controls the tab pill carries,
@@ -3949,26 +3974,27 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
               {!isTabRenaming && tab.runTab && (
                 <RunTabControl taskId={w.id} tab={tab} title={title} isMounted={isMounted} />
               )}
-              {/* Trailing slot: status badge by default. Close × only
-                  appears when hovering the badge itself, not the whole
-                  row, so row hover keeps the badge visible. */}
-              <span className="group/badge relative flex h-4 w-4 shrink-0 items-center justify-center">
+              {/* Trailing slot: the state as a word (running, done) or its
+                  mark. Close only appears when hovering the slot itself,
+                  not the whole row, so row hover keeps the state visible. */}
+              <span className="group/badge relative flex h-[20px] min-w-[20px] shrink-0 items-center justify-end">
                 {(showBell || showDone || showWorking || showDelegated) && (
                   // Pinned to its own layer, same reason as the task row's
                   // badge above: a transition-only layer gets snapped into
                   // existence and the mark jumps a pixel on hover.
-                  <span className="absolute inset-0 flex items-center justify-center transition-opacity group-hover/badge:opacity-0 [transform:translate3d(0,0,0)]">
+                  <span className="flex items-center justify-end transition-opacity group-hover/badge:opacity-0 [transform:translate3d(0,0,0)]">
                     {showBell ? <TaskWorkBadge reason="attention" />
-                      : showDone ? <TaskWorkBadge reason="done" delegated={tab.delegatedWork} />
-                      : showWorking ? <TaskWorkBadge reason="working" delegated={tab.delegatedWork} />
+                      : showDone ? <TaskWorkBadge reason="done" delegated={tab.delegatedWork} worded />
+                      : showWorking ? <TaskWorkBadge reason="working" delegated={tab.delegatedWork} worded />
                       : <TaskWorkBadge reason="delegated" delegated={tab.delegatedWork} />}
                   </span>
                 )}
                 <button
                   title={t("closeTab")}
+                  aria-label={t("closeTab")}
                   onClick={(e) => { e.stopPropagation(); requestCloseTab(w.id, tab.id); }}
                   className={cn(
-                    "absolute inset-0 flex items-center justify-center rounded p-0.5 text-[var(--color-fg-faint)] hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)]",
+                    "absolute right-0 top-0 flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-[var(--sidebar-meta)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-tray-hover)] hover:text-[var(--sidebar-ink)]",
                     (showBell || showDone || showWorking || showDelegated)
                       // Badge visible: X only on badge-slot hover
                       ? "opacity-0 group-hover/badge:opacity-100 pointer-events-none group-hover/badge:pointer-events-auto"
@@ -3981,9 +4007,11 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
               </span>
             </div>
             {isClaudeTab && <SubagentRows taskId={w.id} tabId={tab.id} selectedAgentId={selectedSubagentId} />}
-          </Fragment>
+          </div>
         );
       })}
+      </div>
+      )}
     </div>
   );
 }

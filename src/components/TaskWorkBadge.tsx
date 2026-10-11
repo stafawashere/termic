@@ -21,7 +21,7 @@ import type { WorkBadgeReason } from "@/lib/taskWorkState";
  *  qualifies two of the three reasons rather than being a fourth. See
  *  `lib/delegatedWork.ts`. */
 export function TaskWorkBadge(
-  { reason, delegated, preview, testId = "work-badge" }: {
+  { reason, delegated, preview, worded = false, testId = "work-badge" }: {
     /** `"delegated"` is not a work state: it is an IDLE tab that still has
      *  something running, and it draws only because nothing outranks it. See
      *  the chain in `TabBar` and docs/ui.md. */
@@ -35,6 +35,10 @@ export function TaskWorkBadge(
      *  so it does not add to the `work-badge` count (see the note at the top
      *  of this file). */
     testId?: string;
+    /** The sidebar's session rows: working and done read as a word, a
+     *  dashed spinner plus "running" and a green "done". The marks stay for
+     *  attention, delegated work and a partial turn. */
+    worded?: boolean;
   },
 ) {
   const { t } = useTranslation("chrome");
@@ -81,6 +85,20 @@ export function TaskWorkBadge(
       </span>
     );
   }
+  if (reason === "working" && worded) {
+    return (
+      <span
+        data-testid={testId}
+        data-work-state="working"
+        className="flex shrink-0 items-center gap-[5px] text-[11px] text-[var(--sidebar-running)]"
+        title={t("taskWorkBadge.working")}
+        aria-label={t("taskWorkBadge.workingAria")}
+      >
+        <span aria-hidden className="sidebar-dashed-spinner" />
+        {t("taskWorkBadge.runningWord")}
+      </span>
+    );
+  }
   if (reason === "working") {
     return (
       <span
@@ -109,7 +127,21 @@ export function TaskWorkBadge(
       </span>
     );
   }
-  // done — solid blue bullet, iTerm2-style, in --color-info (defined in
+  if (worded) {
+    return (
+      <span
+        data-testid={testId}
+        data-work-state="done"
+        data-delegated={delegated ? delegated.label : undefined}
+        className="shrink-0 text-[11px] text-[var(--sidebar-settled)]"
+        title={held ? t("taskWorkBadge.doneDelegated", { held }) : t("taskWorkBadge.done")}
+        aria-label={t("taskWorkBadge.doneAria")}
+      >
+        {t("taskWorkBadge.doneWord")}
+      </span>
+    );
+  }
+  // done: solid blue bullet, iTerm2-style, in --color-info (defined in
   // @theme; themes can override). h-3.5 visually matches the bell + spinner.
   return (
     <span

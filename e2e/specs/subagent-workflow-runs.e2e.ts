@@ -35,6 +35,8 @@ const RUN_ROW = '[data-testid="workflow-run-row"]';
 const PHASE_ROW = '[data-testid="workflow-phase-row"]';
 const PANE = '[data-testid="subagent-pane"]';
 const SELECTED = "bg-[var(--color-sel)]";
+/** The task header and session rows wear the tree's selected look. */
+const ROW_SELECTED = "sidebar-selected";
 
 const RELEASE_RUN = "wf_e2erelease";
 const RELEASE_NAME = "acme-release";
@@ -380,15 +382,15 @@ describe("subagent workflow runs", () => {
     await clickPresent(`${runRow(RELEASE_RUN)} [data-testid="workflow-run-fold"]`);
     await waitRun(RELEASE_RUN, facts => facts.expanded === "false", "the run never folded");
 
-    const selection = await browser.execute((task, sel) => {
+    const selection = await browser.execute((task, sel, rowSel) => {
       const scope = document.querySelector(`[data-sidebar-task-row="${task}"]`)!;
       const header = scope.querySelector(`[data-sidebar-task-id="${task}"]`)!;
-      const tabRow = scope.querySelector("div.ml-8")!;
+      const tabRow = scope.querySelector("[data-sidebar-tab-id]")!;
       const selectedRuns = [...scope.querySelectorAll('[data-testid="workflow-run-row"]')]
         .filter(el => el.className.includes(sel))
         .map(el => el.getAttribute("data-run-id"));
-      return { header: header.className.includes(sel), tabRow: tabRow.className.includes(sel), selectedRuns };
-    }, taskId, SELECTED);
+      return { header: header.className.includes(rowSel), tabRow: tabRow.className.includes(rowSel), selectedRuns };
+    }, taskId, SELECTED, ROW_SELECTED);
     expect(selection).toEqual({ header: false, tabRow: false, selectedRuns: [RELEASE_RUN] });
     expect(await settledBackground(runRow(RELEASE_RUN))).toBe(selectedBackground);
     await snap("workflow-run-folded-over-selection.png");
@@ -399,9 +401,9 @@ describe("subagent workflow runs", () => {
       { timeout: 5_000, timeoutMsg: "the run kept the selection after the claude tab came back to the front" },
     );
     const tabRowSelected = await browser.execute(
-      (task, sel) => document.querySelector(`[data-sidebar-task-row="${task}"] div.ml-8`)!.className.includes(sel),
+      (task, sel) => document.querySelector(`[data-sidebar-task-row="${task}"] [data-sidebar-tab-id]`)!.className.includes(sel),
       taskId,
-      SELECTED,
+      ROW_SELECTED,
     );
     expect(tabRowSelected).toBe(true);
   });

@@ -113,7 +113,7 @@ describe("subagent rows", () => {
   async function rowGeometry() {
     return browser.execute((task, sel) => {
       const scope = document.querySelector(`[data-sidebar-task-row="${task}"]`)!;
-      const tabRow = scope.querySelector<HTMLElement>("div.ml-8")!;
+      const tabRow = scope.querySelector<HTMLElement>("[data-sidebar-tab-id]")!;
       const brandMark = tabRow.querySelector("svg")!.getBoundingClientRect();
       const rows = [...scope.querySelectorAll<HTMLElement>(sel)].map(row => {
         const icon = row.querySelector<HTMLElement>('[data-testid="subagent-row-icon"]');
@@ -267,7 +267,7 @@ describe("subagent rows", () => {
     expect(await rowState(agentId)).toBe("running");
     const indent = await browser.execute((task, sel) => {
       const row = document.querySelector<HTMLElement>(sel)!;
-      const tabRow = document.querySelector<HTMLElement>(`[data-sidebar-task-row="${task}"] div.ml-8`)!;
+      const tabRow = document.querySelector<HTMLElement>(`[data-sidebar-task-row="${task}"] [data-sidebar-tab-id]`)!;
       return {
         depth: row.getAttribute("data-depth"),
         rowLeft: row.getBoundingClientRect().left,
@@ -535,13 +535,14 @@ describe("subagent rows", () => {
     this.timeout(30_000);
     const selection = await browser.execute((task) => {
       const sel = "bg-[var(--color-sel)]";
+      const rowSel = "sidebar-selected";
       const scope = document.querySelector(`[data-sidebar-task-row="${task}"]`)!;
       const header = scope.querySelector(`[data-sidebar-task-id="${task}"]`)!;
-      const tabRow = scope.querySelector("div.ml-8")!;
+      const tabRow = scope.querySelector("[data-sidebar-tab-id]")!;
       const subagentRows = [...scope.querySelectorAll('[data-testid="subagent-row"]')];
       return {
-        header: header.className.includes(sel),
-        tabRow: tabRow.className.includes(sel),
+        header: header.className.includes(rowSel),
+        tabRow: tabRow.className.includes(rowSel),
         subagents: subagentRows.filter(el => el.className.includes(sel)).length,
       };
     }, taskId);

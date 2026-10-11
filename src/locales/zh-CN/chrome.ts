@@ -120,6 +120,8 @@ export default {
     openOn: "在 {{forge}} 上打开",
   },
   taskWorkBadge: {
+    runningWord: "运行中",
+    doneWord: "完成",
     working: "智能体工作中",
     workingAria: "工作中",
     attention: "智能体需要你的输入",
