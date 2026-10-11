@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 
 import type { TFunction } from "i18next";
 import { cn } from "@/lib/utils";
 import { formatElapsed, formatTokens, spinnerSuffix } from "@/lib/subagentCliView";
-import { GLYPH, MESSAGE_BULLET, SPINNER_FRAMES } from "./glyphs";
+import { GLYPH, SPINNER_FRAMES } from "./glyphs";
 
 export type FooterState = "running" | "done" | "failed" | "interrupted";
 
@@ -101,10 +101,10 @@ function SpinnerMessage({ message, toolRunning, stallStyle, stallDelayMs }: {
 }
 
 const STATE_DOT: Record<FooterState, string> = {
-  running: "",
+  running: "text-[var(--cc-success)]",
   done: "text-[var(--cc-success)]",
   failed: "text-[var(--cc-error)]",
-  interrupted: "",
+  interrupted: "text-[var(--cc-dim)]",
 };
 
 /** The bottom of Claude Code's screen for one agent: the spinner row while
@@ -116,8 +116,8 @@ export function Footer({
 }: {
   state: FooterState;
   agentType: string;
-  /** What the running agent is doing: the call in flight, else its
-   *  description, else null. */
+  /** What the running agent is doing, as Claude's agent list says it: its
+   *  description, else the call in flight, else null. */
   activity: string | null;
   /** The spinner's message, ellipsis included. */
   message: string;
@@ -173,7 +173,7 @@ export function Footer({
       ref={rootRef}
       data-testid="subagent-footer"
       data-footer-state={state}
-      className="shrink-0 px-[var(--cell)] text-[var(--cc-dim)]"
+      className="shrink-0 text-[var(--cc-dim)]"
     >
       {isRunning && (
         <div data-testid="subagent-working" className="flex text-[var(--cc-claude)]">
@@ -187,13 +187,22 @@ export function Footer({
           </span>
         </div>
       )}
-      <div className="flex pt-[var(--row)]">
-        <span className="min-w-0 flex-1 truncate whitespace-pre">
-          <span aria-hidden className={STATE_DOT[state]}>{isRunning ? GLYPH.ring : MESSAGE_BULLET}</span>
-          {` ${agentType}  `}
-          <span className={cn(isFailed && "text-[var(--cc-error)]")}>{statusText}</span>
-        </span>
-        <span data-testid="subagent-footer-stats" className="shrink-0 pl-[calc(var(--cell)*2)]">{right}</span>
+      <div
+        data-testid="subagent-agent-list"
+        className="pt-[var(--row)]"
+        style={{ paddingLeft: "calc(var(--cell) * 2)", paddingRight: "calc(var(--cell) * 2)" }}
+      >
+        <div className="truncate whitespace-pre text-[var(--cc-dim)]">
+          <span aria-hidden>{GLYPH.ring}</span> {t("subagentView.footerMain")}
+        </div>
+        <div data-testid="subagent-agent-row" className="flex font-bold text-[var(--cc-text)]">
+          <span className="min-w-0 flex-1 truncate whitespace-pre">
+            <span aria-hidden data-testid="subagent-agent-dot" className={STATE_DOT[state]}>{GLYPH.bullet}</span>
+            {` ${agentType}  `}
+            <span className={cn(isFailed && "text-[var(--cc-error)]")}>{statusText}</span>
+          </span>
+          <span data-testid="subagent-footer-stats" className="shrink-0 whitespace-pre pl-[calc(var(--cell)*2)]">{right}</span>
+        </div>
       </div>
     </div>
   );

@@ -9,15 +9,16 @@ import type { TFunction } from "i18next";
 import { cn } from "@/lib/utils";
 import { type ToolCallState, type TranscriptRow } from "@/lib/subagentTranscript";
 import {
-  countGroup, groupSummaryParts, toolDisplay, toolSummary, wordSpans, type DiffLine, type TodoItem, type ToolSummary,
-  type WordSpan,
+  countGroup, foldPrompt, groupSummaryParts, toolDisplay, toolSummary, wordSpans, type DiffLine, type TodoItem,
+  type ToolSummary, type WordSpan,
 } from "@/lib/subagentCliView";
+import type { TranscriptResultNote } from "@/lib/types";
 import type { ViewRow } from "@/lib/subagentTranscript";
 import { GLYPH, MESSAGE_BULLET, RESULT_CONNECTOR } from "./glyphs";
 import { Markdown } from "./Markdown";
 
 const OUTPUT_FOLD_LINES = 3;
-const PROMPT_FOLD_LINES = 6;
+const ERROR_FOLD_LINES = 6;
 const DIFF_FOLD_LINES = 20;
 const WRITE_FOLD_LINES = 10;
 
@@ -60,7 +61,7 @@ function MoreLinesToggle({ count, onToggle, t }: { count: number; onToggle: () =
       onClick={onToggle}
       className="block text-left text-[var(--cc-dim)] hover:text-[var(--cc-dim)]"
     >
-      {GLYPH.ellipsis} {t("subagentView.moreLines", { count })} {t("subagentView.expandHint")}
+      {GLYPH.ellipsis} {t("subagentView.moreLines", { count })}
     </button>
   );
 }
@@ -224,7 +225,7 @@ function SummaryBody({ summary, expanded, onToggle, maxOutputLines, t }: {
       return <span className="text-[var(--cc-dim)]">{t("subagentView.noContent")}</span>;
 
     case "output":
-      return <div className="text-[var(--cc-dim)]">{fold(summary.lines, OUTPUT_FOLD_LINES)}</div>;
+      return <div>{fold(summary.lines, OUTPUT_FOLD_LINES)}</div>;
 
     case "todos":
       return <div>{summary.todos.map((todo, position) => <Todo key={position} todo={todo} />)}</div>;
@@ -265,6 +266,54 @@ function SummaryBody({ summary, expanded, onToggle, maxOutputLines, t }: {
   }
 }
 
+const NOTE_KEYS: Record<TranscriptResultNote, string> = {
+  sharedRepo: "subagentView.noteSharedRepo",
+  diffSkipped: "subagentView.noteDiffSkipped",
+  diffUnavailable: "subagentView.noteDiffUnavailable",
+  autoClassifier: "subagentView.noteAutoClassifier",
+};
+
+/** The dim lines Claude hangs under a result, each on its own hook. */
+function ResultNotes({ notes, t }: { notes: readonly TranscriptResultNote[]; t: Translate }) {
+  return (
+    <>
+      {notes.map(note => (
+        <HookBlock key={note} className="text-[var(--cc-dim)]">
+          <span data-testid="subagent-result-note" data-note={note}>{t(NOTE_KEYS[note])}</span>
+        </HookBlock>
+      ))}
+    </>
+  );
+}
+
+function kilobytes(chars: number): string {
+  return (chars / 1024).toFixed(1);
+}
+
+/** A prompt as Claude draws it: whole up to 10,000 characters, past that
+ *  its head and tail with a subtle rule naming what was hidden. */
+function PromptText({ text, t }: { text: string; t: Translate }) {
+  const folded = foldPrompt(text);
+  if (!folded) return <>{text}</>;
+
+  const kb = kilobytes(folded.hiddenChars);
+  const title = folded.hiddenLines === 0
+    ? t("subagentView.promptHiddenKb", { kb })
+    : t("subagentView.promptHiddenLines", { count: folded.hiddenLines, kb });
+
+  return (
+    <>
+      <div>{folded.head}</div>
+      <div data-testid="subagent-prompt-hidden" className="flex items-center gap-[var(--cell)] text-[var(--cc-subtle)]">
+        <span aria-hidden className="w-[calc(var(--cell)*3)] shrink-0 border-t border-[var(--cc-subtle)]" />
+        <span className="shrink-0">{title}</span>
+        <span aria-hidden className="flex-1 border-t border-[var(--cc-subtle)]" />
+      </div>
+      <div>{folded.tail}</div>
+    </>
+  );
+}
+
 const TOOL_DOT_CLASS: Record<ToolCallState, string> = {
   pending: "text-[var(--cc-dim)] termic-cli-blink",
   ok: "text-[var(--cc-success)]",
@@ -293,13 +342,13 @@ function ToolCall({ row, result, state, expanded, onToggle, options, t }: {
             {MESSAGE_BULLET}
           </span>
         </Gutter>
-        <div className="min-w-0 flex-1 break-words">
-          <span data-testid="subagent-tool-name" className="font-bold">{display.label}</span>
-          {showsArgs && <span data-testid="subagent-tool-input">({display.args})</span>}
-          {showsArgs && row.truncated && (
-            <span className="text-[var(--cc-dim)]"> ({t("subagentView.truncated")})</span>
-          )}
-        </div>
+        <span data-testid="subagent-tool-name" className="shrink-0 whitespace-pre font-bold">{display.label}</span>
+        {showsArgs && (
+          <span data-testid="subagent-tool-input" className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+            ({display.args})
+            {row.truncated && <span className="text-[var(--cc-dim)]"> ({t("subagentView.truncated")})</span>}
+          </span>
+        )}
       </div>
       {options.showToolOutput && (
         <HookBlock>
@@ -312,6 +361,7 @@ function ToolCall({ row, result, state, expanded, onToggle, options, t }: {
           />
         </HookBlock>
       )}
+      {options.showToolOutput && result && <ResultNotes notes={result.notes} t={t} />}
     </div>
   );
 }
@@ -336,15 +386,8 @@ export const EntryRow = memo(function EntryRow({ row, result, toolState, expande
       return (
         <div className="flex bg-[var(--cc-userMessageBackground)] pr-[var(--cell)] text-[var(--cc-text)]">
           <Gutter className="text-[var(--cc-inactive)]">{GLYPH.pointer}</Gutter>
-          <div className="min-w-0 flex-1 whitespace-pre-wrap break-words">
-            <FoldedLines
-              lines={textLines(row.text)}
-              foldAt={PROMPT_FOLD_LINES}
-              expanded={expanded}
-              onToggle={toggle}
-              maxOutputLines={0}
-              t={t}
-            />
+          <div data-testid="subagent-prompt-text" className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+            <PromptText text={row.text.replace(/\s+$/, "")} t={t} />
           </div>
         </div>
       );
@@ -410,7 +453,7 @@ export const EntryRow = memo(function EntryRow({ row, result, toolState, expande
           <div className="min-w-0 flex-1 whitespace-pre-wrap break-words">
             <FoldedLines
               lines={textLines(row.text)}
-              foldAt={PROMPT_FOLD_LINES}
+              foldAt={ERROR_FOLD_LINES}
               expanded={expanded}
               onToggle={toggle}
               maxOutputLines={0}
@@ -501,7 +544,6 @@ export const GroupRow = memo(function GroupRow({ index, members, unfolded, activ
             </span>
           ))}
           {active && GLYPH.ellipsis}
-          {!unfolded && <span className="text-[var(--cc-dim)]"> {t("subagentView.expandHint")}</span>}
         </span>
       </button>
       {unfolded && members.map(member => (

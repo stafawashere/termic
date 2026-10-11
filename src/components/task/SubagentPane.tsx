@@ -39,6 +39,12 @@ import { Header } from "./subagentView/Header";
 import { GLYPH } from "./subagentView/glyphs";
 
 const ESTIMATED_ROW_PX = 28;
+
+// xterm's own padding around the grid (index.css `.xterm`) and its
+// scrollbar, so this view's columns land where the terminal's do.
+const XTERM_PADDING = "8px 6px 8px 10px";
+const XTERM_PADDING_X_PX = 16;
+const XTERM_SCROLLBAR_PX = 8;
 const OVERSCAN_PX = 600;
 
 const INITIAL: TranscriptSnapshot = { status: "loading", window: EMPTY_WINDOW, loadingEarlier: false };
@@ -53,6 +59,8 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [paneWidth, setPaneWidth] = useState(0);
   const [following, setFollowing] = useState(true);
   const followingRef = useRef(true);
   const anchorRef = useRef<{ index: number; delta: number } | null>(null);
@@ -123,6 +131,10 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
     setUnfoldedGroups(new Set());
     setSnapshot(INITIAL);
 
+    const isAgentRunning = () => {
+      const agent = useSubagents.getState().byTab[tab.parentTabId]?.agents[tab.subagentAgentId];
+      return agent?.state === "running";
+    };
     const session = openTranscriptSession(
       {
         taskId: task.id,
@@ -130,6 +142,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
         sessionId: tab.sessionId,
         agentId: tab.subagentAgentId,
         workflowRunId: tab.workflowRunId ?? null,
+        isAgentRunning,
       },
       setSnapshot,
     );
@@ -139,7 +152,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
       session.dispose();
       if (sessionRef.current === session) sessionRef.current = null;
     };
-  }, [task.id, tab.id, tab.sessionId, tab.subagentAgentId, tab.workflowRunId, subagentsEnabled]);
+  }, [task.id, tab.id, tab.sessionId, tab.subagentAgentId, tab.parentTabId, tab.workflowRunId, subagentsEnabled]);
 
   const { window: transcript, status, loadingEarlier } = snapshot;
   const heldRows = transcript.rows;
@@ -186,6 +199,19 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
     observer.observe(scroller);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const observer = new ResizeObserver(() => setPaneWidth(root.clientWidth));
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, []);
+
+  const gridWidth = paneWidth - XTERM_PADDING_X_PX - XTERM_SCROLLBAR_PX;
+  const columns = cell.width > 0 ? Math.max(1, Math.floor(gridWidth / cell.width)) : 0;
+  const contentWidth = columns > 0 ? `${columns * cell.width}px` : "100%";
 
   const offsets = useMemo(
     () => rowOffsets(rows.length, position => heightsRef.current.get(rows[position].index) ?? ESTIMATED_ROW_PX),
@@ -298,7 +324,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   };
 
   const hasEarlier = status === "live" && transcript.start > 0;
-  const isExpired = status === "expired";
+  const isGone = status === "missing" || status === "expired";
   const isEmpty = rows.length === 0;
   const placeholder =
     !isEmpty ? null
@@ -311,7 +337,6 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
         : status === "closed" ? t("subagentView.closed")
           : null;
 
-  const title = agentDescription || agentType || tab.title;
   const isRunning = agentState === "running";
   const lastRow = rows[rows.length - 1];
   const pendingCall = lastRow?.kind === "group"
@@ -322,7 +347,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   const pendingActivity = pendingDisplay
     ? pendingDisplay.args ? `${pendingDisplay.label}(${pendingDisplay.args})` : pendingDisplay.label
     : null;
-  const activity = isRunning ? pendingActivity ?? agentDescription : null;
+  const activity = isRunning ? agentDescription || pendingActivity : null;
   const spinnerMessageText = useMemo(() => spinnerMessage(heldRows), [heldRows]);
   const newestKind = heldRows[heldRows.length - 1]?.kind;
   const newestIsThinking = newestKind === "thinking" || newestKind === "redactedThinking";
@@ -338,8 +363,18 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   const endsAfterStart = endedAt !== null && endedAt > startedAt;
   const durationMs = endsAfterStart ? endedAt - startedAt : null;
 
+  const goneTitle =
+    status === "expired" ? t("subagentView.expired")
+      : isRunning ? t("subagentView.missing")
+        : t("subagentView.missingDone");
+  const goneHint =
+    status === "expired" ? t("subagentView.expiredHint")
+      : isRunning ? t("subagentView.missingHint")
+        : t("subagentView.missingDoneHint");
+
   return (
     <div
+      ref={rootRef}
       data-testid="subagent-pane"
       data-subagent-status={status}
       data-agent-id={tab.subagentAgentId}
@@ -347,46 +382,49 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
       data-entry-count={rows.length}
       data-claude-theme={claudeTheme}
       data-verbose={verbose}
+      data-columns={columns}
       aria-label={t("subagentView.ariaLabel")}
       tabIndex={0}
       onKeyDown={onKeyDown}
-      className="relative flex h-full w-full flex-col pt-[var(--row)] outline-none"
-      style={paneStyle}
+      className="relative flex h-full w-full flex-col outline-none"
+      style={{ ...paneStyle, padding: XTERM_PADDING, "--content": contentWidth } as CSSProperties}
     >
-      <Header
-        title={title}
-        agentType={agentType}
-        model={stats.model}
-        workflowPhase={workflowPhase}
-        t={t}
-      />
+      <div className="shrink-0 w-[var(--content)]">
+        <Header
+          agentType={agentType}
+          description={agentDescription}
+          model={stats.model}
+          version={stats.version}
+          workflowPhase={workflowPhase}
+          t={t}
+        />
 
-      {isExpired && (
-        <div data-testid="subagent-expired" className="shrink-0 px-[var(--cell)] pb-[var(--row)] text-[var(--cc-warning)]">
-          <span className="font-bold">{t("subagentView.expired")}</span>
-          <span className="text-[var(--cc-dim)]"> {GLYPH.middot} {t("subagentView.expiredHint")}</span>
-        </div>
-      )}
+        {isGone && (
+          <div data-testid="subagent-expired" data-gone={status} className="pb-[var(--row)] text-[var(--cc-dim)]">
+            {goneTitle} {GLYPH.middot} {goneHint}
+          </div>
+        )}
 
-      {stoppedNote && (
-        <div data-testid="subagent-stopped" className="shrink-0 px-[var(--cell)] pb-[var(--row)] text-[var(--cc-dim)]">
-          {stoppedNote}
-        </div>
-      )}
+        {stoppedNote && (
+          <div data-testid="subagent-stopped" className="pb-[var(--row)] text-[var(--cc-dim)]">
+            {stoppedNote}
+          </div>
+        )}
 
-      {hasEarlier && (
-        <div className="shrink-0 px-[var(--cell)] pb-[var(--row)]">
-          <button
-            type="button"
-            data-testid="subagent-load-earlier"
-            disabled={loadingEarlier}
-            onClick={() => sessionRef.current?.loadEarlier()}
-            className="text-left text-[var(--cc-dim)] hover:text-[var(--cc-inactive)] disabled:hover:text-[var(--cc-dim)]"
-          >
-            {GLYPH.up} {loadingEarlier ? t("subagentView.loadingEarlier") : t("subagentView.loadEarlier")}
-          </button>
-        </div>
-      )}
+        {hasEarlier && (
+          <div className="pb-[var(--row)]">
+            <button
+              type="button"
+              data-testid="subagent-load-earlier"
+              disabled={loadingEarlier}
+              onClick={() => sessionRef.current?.loadEarlier()}
+              className="text-left text-[var(--cc-dim)] hover:text-[var(--cc-inactive)] disabled:hover:text-[var(--cc-dim)]"
+            >
+              {GLYPH.up} {loadingEarlier ? t("subagentView.loadingEarlier") : t("subagentView.loadEarlier")}
+            </button>
+          </div>
+        )}
+      </div>
 
       <div
         ref={scrollerRef}
@@ -395,7 +433,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
         className="relative min-h-0 flex-1 overflow-y-auto"
       >
         {placeholder && (
-          <div data-testid="subagent-placeholder" className="px-[var(--cell)] text-[var(--cc-dim)]">{placeholder}</div>
+          <div data-testid="subagent-placeholder" className="text-[var(--cc-dim)]">{placeholder}</div>
         )}
         <div style={{ height: totalHeight, position: "relative" }}>
           {rows.slice(range.first, range.end).map((displayRow, offset) => {
@@ -408,7 +446,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
                 data-testid="subagent-entry"
                 data-entry-kind={displayRow.kind}
                 data-entry-index={displayRow.index}
-                className="absolute left-0 right-0 px-[var(--cell)] pb-[var(--row)]"
+                className="absolute left-0 w-[var(--content)] pb-[var(--row)]"
                 style={{ top: offsets[position] }}
               >
                 {entry ? (
@@ -441,21 +479,23 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
       </div>
 
       {footerState && (
-        <Footer
-          state={footerState}
-          agentType={agentType ?? tab.title}
-          activity={activity}
-          message={spinnerMessageText}
-          toolRunning={pendingCall !== null}
-          thinking={newestIsThinking}
-          lastAtMs={stats.lastAtMs}
-          stallStepped={isAnsiTheme(claudeTheme)}
-          startedAt={startedAt}
-          durationMs={durationMs}
-          toolUses={stats.toolUses}
-          outputTokens={stats.outputTokens}
-          t={t}
-        />
+        <div className="shrink-0 w-[var(--content)]">
+          <Footer
+            state={footerState}
+            agentType={agentType ?? tab.title}
+            activity={activity}
+            message={spinnerMessageText}
+            toolRunning={pendingCall !== null}
+            thinking={newestIsThinking}
+            lastAtMs={stats.lastAtMs}
+            stallStepped={isAnsiTheme(claudeTheme)}
+            startedAt={startedAt}
+            durationMs={durationMs}
+            toolUses={stats.toolUses}
+            outputTokens={stats.outputTokens}
+            t={t}
+          />
+        </div>
       )}
 
       {!following && rows.length > 0 && (

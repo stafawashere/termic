@@ -507,8 +507,11 @@ terminal tabs are durable.
   (`lib/subagentTranscript.ts`) folds each run of tool calls and thinking
   into one group row, and `countGroup` plus `groupSummaryParts`
   (`lib/subagentCliView.ts`) write it the way claude does, a dim line two
-  cells in: "Thought for 2s, read 2 files, called 1 tool (ctrl+o to
-  expand)", numbers bold, an edit's `+A -R` in the diff word colours. The
+  cells in: "Thought for 2s, read 2 files, ran 1 shell command", numbers
+  bold, an edit's `+A -R` in the diff word colours, Bash counted as shell
+  commands last, and no expand hint, as in claude's own subagent view. A
+  call whose result carries a file diff (`popsOut`, from the line's
+  `toolUseResult.bashEditDiff`) is drawn in full between two groups. The
   group still running is not dim, takes the blinking tool bullet and the
   "-ing" forms with an ellipsis. Clicking the line unfolds that group, and
   ctrl+o while the pane has focus flips every group and opens every
@@ -522,8 +525,12 @@ terminal tabs are durable.
   on and 600ms off (a CSS `steps()` animation, steady in the text colour
   under reduced motion), then turns success or error. The result hangs
   from claude's connector, two spaces, U+23BF, a space and a no-break
-  space, so its text starts at cell 5, and a fold reads "... +N lines
-  (ctrl+o to expand)". A result whose call is
+  space, so its text starts at cell 5 in the text colour, and a fold
+  reads "... +N lines". Each note the host found on the result (another
+  command ran in the repository, a skipped or unavailable file diff,
+  "Allowed by auto mode classifier") hangs from its own dim connector
+  below. A long argument wraps under the "(" that opens it, because the
+  name and the arguments are separate flex children. A result whose call is
   on a page not loaded yet joins the group alone. `lib/subagentCliView.ts`
   heads a call the way Claude prints it (`Read(path)`, `Update(path)`,
   `Search(pattern: "x")`, `Update Todos`, `server - tool (MCP)`, paths
@@ -543,9 +550,22 @@ terminal tabs are durable.
   rule after every row (`renderTable`). There is no
   HTML path, and a unit test renders `<script>` and raw tags and checks
   they come out escaped. The prompt the agent was given is a U+276F
-  pointer on claude's `userMessageBackground` across the row.
-- **Top row and footer.** No box: one dim row at the top names the
-  description (else agent type), model, workflow phase and read-only.
+  pointer on claude's `userMessageBackground` across the row, drawn whole
+  up to 10,000 characters and past that as its first and last 2,500 with
+  a subtle rule naming what was hidden (`foldPrompt`). Meta user lines are
+  dropped by the host and `<system-reminder>` blocks inside a prompt are
+  stripped here, so a prompt of nothing but reminders is not drawn.
+- **Laid on the terminal's grid.** The pane takes xterm's own padding
+  (8px 6px 8px 10px) and draws every row `floor((width - 16 - 8) / cell)`
+  cells wide, so a prompt's background and the right-aligned footer stats
+  end on the same column claude's would in the tab next door.
+- **Banner and footer.** At the top, claude's welcome banner: the 2.1.296
+  mascot (three rows of quadrant blocks, drawn as boxes on a half-cell
+  grid so the rows meet the way xterm's own block glyphs do), then
+  "Claude Code" bold with the transcript's version dim, the model's
+  display name (`modelDisplayName`, "Opus 5.5") and agent type, and the
+  description, phase and read-only, followed by the two blank rows claude
+  leaves before the first block.
   Under the scroller, while the agent runs, claude's spinner row in the
   claude colour: six frames played out and back on claude's 2s cosine
   (the stops are `cosineFrameStops`, and a unit test keeps index.css in
@@ -558,12 +578,14 @@ terminal tabs are durable.
   measured from when the animation was first applied, so a new entry
   moves it without restarting anything, and a `display: none` pane runs
   none of it. Reduced motion shows a still U+25CF and no shimmer. Then a
-  blank row and the agent's row: U+25CB, the agent type and the call in
-  flight on the left, elapsed time and output tokens on the right, where
+  blank row and claude's agent list, two cells in on both sides: a dim
+  "U+25CB main" row, and the viewed agent's row in bold with a green
+  U+25CF, the agent type, two spaces and its description (else the call in
+  flight) on the left, elapsed time and output tokens on the right, where
   only the seconds tick, from a 1 s interval that exists only while the
   agent runs and the pane is on screen (an IntersectionObserver turns it
-  off for a hidden pane). Once stopped the ring becomes a
-  green or red U+25CF and the left reads "Done (N tool uses)", "Failed" or
+  off for a hidden pane). Once stopped the dot stays green, or turns red
+  or dim, and the left reads "Done (N tool uses)", "Failed" or
   "Interrupted". Counts and tokens come from the entries the view holds,
   so before every earlier page is loaded they cover the newest part only;
   times come from the transcript's own timestamps when entry 0 is held,
@@ -587,8 +609,11 @@ terminal tabs are durable.
   this side, redacted thinking shows a placeholder, a `compact_boundary` line
   is a divider row, and an entry kind the view does not know is a collapsed
   generic row.
-- **Ends cleanly.** A transcript that is gone shows "Transcript expired" and
-  stops tailing. Archiving the task releases every view's watch and closes its
+- **Ends cleanly.** A transcript this view read that is then gone shows
+  "Transcript expired" and stops tailing. One it never found is `missing`:
+  "Transcript not available yet" while the agent runs, looked for again
+  every 2s (`MISSING_RETRY_MS`) without flashing back to loading, and "No
+  transcript" once it has stopped. Both are dim. Archiving the task releases every view's watch and closes its
   subagent tabs (`installSubagentPreviewArchiveWatch`).
 
 ## Task groups in the sidebar

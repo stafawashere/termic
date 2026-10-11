@@ -452,8 +452,8 @@ describe("subagent transcript view", () => {
     // A finished group is dim with no bullet; the running one keeps a
     // blinking bullet and its -ing words, as claude draws them.
     expect(await groups()).toEqual([
-      { text: "Thought for 4s (ctrl+o to expand)", unfolded: false, blinking: false },
-      { text: "Reading 1 file, calling 1 tool\u2026 (ctrl+o to expand)", unfolded: false, blinking: true },
+      { text: "Thought for 4s", unfolded: false, blinking: false },
+      { text: "Reading 1 file, running 1 shell command\u2026", unfolded: false, blinking: true },
     ]);
 
     const footer = `${pane} [data-testid="subagent-footer"]`;
@@ -722,8 +722,8 @@ describe("subagent transcript view", () => {
     });
     expect(await toolStates()).toEqual([]);
     expect((await groups()).map(group => group.text)).toEqual([
-      "Thought for 4s (ctrl+o to expand)",
-      "Edited 1 file +2 -1, read 1 file, called 3 tools (ctrl+o to expand)",
+      "Thought for 4s",
+      "Edited 1 file +2 -1, read 1 file, called 1 tool, ran 2 shell commands",
     ]);
     await snap("subagent-cli-collapsed.png");
 
