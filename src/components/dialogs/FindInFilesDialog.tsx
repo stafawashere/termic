@@ -1,4 +1,4 @@
-// ⇧⌘F find-in-files. Streams results live: every keystroke fires a fresh
+// ⌥⌘F find-in-files. Streams results live: every keystroke fires a fresh
 // search with a new searchId; Rust SIGKILLs the previous in-flight search
 // automatically so we never fan out into zombies.
 //
@@ -46,7 +46,7 @@ const RIPGREP_INSTALL_URL = "https://github.com/BurntSushi/ripgrep#installation"
 // settled. Early after launch the login-shell PATH hasn't landed, so an
 // installed rg can still be invisible; keeping that answer would leave
 // the install hint up all session for someone who has it. Unsettled means
-// ask again on the next open (one IPC per ⇧⌘F, and it settles fast).
+// ask again on the next open (one IPC per ⌥⌘F, and it settles fast).
 let settledBackend: FindBackend | null = null;
 async function loadBackend(): Promise<FindBackend> {
   if (settledBackend) return settledBackend;

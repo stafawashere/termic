@@ -115,7 +115,8 @@ just `bg` and `accent` and still look coherent.
 | `ok-fg` | ink on a solid `ok` fill (toggle knobs). Defaults to white |
 | `warn` | warning yellow |
 | `err` | error red |
-| `palette-red` … `palette-pink` | hue-named accent ramp for user-assigned marks (today: project-group folder colors). 8 keys: `palette-red`, `palette-orange`, `palette-yellow`, `palette-green`, `palette-teal`, `palette-blue`, `palette-purple`, `palette-pink`. Tune shades to your theme, but keep each hue recognizable: users pick colors by name and expect "red" to stay red across themes |
+| `palette-red` … `palette-pink` | hue-named accent ramp for user-assigned marks (state marks and links, and the source of the accent presets below). 8 keys: `palette-red`, `palette-orange`, `palette-yellow`, `palette-green`, `palette-teal`, `palette-blue`, `palette-purple`, `palette-pink`. Tune shades to your theme, but keep each hue recognizable: users pick colors by name and expect "red" to stay red across themes |
+| `swatch-red` … `swatch-pink` | the accent presets users pick for group folders, task groups and profiles. Not a theme key: each is derived from its `palette-*` key (57% chroma, mixed toward `fg-dim`), so tuning the palette retunes the swatches |
 
 The `--color-cli-*` agent tint variables are not themeable in v1; they keep
 their defaults. So do `--color-pr-merged` / `--color-pr-open`, the pull-request
@@ -139,6 +140,19 @@ yields a complete, readable ANSI 16.
 
 Hex (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) and `rgb()` / `rgba()` /
 `hsl()` / `hsla()` notation. Named CSS colors are not accepted.
+
+## Sidebar tokens
+
+The sidebar (GH #90) paints only with `--sidebar-*` tokens in
+`src/index.css`: surfaces (`bg-top`, `bg-bottom`, `well-bg`, `tray-bg`,
+`card-bg`, `popover-bg`, `footer-top`, `footer-bottom`), inks (`ink`,
+`muted`, `meta`, `faint`, `icon`, `chevron`, `eyebrow`), selection
+(`sel-from`, `sel-to`, `sel-bar`), work state (`running`, `settled`),
+and the rest (dividers, guides, keycaps, drag and focus rings). Dark+
+defines them as literals inside `@theme`; every other built-in theme, and
+any custom theme, gets them derived from its own `bg-1`, `fg`, `accent` and
+palette, so a custom theme restyles the sidebar without naming one. They
+are not keys in a theme file.
 
 ## The subagent view paints with claude's palette
 

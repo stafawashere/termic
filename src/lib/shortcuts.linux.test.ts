@@ -92,6 +92,7 @@ describe("what a terminal hands to the app off macOS", () => {
     expect(app(ev("b", { altKey: true }))).toBe(true);           // right sidebar
     expect(app(ev("P", { shiftKey: true }))).toBe(true);         // command palette
     expect(app(ev("}", { shiftKey: true }))).toBe(true);         // next tab
+    expect(app(ev("f", { altKey: true }))).toBe(true);           // find in files
   });
 
   it("leaves the terminal its own copy, paste and find", () => {

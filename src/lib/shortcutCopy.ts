@@ -56,6 +56,7 @@ const DEF_KEY: Record<ShortcutId, string> = {
   "file-finder": "fileFinder",
   "task-finder": "taskFinder",
   "find-in-files": "findInFiles",
+  "focus-sidebar-filter": "focusSidebarFilter",
   "toggle-left-sidebar": "toggleLeftSidebar",
   "toggle-right-sidebar": "toggleRightSidebar",
   "broadcast": "broadcast",

@@ -348,7 +348,7 @@ function CompactSidebarReveal() {
       onMouseLeave={scheduleClose}
     >
       {/* 56px icon rail — always present, owns the grid column width. */}
-      <ErrorBoundary label="Sidebar"><Sidebar compact /></ErrorBoundary>
+      <ErrorBoundary label="Sidebar"><Sidebar compact activityAnimates={!open} /></ErrorBoundary>
       {/* Full sidebar overlay. Kept mounted so the slide animates both
           ways; pointer-events are dropped while retracted so it never
           eats clicks over the content beneath it. */}
@@ -364,7 +364,7 @@ function CompactSidebarReveal() {
           transform: open ? "translateX(0)" : "translateX(-100%)",
         }}
       >
-        <ErrorBoundary label="Sidebar"><Sidebar compact={false} /></ErrorBoundary>
+        <ErrorBoundary label="Sidebar"><Sidebar compact={false} activityAnimates={open} /></ErrorBoundary>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupOf, projectSections, sortSectionsActiveFirst, visualProjectOrder } from "@/lib/projectGroups";
+import { groupDisplayName, groupOf, projectSections, sortSectionsActiveFirst, visualProjectOrder } from "@/lib/projectGroups";
 import type { Project } from "@/lib/types";
 
 // Only id/name/group matter to the helpers; keep fixtures terse.
@@ -125,5 +125,16 @@ describe("a mixed-case group name keys the same everywhere", () => {
   it("gives two spellings of one group a single section", () => {
     const sections = projectSections([proj("a", "Infra"), proj("b"), proj("c", "INFRA")]);
     expect(sections.map(s => (s.kind === "loose" ? s.p.id : s.name))).toEqual(["INFRA", "b"]);
+  });
+});
+
+describe("groupDisplayName", () => {
+  it("shows a stored all-caps label in sentence case", () => {
+    expect(groupDisplayName("REVERSE ENGINEERING")).toBe("Reverse engineering");
+    expect(groupDisplayName("NEW GROUP 2")).toBe("New group 2");
+  });
+
+  it("leaves an empty label empty", () => {
+    expect(groupDisplayName("")).toBe("");
   });
 });

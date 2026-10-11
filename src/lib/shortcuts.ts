@@ -54,6 +54,7 @@ export type ShortcutId =
   | "file-finder"
   | "task-finder"
   | "find-in-files"
+  | "focus-sidebar-filter"
   | "toggle-left-sidebar"
   | "toggle-right-sidebar"
   | "broadcast"
@@ -185,7 +186,11 @@ export const SHORTCUT_DEFS: ShortcutDef[] = [
     defaultBinding: B("p", { cmd: true }) },
   { id: "task-finder", group: "General",
     defaultBinding: B("o", { cmd: true }) },
+  // The sidebar filter holds Shift+Cmd+F, the keycap its field draws. Find
+  // in files moved to Opt+Cmd+F, which nothing else claimed.
   { id: "find-in-files", group: "General",
+    defaultBinding: B("f", { cmd: true, alt: true }) },
+  { id: "focus-sidebar-filter", group: "General",
     defaultBinding: B("f", { cmd: true, shift: true }) },
   { id: "toggle-left-sidebar", group: "General",
     defaultBinding: B("b", { cmd: true }) },
@@ -381,7 +386,7 @@ export function isSubagentVerboseChord(e: Pick<KeyboardEvent, "key" | "ctrlKey" 
   return onlyCtrl && e.key.toLowerCase() === "o";
 }
 
-const TERMINAL_OWN: ReadonlySet<ShortcutId> = new Set<ShortcutId>(["terminal-copy", "terminal-paste", "find-in-files"]);
+const TERMINAL_OWN: ReadonlySet<ShortcutId> = new Set<ShortcutId>(["terminal-copy", "terminal-paste", "focus-sidebar-filter"]);
 
 /** Off macOS: is this key one of the app's chords that a TERMINAL should let
  *  go? The rule is the one the terminals always stated: Ctrl is the app's
@@ -399,8 +404,8 @@ const TERMINAL_OWN: ReadonlySet<ShortcutId> = new Set<ShortcutId>(["terminal-cop
 export function isAppChordInTerminal(e: KeyboardEvent, binds: Partial<BindingMap>): boolean {
   if (IS_MAC) return false;
   for (const d of SHORTCUT_DEFS) {
-    // The terminal's OWN: copy, paste, and Ctrl+Shift+F, which inside a
-    // terminal is that terminal's find. Their handlers sit around the call
+    // The terminal's OWN: copy, paste, and Ctrl+Shift+F (the sidebar
+    // filter's chord), which inside a terminal is that terminal's find. Their handlers sit around the call
     // sites in no fixed order, so they are excluded here, not by position.
     if (TERMINAL_OWN.has(d.id)) continue;
     const b = binds[d.id];

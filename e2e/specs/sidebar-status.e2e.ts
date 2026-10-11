@@ -182,31 +182,37 @@ describe("sidebar status section", () => {
     for (const id of [fresh, blocked, reviewed, groupLead, groupMember, multi, labelled]) if (id) await archiveTask(id);
   });
 
-  it("is off by default, and the list options menu turns it on above PROJECTS", async () => {
+  it("is off by default, and the list options menu turns it on above the project tree", async () => {
     expect(await present(SECTION)).toBe(false);
 
     await openListOptions();
     await click(TOGGLE_ROW);
     await waitVisible(SECTION);
 
-    // The header is a highlighted section bar with an expand/collapse toggle.
+    // The block has no heading of its own (the PROJECTS eyebrow stays the
+    // only one), so its fold is a chevron on the bottom rule and says what it
+    // folds through its accessible name rather than visible text.
     const header = await browser.execute(sel => {
       const el = document.querySelector(sel) as HTMLElement;
-      // textContent, not innerText: the capitals are CSS, not the string.
-      return { tag: el.tagName, expandable: el.hasAttribute("aria-expanded"), text: el.textContent?.trim() };
+      return { tag: el.tagName, expandable: el.hasAttribute("aria-expanded"), name: el.getAttribute("aria-label") };
     }, HEADER);
     expect(header.tag).toBe("DIV");
     expect(header.expandable).toBe(true);
-    expect(header.text).toMatch(/^Status/);
+    expect(header.name).toBe("Collapse Status section");
     expect(await present('[data-testid="sidebar-section-divider"]')).toBe(true);
-    // Above the PROJECTS header (which holds the Add project button), in
-    // document order.
-    const above = await browser.execute(sec => {
+    // Under the PROJECTS header (which holds the Add project button) and
+    // above the project tree, in document order: the block lives in the
+    // tree's scroller, and the eyebrow stays the list's only header.
+    const order = await browser.execute(sec => {
       const s = document.querySelector(sec)!;
-      const projects = document.querySelector('[data-testid="sidebar-add-project"]')!;
-      return !!(s.compareDocumentPosition(projects) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const projectsHeader = document.querySelector('[data-testid="sidebar-add-project"]')!;
+      const firstProject = document.querySelector("[data-project-id]")!;
+      return {
+        belowHeader: !!(s.compareDocumentPosition(projectsHeader) & Node.DOCUMENT_POSITION_PRECEDING),
+        aboveTree: !!(s.compareDocumentPosition(firstProject) & Node.DOCUMENT_POSITION_FOLLOWING),
+      };
     }, SECTION);
-    expect(above).toBe(true);
+    expect(order).toEqual({ belowHeader: true, aboveTree: true });
     expect(await stored("showStatusSection")).toBe("1");
   });
 
@@ -395,16 +401,18 @@ describe("sidebar status section", () => {
     // on, moved 13 ms in about 1.5 s of wall time: the window was painting no
     // frames. One class change, one transition, never restarted. With
     // `transition: none` the same element reads the selection colour, so the
-    // transition's end state is what is asserted.
+    // transition's end state is what is asserted. The selection itself is
+    // the `.sidebar-selected` gradient, a background-image over a transparent
+    // background-color, so that is the property read.
     await browser.waitUntil(
       () => browser.execute(sel => {
         const el = document.querySelector(sel) as HTMLElement | null;
         if (el?.dataset.active !== "true") return false;
         const was = el.style.transition;
         el.style.transition = "none";
-        const bg = getComputedStyle(el).backgroundColor;
+        const selectionPaint = getComputedStyle(el).backgroundImage;
         el.style.transition = was;
-        return bg !== "rgba(0, 0, 0, 0)" && !/, 0\)$/.test(bg);
+        return selectionPaint.includes("linear-gradient");
       }, ROW_IN("attention", blocked)),
       { timeout: 5_000 },
     ).catch(async () => {
@@ -504,6 +512,31 @@ describe("sidebar status section", () => {
     await snap("sidebar-status-collapsed.png");
     await click(HEADER);
     expect(await ariaExpanded(HEADER)).toBe("true");
+  });
+
+  it("swaps the tree for the buckets from the header, remembers it, and swaps back", async () => {
+    const SWAP = '[data-testid="sidebar-swap-view"]';
+    const eyebrow = () => browser.execute(() => document.querySelector('[data-testid="sidebar-section-eyebrow"]')?.textContent ?? null);
+    const asView = `${SECTION}[data-view]`;
+    await waitVisible(SWAP);
+    expect(await eyebrow()).toBe("Projects");
+    expect(await present('[data-testid="sidebar-status-count"]')).toBe(false);
+
+    await click(SWAP);
+    await waitVisible(asView);
+    expect(await eyebrow()).toBe("Status");
+    expect(await present('[data-testid="sidebar-status-count"]')).toBe(true);
+    // The view is the section without its own header, and the tree is gone.
+    expect(await present(`${asView} ${HEADER}`)).toBe(false);
+    expect(await present(`[data-project-id="${projectId}"]`)).toBe(false);
+    expect(await stored("sidebarView")).toBe("status");
+    await snap("sidebar-status-view.png");
+
+    await click(SWAP);
+    await waitVisible(`[data-project-id="${projectId}"]`);
+    expect(await eyebrow()).toBe("Projects");
+    expect(await present(asView)).toBe(false);
+    expect(await stored("sidebarView")).toBe("tree");
   });
 
   it("puts a task with an open PR in review, and a merge takes it out", async () => {

@@ -120,6 +120,8 @@ export default {
     openOn: "Open on {{forge}}",
   },
   taskWorkBadge: {
+    runningWord: "running",
+    doneWord: "done",
     working: "Agent working",
     workingAria: "Working",
     attention: "Agent needs your input",
@@ -163,6 +165,7 @@ export default {
     worktree: "worktree",
   },
   themePicker: {
+    label: "Theme",
     system: "System",
     light: "Light",
     autoBadge: "auto",

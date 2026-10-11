@@ -1732,6 +1732,29 @@ describe("compact rail", () => {
     await snap("compact-rail-tooltip.png");
   });
 
+  it("stacks the views in a well over the activity readout and marks the open task", async () => {
+    const rail = await browser.execute((id) => {
+      const views = document.querySelector('[data-testid="sidebar-rail-views"]') as HTMLElement | null;
+      const head = views?.parentElement;
+      const tile = document.querySelector(`[data-rail-task-id="${id}"]`) as HTMLElement | null;
+      return {
+        direction: views ? getComputedStyle(views).flexDirection : null,
+        buttons: views?.querySelectorAll("button[aria-pressed]").length ?? 0,
+        pressed: views?.querySelectorAll('button[aria-pressed="true"]').length ?? 0,
+        readout: !!head?.querySelector('[data-testid="sidebar-agent-activity"]'),
+        tileSelected: tile?.dataset.selected === "true",
+        tileHeight: tile ? Math.round(tile.getBoundingClientRect().height) : 0,
+      };
+    }, taskId);
+    expect(rail.direction).toBe("column");
+    expect(rail.buttons).toBeGreaterThanOrEqual(2);
+    // A task is open, so no view segment reads as the current one.
+    expect(rail.pressed).toBe(0);
+    expect(rail.readout).toBe(true);
+    expect(rail.tileSelected).toBe(true);
+    expect(rail.tileHeight).toBe(32);
+  });
+
   it("scrolls without a visible scrollbar", async () => {
     // Measured as the space a scrollbar takes, not as `scrollbar-width`:
     // macOS 14's WebKit (the CI runner) predates that property and reads it

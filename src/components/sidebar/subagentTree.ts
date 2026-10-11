@@ -584,3 +584,35 @@ export function childRowCarriesSelection(
   const isSubagentChild = subagentId !== null && subagentRowIds.has(subagentId);
   return isTerminalChild || isSubagentChild;
 }
+
+/** The tree lines one row draws, from the rows' indents in order. `last`:
+ *  no later sibling follows, so the row's own guide stops at its elbow.
+ *  `through`: the shallower levels whose guides pass down beside the row,
+ *  because the ancestor at that level has a later sibling. */
+export interface SubagentGuideLines {
+  last: boolean;
+  through: readonly number[];
+}
+
+export function subagentGuideLines(indents: readonly number[]): readonly SubagentGuideLines[] {
+  const isLast = indents.map((indent, index) => {
+    const nextAtOrAbove = indents.slice(index + 1).find(later => later <= indent);
+    return nextAtOrAbove === undefined || nextAtOrAbove < indent;
+  });
+
+  const lastAncestorAt: boolean[] = [];
+
+  return indents.map((indent, index) => {
+    const through: number[] = [];
+
+    for (let level = 1; level < indent; level += 1) {
+      const ancestorHasLaterSibling = lastAncestorAt[level] === false;
+      if (ancestorHasLaterSibling) through.push(level);
+    }
+
+    lastAncestorAt[indent] = isLast[index];
+    lastAncestorAt.length = indent + 1;
+
+    return { last: isLast[index], through };
+  });
+}

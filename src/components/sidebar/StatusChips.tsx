@@ -177,12 +177,15 @@ export const StatusChips = memo(function StatusChips() {
                 }
               }}
               className={cn(
-                "flex h-[22px] shrink-0 items-center gap-1.5 rounded-full border px-2 text-[11.5px] tabular-nums transition-colors",
+                // Sunk like the filter field above them, so the two read as one
+                // control. Colour only transitions: a themed border does not
+                // repaint under transition-colors in WKWebView.
+                "flex h-[22px] shrink-0 items-center gap-1.5 rounded-[6px] border px-2 text-[11px] font-semibold tabular-nums transition-[color,background-color] duration-[120ms]",
                 on
-                  ? "border-[var(--color-accent)] text-[var(--color-fg)]"
+                  ? "border-[var(--color-accent)] text-[var(--sidebar-ink-strong)]"
                   : empty
-                    ? "cursor-default border-[var(--color-border-soft)] text-[var(--color-fg-faint)] opacity-60"
-                    : "border-[var(--color-border-soft)] text-[var(--color-fg-dim)] hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)]",
+                    ? "cursor-default border-[var(--sidebar-input-border)] bg-[var(--sidebar-input-bg)] text-[var(--sidebar-faint)]"
+                    : "border-[var(--sidebar-input-border)] bg-[var(--sidebar-input-bg)] text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--sidebar-btn-hover-ink)]",
               )}
               style={on ? { backgroundColor: "color-mix(in srgb, var(--color-accent) 14%, transparent)" } : undefined}
             >

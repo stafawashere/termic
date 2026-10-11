@@ -108,39 +108,26 @@ describe("project add/remove", () => {
     }
   });
 
-  // The dashed "New task" placeholder stands in for the task rows an empty
-  // project does not have yet, so it must be the same height as one. It used
-  // to be ~11px taller, which broke the sidebar rhythm.
-  it("sizes the empty-project placeholder like a task row", async () => {
+  // The "New task" placeholder stands in for the task rows an empty project
+  // does not have yet, so it keeps the sidebar rhythm. The refined tree draws
+  // every row at 28px except the task row (30px), and the placeholder is one
+  // of the 28px rows, the same height as the project row above it. It used
+  // to be ~11px taller, which broke that rhythm.
+  it("sizes the empty-project placeholder like the project row above it", async () => {
     const id = projectId!;
     await browser.execute((i) => {
       window.__termic!.useApp.getState().setProjectCollapsed(i, false);
     }, id);
     const trigger = `[data-testid="project-empty-new-task-${id}"]`;
     await waitVisible(trigger);
-    const placeholderH = await browser.execute(
-      (sel) => (document.querySelector(sel) as HTMLElement).offsetHeight,
-      trigger,
-    );
 
-    const taskId = await browser.execute(async (i) => {
-      const t = window.__termic!;
-      const task = await t.ipc.taskOpenRepo(i, "fakeagent", "placeholder-size");
-      await t.useApp.getState().loadAll();
-      return task.id as string;
-    }, id);
-    const row = `[data-sidebar-task-id="${taskId}"]`;
-    await waitVisible(row);
-    const rowH = await browser.execute(
-      (sel) => (document.querySelector(sel) as HTMLElement).offsetHeight,
-      row,
-    );
+    const heights = await browser.execute((sel, projectSel) => {
+      const placeholder = document.querySelector(sel) as HTMLElement;
+      const projectRow = document.querySelector(projectSel) as HTMLElement;
+      return { placeholder: placeholder.offsetHeight, projectRow: projectRow.offsetHeight };
+    }, trigger, `[data-project-id="${id}"]`) as { placeholder: number; projectRow: number };
 
-    expect(placeholderH).toEqual(rowH);
-    await browser.execute(async (i) => {
-      await window.__termic!.ipc.taskArchive(i);
-      await window.__termic!.useApp.getState().loadAll();
-    }, taskId);
+    expect(heights.placeholder).toEqual(heights.projectRow);
   });
 
   it("reorders projects", async () => {

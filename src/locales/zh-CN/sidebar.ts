@@ -1,10 +1,21 @@
 // 侧边栏：项目树、任务行、紧凑模式图标栏、页脚、更新卡片，
 // 以及共享的菜单内容（项目操作、分组操作）。
 export default {
+  activity: {
+    agents_one: "{{count}} 个智能体",
+    agents_other: "{{count}} 个智能体",
+    idle: "没有正在工作的智能体",
+    line: "{{task}} · 已运行 {{elapsed}}",
+    lineNoTime: "{{task}} · 运行中",
+    subagents_one: "{{count}} 个子智能体运行中",
+    subagents_other: "{{count}} 个子智能体运行中",
+  },
   navDashboard: "仪表盘",
   navHistory: "历史",
   navBoard: "看板",
   navScheduled: "定时任务",
+  swapToStatus: "显示状态",
+  swapToProjects: "显示项目",
   projectsHeader: "项目",
   listOptionsTip: "项目列表选项",
   expandAll: "展开所有智能体",
@@ -44,7 +55,7 @@ export default {
     tipEmpty: "{{label}}：没有任务",
   },
   filterBar: {
-    placeholder: "筛选任务",
+    placeholder: "筛选项目和任务",
     count: "{{shown}} / {{total}} 个任务",
     hidden_one: "已隐藏 {{count}} 个无匹配的项目",
     hidden_other: "已隐藏 {{count}} 个无匹配的项目",
@@ -78,7 +89,7 @@ export default {
   removeProjectMessage: "所有任务将被归档，其工作树将从磁盘删除。仓库文件夹会保留。此操作无法在 Termic 内撤销。",
   removingBusy: "正在移除「{{name}}」…",
   removeProject: "移除项目",
-  inactiveHeader: "不活跃项目",
+  inactiveHeader: "不活跃",
   inactiveTipOne: "{{count}} 个不活跃项目",
   inactiveTipMany: "{{count}} 个不活跃项目",
   reportBug: "报告问题",
@@ -98,6 +109,8 @@ export default {
   creatingWorktree: "正在创建工作树…",
   taskNameTitle: "任务名称：{{name}}",
   restoreFailed: "恢复失败",
+  expandTask: "展开任务",
+  collapseTask: "折叠任务",
   taskMenu: "任务菜单",
   spotlightTip: "Spotlight：更改会与 {{branch}} 同步",
   menuNew: "新建",
@@ -201,6 +214,14 @@ export default {
   scheduleDocker: "定时执行暂不支持 Docker",
 
   subagents: {
+    stateWord: {
+      running: "运行中",
+      done: "完成",
+      failed: "失败",
+      interrupted: "已中断",
+      unknown: "已停止",
+      expired: "已过期",
+    },
     running: "运行中",
     runningHint: "该子智能体仍在工作。",
     done: "已完成",

@@ -107,6 +107,10 @@ export function sanitizeTheme(file: CustomThemeFile): CustomTheme {
   };
 }
 
+/** Class on <html> while a custom theme is active (applyTheme). index.css
+ *  keys the sidebar's derived --sidebar-* recipes off it. */
+export const CUSTOM_THEME_CLASS = "custom-theme";
+
 /** Push a custom theme's UI colors as inline vars on <html>. Inline style
  *  beats the @theme defaults in the cascade, so a partial theme falls back
  *  to Dark+ per-key automatically. Iterates the full allowlist (set or

@@ -561,7 +561,7 @@ const numOrDefault = (k: string, fallback: number) => {
   try { const v = Math.round(Number(localStorage.getItem(k))); return Number.isFinite(v) && v > 0 ? v : fallback; }
   catch { return fallback; }
 };
-const initialSBW = numOrDefault(LS_SBW, 280);
+const initialSBW = numOrDefault(LS_SBW, 338);
 const initialRPW = numOrDefault(LS_RPW, 280);
 const initialRFH = numOrDefault(LS_RFH, 260);
 
@@ -3093,6 +3093,7 @@ export const useApp = create<AppState>((set, get) => ({
         patch.workProgressKind = null;
       } else {
         patch.workDoneAt = undefined;
+        patch.workingSince = Date.now();
         // The agent went back to work after we called it done, so the bullet
         // this turn produced was wrong — drop it rather than leaving a "this
         // finished" mark on a tab that is visibly working. An `attention`

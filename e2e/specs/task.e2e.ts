@@ -2765,14 +2765,14 @@ describe("task groups", () => {
       const all: any[] = await window.__termic!.ipc.tasksList();
       return Object.fromEntries(all.map(t => [t.id, t.group ?? null]));
     }) as unknown as Promise<Record<string, { id: string; name?: string; color?: string } | null>>;
-  /** The rail's painted colour against the palette token it should resolve
+  /** The rail's painted colour against the swatch token it should resolve
    *  to, both read as computed rgb so a theme change cannot fake a match. */
   const railMatches = (gid: string, key: string) =>
     browser.execute((sel, k) => {
       const rail = document.querySelector(`${sel} [data-task-group-rail]`) as HTMLElement | null;
       if (!rail) return false;
       const probe = document.createElement("span");
-      probe.style.backgroundColor = `var(--color-palette-${k})`;
+      probe.style.backgroundColor = `var(--color-swatch-${k})`;
       document.body.appendChild(probe);
       const want = getComputedStyle(probe).backgroundColor;
       probe.remove();
@@ -2897,7 +2897,7 @@ describe("task groups", () => {
         const el = document.querySelector(sel) as HTMLElement | null;
         if (!el) return false;
         const probe = document.createElement("span");
-        probe.style.backgroundColor = `var(--color-palette-${k})`;
+        probe.style.backgroundColor = `var(--color-swatch-${k})`;
         document.body.appendChild(probe);
         const want = getComputedStyle(probe).backgroundColor;
         probe.remove();
@@ -3123,8 +3123,10 @@ describe("task groups", () => {
         looseName: box(nameOf(looseId))!.left,
         capLabel: box(document.querySelector(`[data-testid="task-group-label-${orchId}"]`))!.left,
         rail: box(rail)!.left + parseFloat(getComputedStyle(rail).borderLeftWidth) / 2,
-        looseRow: box(rowOf(looseId))!.left,
-        memberRow: box(rowOf(c1))!.left,
+        // Rows span the panel at every depth, so the step is read off the
+        // chevrons, where the indent is drawn.
+        looseRow: centre(rowOf(looseId).querySelector("svg")),
+        memberRow: centre(rowOf(c1).querySelector("svg")),
       };
     }, orch, child1, loose);
     expect(Math.abs(g.capIcon - g.looseChevron)).toBeLessThanOrEqual(1);
@@ -3450,7 +3452,7 @@ describe("spawn links across projects", () => {
    *  deliver pointer events to the list in this WKWebView.) */
   const hover = (id: string | null) =>
     browser.execute((sel) => {
-      const list = document.querySelector("[data-sidebar-task-id]")!.closest(".overflow-y-auto")!;
+      const list = document.querySelector("[data-sidebar-task-id]")!.closest("[data-testid='sidebar-scroll']")!;
       if (!sel) { list.dispatchEvent(new PointerEvent("pointerleave", { bubbles: false })); return; }
       document.querySelector(sel)!.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, buttons: 0 }));
     }, id ? row(id) : null);
@@ -3943,10 +3945,19 @@ describe("branch as the task name (GH #260)", () => {
   let taskId = "";
   let original = false;
 
-  /** Visible text of the task's sidebar row, minus the terminal count. */
+  /** Text of the task's sidebar row without its trailing branch chip. The
+   *  chip names the branch beside a typed name by design, so leaving it in
+   *  would hide which of the two the label itself shows. */
   const rowText = (id: string) =>
     browser.execute(
-      (i) => document.querySelector(`[data-sidebar-task-id="${i}"]`)?.textContent ?? "",
+      (i) => {
+        const row = document.querySelector(`[data-sidebar-task-id="${i}"]`);
+        if (!row) return "";
+
+        const labelOnly = row.cloneNode(true) as HTMLElement;
+        labelOnly.querySelector('[data-testid="task-branch-chip"]')?.remove();
+        return labelOnly.textContent ?? "";
+      },
       id,
     );
 

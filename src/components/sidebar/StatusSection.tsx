@@ -21,10 +21,10 @@
 // `[data-sidebar-task-id]` per task. Rows are mouse-only: keyboard navigation
 // walks the tree's project order, which this section shares but does not own.
 
-import { memo, useMemo } from "react";
+import { Fragment, memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { Activity, Bell, ChevronDown, ChevronRight, GitPullRequest, Minus, Moon, Plus } from "lucide-react";
+import { Bell, GitPullRequest, Moon } from "lucide-react";
 import { useApp } from "@/store/app";
 import { usePrefs } from "@/store/prefs";
 import { usePr } from "@/store/pr";
@@ -39,6 +39,7 @@ import { TaskPrBadge } from "@/components/TaskPrBadge";
 import { TaskLabelText } from "@/components/TaskLabelText";
 import { Spinner } from "@/components/ui/Spinner";
 import { RollupMarks, WorkMarkList } from "./RollupMarks";
+import { ChecklistGlyph, CritterGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
 import { cn } from "@/lib/utils";
 import { taskLabel, taskLabelParts } from "@/lib/taskLabel";
 import { isStatusBucketCollapsed, STATUS_MARK_COLOR, statusBuckets, type StatusBucket } from "@/lib/sidebarStatus";
@@ -46,7 +47,9 @@ import { groupColorCss, groupLabel } from "@/lib/taskGroups";
 import { formatTerminalTitle } from "@/lib/terminalTitle";
 import { taskDelegatedWork, taskWorkBadge } from "@/lib/taskWorkState";
 import type { WorkStatePrefs } from "@/lib/taskWorkState";
+import { builtinBaseId } from "@/lib/agents";
 import type { Agent, Task, TaskGroup, TerminalTab } from "@/lib/types";
+import { SubagentGroupToggle, SubagentRows } from "./SubagentRows";
 
 /** Literal keys, so usedKeys.test.ts can see them. The board's own labels:
  *  a bucket and its column must not be called two different things. */
@@ -84,24 +87,16 @@ function StatusBucketMark({ bucket }: { bucket: StatusBucket }) {
   );
 }
 
-/** `matchIds`: the sidebar filter bar's result, or null while it is empty.
- *  The section lists only those tasks, so a filter means the same thing
- *  here as in the tree below. */
-export function StatusSection({ matchIds = null }: { matchIds?: ReadonlySet<string> | null }) {
-  const { t } = useTranslation("sidebar");
+/** The buckets the filter leaves (`matchIds`, null while the bar is empty),
+ *  and the board prefs that fill them. Shared by the section and the
+ *  header's count in the STATUS view. */
+function useStatusGroups(matchIds: ReadonlySet<string> | null) {
   const projects = useApp(s => s.projects);
   const tasks = useApp(s => s.tasks);
-  const agents = useApp(s => s.agents);
   const facts = useStatusTabFacts();
   const settledHighlight = usePrefs(s => s.settledHighlight);
   const workingIndicator = usePrefs(s => s.workingIndicator);
   const attentionIndicator = usePrefs(s => s.attentionIndicator);
-  const useBranchAsTaskName = usePrefs(s => s.useBranchAsTaskName);
-  const bucketCollapsed = usePrefs(s => s.statusBucketCollapsed);
-  const setBucketCollapsed = usePrefs(s => s.setStatusBucketCollapsed);
-  const statusSectionCollapsed = usePrefs(s => s.statusSectionCollapsed);
-  const setStatusSectionCollapsed = usePrefs(s => s.setStatusSectionCollapsed);
-  const isCollapsed = matchIds ? false : statusSectionCollapsed;
   // The board's pref set, so the same toggles fill the same buckets. Stable
   // identity: it keys every row's badge selector.
   const workPrefs: WorkStatePrefs = useMemo(
@@ -124,7 +119,41 @@ export function StatusSection({ matchIds = null }: { matchIds?: ReadonlySet<stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [projects, listed, facts, workPrefs, prKey],
   );
-  const totalStatusCount = useMemo(() => groups.reduce((acc, g) => acc + g.count, 0), [groups]);
+  const total = useMemo(() => groups.reduce((acc, g) => acc + g.count, 0), [groups]);
+
+  return { projects, tasks, groups, total, workPrefs };
+}
+
+/** The STATUS view's count, beside the section header's eyebrow. */
+export const StatusViewCount = memo(function StatusViewCount({ matchIds = null }: { matchIds?: ReadonlySet<string> | null }) {
+  const { total } = useStatusGroups(matchIds);
+
+  return (
+    <span
+      data-testid="sidebar-status-count"
+      className="sidebar-badge"
+    >
+      {total}
+    </span>
+  );
+});
+
+/** `matchIds`: the sidebar filter bar's result, or null while it is empty.
+ *  The section lists only those tasks, so a filter means the same thing
+ *  here as in the tree below.
+ *
+ *  `asView`: the STATUS view, which the sidebar's own section header names
+ *  and counts, so this draws no header of its own and never folds. */
+export function StatusSection({ matchIds = null, asView = false }: { matchIds?: ReadonlySet<string> | null; asView?: boolean }) {
+  const { t } = useTranslation("sidebar");
+  const agents = useApp(s => s.agents);
+  const useBranchAsTaskName = usePrefs(s => s.useBranchAsTaskName);
+  const bucketCollapsed = usePrefs(s => s.statusBucketCollapsed);
+  const setBucketCollapsed = usePrefs(s => s.setStatusBucketCollapsed);
+  const statusSectionCollapsed = usePrefs(s => s.statusSectionCollapsed);
+  const setStatusSectionCollapsed = usePrefs(s => s.setStatusSectionCollapsed);
+  const isCollapsed = matchIds || asView ? false : statusSectionCollapsed;
+  const { projects, tasks, groups, total: totalStatusCount, workPrefs } = useStatusGroups(matchIds);
   const statusTaskIds = useMemo(() => {
     const ids: string[] = [];
     for (const g of groups) {
@@ -138,58 +167,11 @@ export function StatusSection({ matchIds = null }: { matchIds?: ReadonlySet<stri
   const projectName = useMemo(() => new Map(projects.map(p => [p.id, p.name])), [projects]);
 
   return (
-    <div data-testid="status-section" className="mb-1">
-      <div
-        role="button"
-        tabIndex={0}
-        data-testid="status-section-header"
-        aria-expanded={!isCollapsed}
-        title={isCollapsed ? t("expandStatusSection") : t("collapseStatusSection")}
-        onClick={() => setStatusSectionCollapsed(!statusSectionCollapsed)}
-        onKeyDown={ev => {
-          if (ev.key === "Enter" || ev.key === " ") {
-            ev.preventDefault();
-            setStatusSectionCollapsed(!statusSectionCollapsed);
-          }
-        }}
-        className={cn(
-          "group flex h-7 cursor-pointer select-none items-center justify-between rounded-md px-2 text-[11px] font-semibold uppercase tracking-wider transition-colors",
-          "bg-[var(--color-bg-2)]/60 hover:bg-[var(--color-bg-2)] text-[var(--color-fg)] border border-[var(--color-border-soft)]/50",
-        )}
-      >
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Activity className="h-3.5 w-3.5 shrink-0 text-[var(--color-accent)]" />
-          <span className="truncate">{t("statusHeader")}</span>
-          {totalStatusCount > 0 && (
-            <span
-              data-testid="status-section-total-count"
-              className="ml-0.5 rounded-full bg-[var(--color-bg-3)]/80 px-1.5 py-0.5 text-[10.5px] font-medium tabular-nums text-[var(--color-fg-dim)] group-hover:text-[var(--color-fg)]"
-            >
-              {totalStatusCount}
-            </span>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-1 text-[var(--color-fg-faint)] group-hover:text-[var(--color-fg-dim)]">
-          {isCollapsed && statusTaskIds.length > 0 && (
-            <RollupMarks ids={statusTaskIds} testId="status-section-marks" />
-          )}
-          {isCollapsed ? (
-            <span
-              data-testid="status-section-expand-indicator"
-              className="flex h-4 w-4 items-center justify-center rounded text-[var(--color-accent)]"
-            >
-              <Plus className="h-3 w-3" strokeWidth={2.5} />
-            </span>
-          ) : (
-            <span
-              data-testid="status-section-collapse-indicator"
-              className="flex h-4 w-4 items-center justify-center rounded"
-            >
-              <Minus className="h-3 w-3" strokeWidth={2.5} />
-            </span>
-          )}
-        </div>
-      </div>
+    <div
+      data-testid="status-section"
+      data-view={asView || undefined}
+      className={cn("flex flex-col", !asView && "pt-[4px]")}
+    >
       {!isCollapsed && groups.map(g => {
         const open = !isStatusBucketCollapsed(g.bucket, bucketCollapsed);
         const count = g.count;
@@ -203,13 +185,11 @@ export function StatusSection({ matchIds = null }: { matchIds?: ReadonlySet<stri
               data-testid="status-bucket-header"
               aria-expanded={open}
               onClick={() => setBucketCollapsed(g.bucket, open)}
-              className="ml-1 flex h-[var(--task-row-h)] items-center gap-1 rounded-md px-1 text-[12.5px] text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)] transition-colors"
+              className="flex h-[var(--sidebar-row-h)] items-center gap-[8px] rounded-[6px] px-[6px] text-[13px] text-[var(--sidebar-ink-group)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)]"
             >
-              {open
-                ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
-                : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />}
+              <TreeChevron open={open} className="shrink-0 text-[var(--sidebar-chevron)]" />
               <StatusBucketMark bucket={g.bucket} />
-              <span className="min-w-0 truncate font-medium">{bucketLabel(g.bucket, t)}</span>
+              <span className="min-w-0 truncate font-semibold">{bucketLabel(g.bucket, t)}</span>
               {/* Tinted with the bucket's colour, the text left neutral: an
                   amber or blue digit on the light theme's cream is too faint
                   to read, a tint behind a dim one is not. */}
@@ -217,13 +197,16 @@ export function StatusSection({ matchIds = null }: { matchIds?: ReadonlySet<stri
                 data-testid="status-bucket-count"
                 title={countLabel}
                 aria-label={countLabel}
-                className="ml-auto min-w-[18px] rounded-full px-1.5 text-center text-[11px] leading-[16px] tabular-nums text-[var(--color-fg-dim)]"
-                style={{ backgroundColor: `color-mix(in srgb, ${STATUS_MARK_COLOR[g.bucket]} 16%, transparent)` }}
+                className="sidebar-badge ml-auto text-center"
+                style={{ backgroundColor: `color-mix(in srgb, ${STATUS_MARK_COLOR[g.bucket]} 16%, var(--sidebar-badge-bg))` }}
               >
                 {count}
               </span>
             </button>
-            {open && g.items.map(item => item.kind === "task" ? (
+            {open && g.items.length > 0 && (
+            <div className="relative flex flex-col">
+            <span aria-hidden className="pointer-events-none absolute bottom-0 top-0 w-px bg-[var(--sidebar-guide)]" style={{ left: 10 }} />
+            {g.items.map(item => item.kind === "task" ? (
               <StatusTaskRow
                 key={item.task.id}
                 task={item.task}
@@ -231,6 +214,7 @@ export function StatusSection({ matchIds = null }: { matchIds?: ReadonlySet<stri
                 agents={agents}
                 useBranchAsTaskName={useBranchAsTaskName}
                 workPrefs={workPrefs}
+                withSubagents={asView}
               />
             ) : (
               <StatusGroupBlock
@@ -248,13 +232,59 @@ export function StatusSection({ matchIds = null }: { matchIds?: ReadonlySet<stri
                     agents={agents}
                     useBranchAsTaskName={useBranchAsTaskName}
                     workPrefs={workPrefs}
+                    withSubagents={asView}
                   />
                 )}
               />
             ))}
+            </div>
+            )}
           </div>
         );
       })}
+      {/* The block has no heading: its fold sits on its bottom rule, a
+          chevron that shows on hover, and stays with the folded block's
+          marks while it is folded. */}
+      {!asView && (
+        <div
+          role="button"
+          tabIndex={0}
+          data-testid="status-section-header"
+          aria-expanded={!isCollapsed}
+          aria-label={isCollapsed ? t("expandStatusSection") : t("collapseStatusSection")}
+          title={isCollapsed ? t("expandStatusSection") : t("collapseStatusSection")}
+          onClick={() => setStatusSectionCollapsed(!statusSectionCollapsed)}
+          onKeyDown={ev => {
+            if (ev.key === "Enter" || ev.key === " ") {
+              ev.preventDefault();
+              setStatusSectionCollapsed(!statusSectionCollapsed);
+            }
+          }}
+          className="group/fold relative mb-[6px] mt-[4px] flex h-[14px] cursor-pointer select-none items-center justify-end"
+        >
+          <span data-testid="sidebar-section-divider" aria-hidden className="absolute inset-x-0 top-1/2 h-px bg-[var(--sidebar-divider)]" />
+          <span
+            className={cn(
+              // Masks the rule behind it, so the chevron reads as sitting on it.
+              "relative flex shrink-0 items-center gap-[6px] bg-[var(--sidebar-bg-top)] pl-[6px] pr-[8px] text-[var(--sidebar-chevron)] transition-opacity duration-[120ms]",
+              isCollapsed ? "opacity-100" : "opacity-0 group-hover/fold:opacity-100 group-focus-visible/fold:opacity-100",
+            )}
+          >
+            {isCollapsed && totalStatusCount > 0 && (
+              <span data-testid="status-section-total-count" className="text-[11px] tabular-nums text-[var(--sidebar-meta)]">
+                {totalStatusCount}
+              </span>
+            )}
+            {isCollapsed && statusTaskIds.length > 0 && (
+              <RollupMarks ids={statusTaskIds} testId="status-section-marks" />
+            )}
+            <TreeChevron
+              open={!isCollapsed}
+              data-testid={isCollapsed ? "status-section-expand-indicator" : "status-section-collapse-indicator"}
+            />
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -304,7 +334,7 @@ function StatusGroupBlock({ group, label, projectName, tasks, workPrefs, renderR
         onKeyDown={ev => {
           if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); toggle(); }
         }}
-        className="ml-3 flex h-[var(--task-row-h)] cursor-pointer select-none items-center gap-1 rounded-md px-1 text-[13px] font-medium transition-colors hover:bg-[var(--color-hover)]"
+        className="flex h-[var(--sidebar-row-h)] cursor-pointer select-none items-center gap-[8px] rounded-[6px] pl-[24px] pr-[8px] text-[13px] font-medium transition-[background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)]"
         style={{ color }}
       >
         {/* Where a row's chevron sits, as the tree's caption does it. */}
@@ -312,23 +342,30 @@ function StatusGroupBlock({ group, label, projectName, tasks, workPrefs, renderR
           data-testid="status-group-toggle"
           aria-label={collapsed ? t("taskGroup.expand") : t("taskGroup.collapse")}
           title={collapsed ? t("taskGroup.expand") : t("taskGroup.collapse")}
-          className="shrink-0 rounded p-0.5"
+          className="flex w-[10px] shrink-0 items-center justify-center"
         >
-          {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          <TreeChevron open={!collapsed} />
         </span>
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <TintedFolderGlyph size={15} color={color} className="shrink-0" />
+        <div className="flex min-w-0 flex-1 items-center gap-[6px]">
           <span className="min-w-0 shrink truncate">{label}</span>
           {projectName && (
-            <span className="min-w-0 shrink-[2] truncate text-[11.5px] font-normal text-[var(--color-fg-faint)]">{projectName}</span>
+            <span className="min-w-0 shrink-[2] truncate text-[12px] font-normal text-[var(--sidebar-meta)]">{projectName}</span>
           )}
         </div>
         {collapsed
           ? <StatusGroupMarks memberIds={tasks.map(w => w.id)} count={tasks.length} workPrefs={workPrefs} />
-          : <span data-testid="status-group-count" className="ml-auto shrink-0 pr-1 text-[11px] font-normal tabular-nums text-[var(--color-fg-faint)]">{tasks.length}</span>}
+          : <span data-testid="status-group-count" className="ml-auto shrink-0 text-[11px] font-normal tabular-nums text-[var(--sidebar-meta)]">{tasks.length}</span>}
       </div>
       {shown.length > 0 && (
-        <div data-status-group-rail className="ml-6 border-l-2" style={{ borderColor: color }}>
-          <div className="-ml-1.5">{shown.map(renderRow)}</div>
+        <div className="relative">
+          <span
+            aria-hidden
+            data-status-group-rail
+            className="pointer-events-none absolute bottom-0 top-0 border-l"
+            style={{ left: 28, borderColor: color }}
+          />
+          <div style={{ "--sb-status-pad": "42px" } as React.CSSProperties}>{shown.map(renderRow)}</div>
         </div>
       )}
     </div>
@@ -352,9 +389,9 @@ function StatusGroupMarks({ memberIds, count, workPrefs }: {
   );
   const key = useApp(select);
   return (
-    <span data-testid="status-group-marks" data-kinds={key} className="ml-auto flex shrink-0 items-center gap-1 pr-1">
+    <span data-testid="status-group-marks" data-kinds={key} className="ml-auto flex shrink-0 items-center gap-1">
       {key && <WorkMarkList kinds={key} badgeTestId="status-work-badge" />}
-      <span data-testid="status-group-count" className="ml-0.5 shrink-0 text-[11px] font-normal tabular-nums text-[var(--color-fg-faint)]">{count}</span>
+      <span data-testid="status-group-count" className="ml-0.5 shrink-0 text-[11px] font-normal tabular-nums text-[var(--sidebar-meta)]">{count}</span>
     </span>
   );
 }
@@ -366,12 +403,15 @@ function StatusGroupMarks({ memberIds, count, workPrefs }: {
  *  is two things, and one glyph on the row said only one of them. TaskRow is
  *  NOT reused: its rename and auto-expand effects would run twice per task,
  *  and every auto-expand would be a second whole-state write. */
-const StatusTaskRow = memo(function StatusTaskRow({ task: w, projectName, agents, useBranchAsTaskName, workPrefs }: {
+const StatusTaskRow = memo(function StatusTaskRow({ task: w, projectName, agents, useBranchAsTaskName, workPrefs, withSubagents }: {
   task: Task;
   projectName: string;
   agents: Agent[];
   useBranchAsTaskName: boolean;
   workPrefs: WorkStatePrefs;
+  /** The STATUS view nests each claude session's subagents under it, the
+   *  tree's way. The compact block above the tree keeps one row a session. */
+  withSubagents: boolean;
 }) {
   const { t } = useTranslation("sidebar");
   const setActive = useApp(s => s.setActiveTask);
@@ -390,6 +430,7 @@ const StatusTaskRow = memo(function StatusTaskRow({ task: w, projectName, agents
   const label = taskLabel(w, useBranchAsTaskName);
   const labelIsBranch = label !== w.name;
   const droppedPrefix = taskLabelParts(w, useBranchAsTaskName).prefix !== "";
+  const isSelectedRow = isActive && (!open || !activeChild);
   const toggle = () => setExpanded(w.id, !expanded,
     useApp.getState().tasks.filter(x => !x.archived).map(x => x.id));
 
@@ -400,7 +441,7 @@ const StatusTaskRow = memo(function StatusTaskRow({ task: w, projectName, agents
           WebKit reparents. Same reason as the tree's row. */}
       <div
         data-status-task-id={w.id}
-        data-active={(isActive && (!open || !activeChild)) || undefined}
+        data-active={isSelectedRow || undefined}
         role="button"
         tabIndex={0}
         onClick={() => setActive(w.id)}
@@ -408,33 +449,31 @@ const StatusTaskRow = memo(function StatusTaskRow({ task: w, projectName, agents
           if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); setActive(w.id); }
         }}
         className={cn(
-          "ml-3 flex h-[var(--task-row-h)] cursor-pointer select-none items-center gap-1 rounded-md px-1 text-[13px] transition-colors",
+          "flex h-[var(--sidebar-row-h)] cursor-pointer select-none items-center gap-[8px] rounded-[6px] pl-[var(--sb-status-pad,24px)] pr-[8px] text-[13px] transition-[color,background-color] duration-[120ms]",
           // The tree's rule: the selection sits on the task's row unless an
           // expanded child row (its active tab) carries it.
-          isActive && (!open || !activeChild)
-            ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
-            : isActive
-              ? "text-[var(--color-fg)] hover:bg-[var(--color-hover)]"
-              : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
+          isSelectedRow
+            ? "sidebar-selected text-[var(--sidebar-sel-ink)]"
+            : "text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-row-hover)]",
         )}
       >
         {tabCount === 0
-          // No terminals this session: the tree's dormant mark, nothing to expand.
-          ? <Moon className="mx-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)] opacity-40" />
+          // No terminals this session: nothing to expand; the moon after the
+          // name says so, as in the tree.
+          ? <span aria-hidden className="w-[10px] shrink-0" />
           : (
             <button
               type="button"
               data-testid="status-task-toggle"
               aria-expanded={open}
               onClick={e => { e.stopPropagation(); toggle(); }}
-              className="shrink-0 rounded p-0.5 transition-colors hover:bg-[var(--color-bg-3)]"
+              className="flex h-[20px] w-[10px] shrink-0 items-center justify-center"
             >
-              {open
-                ? <ChevronDown className="h-3.5 w-3.5 text-[var(--color-fg-faint)]" />
-                : <ChevronRight className="h-3.5 w-3.5 text-[var(--color-fg-faint)]" />}
+              <TreeChevron open={open} className={isSelectedRow ? "text-[var(--sidebar-sel-chevron)]" : "text-[var(--sidebar-chevron)]"} />
             </button>
           )}
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <ChecklistGlyph size={15} className={cn("shrink-0", isSelectedRow ? "text-[var(--sidebar-sel-icon)]" : "text-[var(--sidebar-icon)]")} />
+        <div className="flex min-w-0 flex-1 items-center gap-[6px]">
           {/* The leaf alone: this row also names the project, and a
               squeezed prefix came out a different length on every row. The
               whole branch is in the tooltip, and in the tree below. */}
@@ -452,11 +491,12 @@ const StatusTaskRow = memo(function StatusTaskRow({ task: w, projectName, agents
               first: the task's own name is what the row is for. A group
               member has it on its caption instead. */}
           {projectName && (
-            <span className="min-w-0 shrink-[2] truncate text-[11.5px] text-[var(--color-fg-faint)]">{projectName}</span>
+            <span className={cn("min-w-0 shrink-[2] truncate text-[12px]", isSelectedRow ? "text-[var(--sidebar-sel-meta)]" : "text-[var(--sidebar-meta)]")}>{projectName}</span>
           )}
+          {tabCount === 0 && <Moon className="ml-[2px] h-3 w-3 shrink-0 text-[var(--sidebar-chevron)] opacity-60" />}
           {/* The tree's terminal count, from two up. */}
           {tabCount > 1 && (
-            <span data-testid="status-task-count" className="shrink-0 text-[11px] font-medium tabular-nums text-[var(--color-fg-dim)]">
+            <span data-testid="status-task-count" className="shrink-0 text-[11px] font-medium tabular-nums text-[var(--sidebar-meta)]">
               ({tabCount})
             </span>
           )}
@@ -464,12 +504,12 @@ const StatusTaskRow = memo(function StatusTaskRow({ task: w, projectName, agents
         <span className="flex shrink-0 items-center gap-1.5 pl-1">
           <TaskPrBadge task={w} testId="status-pr-badge" />
           {/* Expanded, the children carry the badges, as in the tree. */}
-          <span className="flex h-[18px] w-[18px] items-center justify-center">
+          <span className="flex h-[20px] w-[20px] items-center justify-center">
             {!open && badge && <TaskWorkBadge reason={badge} delegated={delegated} testId="status-work-badge" />}
           </span>
         </span>
       </div>
-      {open && <StatusTaskTabs taskId={w.id} agents={agents} workPrefs={workPrefs} />}
+      {open && <StatusTaskTabs taskId={w.id} agents={agents} workPrefs={workPrefs} withSubagents={withSubagents} />}
     </div>
   );
 });
@@ -479,10 +519,11 @@ const StatusTaskRow = memo(function StatusTaskRow({ task: w, projectName, agents
  *  Mounted only while expanded, which is the one place this section holds a
  *  task's tabs (titles are drawn here); the timestamps stay held back by
  *  useRowTabs, as for the tree's rows. */
-function StatusTaskTabs({ taskId, agents, workPrefs }: {
+function StatusTaskTabs({ taskId, agents, workPrefs, withSubagents }: {
   taskId: string;
   agents: Agent[];
   workPrefs: WorkStatePrefs;
+  withSubagents: boolean;
 }) {
   const tabs = useRowTabs(taskId);
   const isActive = useApp(s => s.activeTaskId === taskId);
@@ -491,18 +532,21 @@ function StatusTaskTabs({ taskId, agents, workPrefs }: {
   const setActiveTabId = useApp(s => s.setActiveTabId);
   const terminalTabs = tabs.filter((t): t is TerminalTab => t.type === "terminal" && !t.paneId);
   return (
-    <>
+    // SubagentRows indents from --sb-task-pad, and a session here sits one
+    // step in from this row's pad, as a tree session does from its task.
+    <div style={{ "--sb-task-pad": "var(--sb-status-pad, 24px)" } as React.CSSProperties}>
       {terminalTabs.map(tab => {
         const hot = isActive && tab.id === activeTabId;
         const reason = taskWorkBadge([tab], workPrefs);
         const raw = tab.customTitle ? tab.title : (tab.liveTitle || tab.title);
         const icon = resolveIconId(tab.cli, agents);
+        const isClaude = builtinBaseId(tab.cli, agents) === "claude";
         // The tree's rule: the brand glyph always goes, the spinner whenever
         // Termic draws its own working badge.
         const title = tab.customTitle ? raw : formatTerminalTitle(raw, icon, !!workPrefs.workingIndicator);
         return (
+          <Fragment key={tab.id}>
           <div
-            key={tab.id}
             data-status-tab-id={tab.id}
             data-cli={tab.cli}
             data-active={hot || undefined}
@@ -515,24 +559,33 @@ function StatusTaskTabs({ taskId, agents, workPrefs }: {
               }
             }}
             className={cn(
-              "ml-8 flex cursor-pointer select-none items-center gap-1.5 rounded-md px-1.5 py-[3px] text-[12.5px] transition-colors",
+              "mt-[2px] flex h-[var(--sidebar-task-row-h)] cursor-pointer select-none items-center gap-[8px] rounded-[6px] pl-[calc(var(--sb-status-pad,24px)+18px)] pr-[8px] text-[13px] transition-[color,background-color] duration-[120ms]",
               hot
-                ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
-                : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
+                ? "sidebar-selected text-[var(--sidebar-sel-ink)]"
+                : "text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-row-hover)]",
             )}
           >
-            <span className={cn("shrink-0", CLI_BRAND_COLOR[icon] || "text-[var(--color-fg-dim)]")}>
-              <CliIcon cli={icon} className="h-3.5 w-3.5" />
+            <span className="flex w-[10px] shrink-0 items-center justify-center">
+              {withSubagents && isClaude && <SubagentGroupToggle tabId={tab.id} />}
             </span>
+            {isClaude ? (
+              <CritterGlyph size={16} className="shrink-0 text-[var(--color-accent)]" />
+            ) : (
+              <span className={cn("shrink-0", CLI_BRAND_COLOR[icon] || "text-[var(--sidebar-icon)]")}>
+                <CliIcon cli={icon} className="h-[15px] w-[15px]" />
+              </span>
+            )}
             <span className="min-w-0 flex-1 truncate">{title}</span>
-            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+            <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center">
               {reason && (
                 <TaskWorkBadge reason={reason} delegated={taskDelegatedWork([tab], workPrefs)} testId="status-work-badge" />
               )}
             </span>
           </div>
+          {withSubagents && isClaude && <SubagentRows taskId={taskId} tabId={tab.id} selectedAgentId={null} />}
+          </Fragment>
         );
       })}
-    </>
+    </div>
   );
 }

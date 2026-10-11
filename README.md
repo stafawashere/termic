@@ -237,7 +237,7 @@ no metered markup, no backend daemon. Here's what the window gives you on top:
 - **Message Queues.** Built on top of work-done detection: queue N messages (with optional repeats) to run autonomous "Ralph loop" sessions.
 - **Auto-Resume Everything.** Termic auto-resumes sessions even for repo-root tasks, and resumes ALL agent tabs in a task, not just the primary one.
 - **Spotlight.** Mirror one worktree's changes — committed, uncommitted, and untracked — into your repo root in real time, so your editor, dev server, and browser see the agent's work live. It runs on a detached HEAD and never commits to your branch; disabling it cleanly restores the checkout. (Conductor checkpoints your branch; Spotlight doesn't touch it.)
-- **Find + edit in-app.** ⌘P fuzzy file finder, ⇧⌘F find-in-files (on
+- **Find + edit in-app.** ⌘P fuzzy file finder, ⌥⌘F find-in-files (on
   `ripgrep` when you have it, `git grep` otherwise, .gitignore-aware,
   streams live). CodeMirror 6 editor with side-by-side / unified diffs,
   highlighting for ~150 languages, inline git blame, scratchpad tabs that

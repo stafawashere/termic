@@ -12,7 +12,7 @@ import type { ISearchDecorationOptions } from "@xterm/addon-search";
 type Rgb = [number, number, number];
 
 /** The key that opens find in a terminal. EXACTLY ⌘F on macOS (no Shift, so
- *  ⇧⌘F stays the app's find-in-files); Ctrl+Shift+F elsewhere, because plain
+ *  ⇧⌘F stays the app's sidebar filter); Ctrl+Shift+F elsewhere, because plain
  *  Ctrl+F is readline's forward-char and hijacking it would break the shell. */
 export function isTerminalFindCombo(e: KeyboardEvent, isMac: boolean): boolean {
   const f = e.key.toLowerCase() === "f";

@@ -1375,7 +1375,7 @@ const captureArmedRef = useRef(false);
     // useShortcuts, which dispatches the command. Read from resolved prefs
     // so user rebinds are honored.
     const PASS_TO_APP: ShortcutId[] = [
-      "file-finder", "find-in-files", "broadcast", "open-settings",
+      "file-finder", "find-in-files", "focus-sidebar-filter", "broadcast", "open-settings",
     ];
     term.attachCustomKeyEventHandler((e) => {
       // IME composition guard (Korean/Japanese/Chinese). xterm's
@@ -1394,8 +1394,8 @@ const captureArmedRef = useRef(false);
       }
       // Open find in terminal (TerminalFindBar). See isTerminalFindCombo.
       // BEFORE the pass-through below: off macOS the combo is Ctrl+Shift+F,
-      // which is also find-in-files (⇧⌘F with Ctrl for Cmd), and inside a
-      // terminal it means this terminal's find, as in Windows Terminal.
+      // which is also the sidebar filter (⇧⌘F with Ctrl for Cmd), and inside
+      // a terminal it means this terminal's find, as in Windows Terminal.
       if (e.type === "keydown" && isTerminalFindCombo(e, IS_MAC)) {
         setSearchOpen(true);
         e.preventDefault();

@@ -12,8 +12,9 @@
 
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Bell, ListFilter, Search, X } from "lucide-react";
+import { Bell, Search, X } from "lucide-react";
 import { Tip } from "@/components/ui/Tooltip";
+import { FilterLinesGlyph } from "./sidebarIcons";
 import { useUI } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
@@ -45,10 +46,12 @@ export function ProjectFilterToggle({ projectId, active, paused = false, reveale
         data-paused={paused || undefined}
         aria-disabled={paused || undefined}
         className={cn(
-          iconBtn, "transition-opacity",
-          revealed ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-          active && litBtn,
-          paused && "cursor-default hover:bg-transparent hover:text-[var(--color-fg-faint)]",
+          // Fades with the tray it sits in, so specs reading its own
+          // opacity still see whether it shows.
+          "sidebar-tray-btn",
+          revealed || active ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+          active && "bg-[var(--sidebar-tray-hover)] text-[var(--color-accent)] hover:text-[var(--color-accent)]",
+          paused && "cursor-default hover:bg-transparent hover:text-[var(--sidebar-icon)]",
         )}
         // Keep focus in an open input: its blur would fold the bar away
         // before this click could decide what to do with it.
@@ -56,7 +59,7 @@ export function ProjectFilterToggle({ projectId, active, paused = false, reveale
         onClick={e => { e.stopPropagation(); if (!paused) onToggle(); }}
       >
         {/* the slash is drawn the way lucide draws its own -off icons */}
-        <ListFilter className="h-4 w-4">{paused && <path d="m2 2 20 20" />}</ListFilter>
+        <FilterLinesGlyph size={13} slashed={paused} />
       </button>
     </Tip>
   );

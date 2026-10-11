@@ -153,7 +153,7 @@ export const DropdownSeparator = () => (
   <DM.Separator className="my-1 h-px bg-[var(--color-border-soft)]" />
 );
 export const DropdownLabel = ({ children }: { children: ReactNode }) => (
-  <DM.Label className="px-2 py-1 text-[11.5px] uppercase tracking-wider text-[var(--color-fg-faint)]">
+  <DM.Label data-menu-label className="px-2 py-1 text-[11.5px] uppercase tracking-wider text-[var(--color-fg-faint)]">
     {children}
   </DM.Label>
 );

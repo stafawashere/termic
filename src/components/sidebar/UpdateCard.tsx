@@ -59,14 +59,14 @@ export function UpdateCard() {
     (mode === "update" ? t("updateCard.defaultSummary") : "");
 
   return (
-    <div className="relative mx-2 mb-2 shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-2)] p-3">
+    <div className="relative mx-[10px] mb-[8px] shrink-0 rounded-[8px] border border-[var(--sidebar-card-border)] bg-[var(--sidebar-card-bg)] p-3 shadow-[var(--sidebar-popover-shadow)]">
       {/* Dismiss — absolute so the content starts at the card's top
           padding, no empty header row. */}
       <button
         type="button"
         aria-label={t("dismiss", { ns: "common" })}
         onClick={() => (mode === "update" ? dismissUpdate() : dismissWhatsNew())}
-        className="absolute right-1.5 top-1.5 rounded p-1 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+        className="absolute right-1.5 top-1.5 rounded-[5px] p-1 text-[var(--sidebar-icon)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-tray-hover)] hover:text-[var(--sidebar-btn-hover-ink)]"
       >
         <X className="h-3.5 w-3.5" />
       </button>
@@ -85,7 +85,7 @@ export function UpdateCard() {
           absolute × (the what's-new badge already pushes text below it). */}
       <p
         className={cn(
-          "text-[12.5px] leading-snug text-[var(--color-fg-dim)]",
+          "text-[12.5px] leading-snug text-[var(--sidebar-muted)]",
           mode === "update" && "pr-5",
         )}
       >
@@ -112,7 +112,7 @@ export function UpdateCard() {
           type="button"
           onClick={() => void install()}
           disabled={installing !== null}
-          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-[var(--color-accent-deep)] px-2 py-1.5 text-[12px] font-medium text-white hover:bg-[#8a3a1c] disabled:opacity-70"
+          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-[var(--color-accent-deep)] px-2 py-1.5 text-[12px] font-medium text-white hover:bg-[color-mix(in_srgb,var(--color-accent-deep)_85%,black)] disabled:opacity-70"
         >
           {installing === null && (
             <>

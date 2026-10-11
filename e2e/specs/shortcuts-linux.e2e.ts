@@ -413,8 +413,9 @@ const ptyBytes = () => browser.execute(() => {
     await intercept(false);
     console.log(`\nSuper+<binding> from a focused terminal:\n  kept by the terminal: ${kept.join(", ") || "none"}\n  arrived but would not match: ${unmatched.join(", ") || "none"}\n`);
     // Handled by the terminal itself before the app's handler, by design:
-    // copy / paste, and Shift+F which is the terminal's own find there.
-    const local = new Set(["terminal-copy", "terminal-paste", "find-in-files"]);
+    // copy / paste, and Shift+F (the sidebar filter's chord) which is the
+    // terminal's own find there.
+    const local = new Set(["terminal-copy", "terminal-paste", "focus-sidebar-filter"]);
     expect(kept.filter(id => !local.has(id))).toEqual([]);
     expect(unmatched).toEqual([]);
   });
@@ -441,7 +442,7 @@ const ptyBytes = () => browser.execute(() => {
     // And the other half of the rule: a chord with Shift or Alt on it is the
     // app's, every one of them (isAppChordInTerminal). Ctrl+Alt+Left used to
     // go to the PTY as an escape sequence. The terminal's own three stay.
-    const own = new Set(["terminal-copy", "terminal-paste", "find-in-files"]);
+    const own = new Set(["terminal-copy", "terminal-paste", "focus-sidebar-filter"]);
     const shouldReach = Object.entries(bindings)
       .filter(([id, b]) => b.cmd && (b.shift || b.alt) && !own.has(id)).map(([id]) => id);
     expect(shouldReach.filter(id => kept.includes(id)).sort()).toEqual([]);
@@ -658,7 +659,11 @@ type Group = "task" | "tab" | "pane" | "bottom" | "leaves" | "chrome" | "setting
     { id: "new-task-quick", group: "ui" },
     { id: "task-finder", group: "ui" },
     { id: "file-finder", group: "ui" },
-    { id: "find-in-files", group: "ui", modes: ["ctrl"] },
+    // Ctrl+Alt+F carries Alt, so a terminal gives it up: every mode.
+    { id: "find-in-files", group: "ui" },
+    // Ctrl+Shift+F inside a terminal is that terminal's find, so the filter
+    // is pressed from outside one only.
+    { id: "focus-sidebar-filter", group: "focus", modes: ["ctrl"] },
     { id: "broadcast", group: "ui" },
     { id: "prompt-palette", group: "ui" },
     { id: "open-settings", group: "settings" },

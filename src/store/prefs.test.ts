@@ -137,6 +137,68 @@ describe("prefs: findInFilesRegex", () => {
   });
 });
 
+describe("prefs: find in files leaves Shift+Cmd+F to the sidebar filter", () => {
+  const KEY = "shortcutBindings";
+  const oldFindDefault = { key: "f", cmd: true, shift: true, alt: false };
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", fakeLocalStorage());
+    vi.resetModules();
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("moves a map saved before the filter had a key onto the new default", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ "find-in-files": oldFindDefault }));
+    const { usePrefs } = await import("./prefs");
+    const shortcuts = usePrefs.getState().shortcuts;
+
+    expect(shortcuts["find-in-files"]).toEqual({ key: "f", cmd: true, shift: false, alt: true });
+    expect(shortcuts["focus-sidebar-filter"]).toEqual(oldFindDefault);
+  });
+
+  it("keeps Shift+Cmd+F on find in files once the filter is in the saved map", async () => {
+    const moved = { key: "g", cmd: true, shift: false, alt: true };
+    localStorage.setItem(KEY, JSON.stringify({ "find-in-files": oldFindDefault, "focus-sidebar-filter": moved }));
+    const { usePrefs } = await import("./prefs");
+
+    expect(usePrefs.getState().shortcuts["find-in-files"]).toEqual(oldFindDefault);
+  });
+});
+
+describe("prefs: sidebarView", () => {
+  const KEY = "sidebarView";
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", fakeLocalStorage());
+    vi.resetModules();
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("starts on the tree, and on the tree for a value it does not know", async () => {
+    localStorage.setItem(KEY, "board");
+    const { usePrefs } = await import("./prefs");
+
+    expect(usePrefs.getState().sidebarView).toBe("tree");
+  });
+
+  it("persists a swap and comes back on it", async () => {
+    const first = await import("./prefs");
+    first.usePrefs.getState().setSidebarView("status");
+    vi.resetModules();
+    const { usePrefs } = await import("./prefs");
+
+    expect(usePrefs.getState().sidebarView).toBe("status");
+  });
+
+  it("does not notify for an unchanged view", async () => {
+    const { usePrefs } = await import("./prefs");
+    let notified = 0;
+    usePrefs.subscribe(() => { notified += 1; });
+
+    usePrefs.getState().setSidebarView("tree");
+
+    expect(notified).toBe(0);
+  });
+});
+
 describe("prefs: findInFilesMatchCase", () => {
   const KEY = "findInFilesMatchCase";
   beforeEach(() => {

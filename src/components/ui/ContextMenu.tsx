@@ -131,7 +131,7 @@ export function ContextMenuSubContent({ children, className }: { children: React
   );
 }
 export const ContextMenuLabel = ({ children }: { children: ReactNode }) => (
-  <CM.Label className="px-2 py-1 text-[11.5px] uppercase tracking-wider text-[var(--color-fg-faint)]">
+  <CM.Label data-menu-label className="px-2 py-1 text-[11.5px] uppercase tracking-wider text-[var(--color-fg-faint)]">
     {children}
   </CM.Label>
 );

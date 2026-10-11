@@ -85,6 +85,23 @@ describe("Back and Forward own the bracket keys", () => {
   });
 });
 
+describe("the sidebar filter and find in files", () => {
+  const def = (id: string) => SHORTCUT_DEFS.find(d => d.id === id)!;
+
+  it("gives Shift+Cmd+F to the sidebar filter, whose field draws that keycap", () => {
+    expect(bindingsEqual(def("focus-sidebar-filter").defaultBinding,
+      { key: "f", cmd: true, shift: true, alt: false })).toBe(true);
+  });
+
+  it("moves find in files to Opt+Cmd+F, a chord nothing else holds", () => {
+    const findBinding = def("find-in-files").defaultBinding;
+    const holders = SHORTCUT_DEFS.filter(d => bindingsEqual(d.defaultBinding, findBinding));
+
+    expect(bindingsEqual(findBinding, { key: "f", cmd: true, alt: true, shift: false })).toBe(true);
+    expect(holders.map(d => d.id)).toEqual(["find-in-files"]);
+  });
+});
+
 describe("function keys", () => {
   it("are valid on their own", () => {
     // F12 types nothing, so it cannot swallow anybody's input. Requiring a

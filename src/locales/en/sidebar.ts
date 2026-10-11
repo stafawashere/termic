@@ -1,10 +1,21 @@
 // Sidebar: project tree, task rows, compact rail, footer, the update card,
 // and the shared menu bodies (project actions, group actions).
 export default {
+  activity: {
+    agents_one: "{{count}} agent",
+    agents_other: "{{count}} agents",
+    idle: "No agents working",
+    line: "{{task}} · running {{elapsed}}",
+    lineNoTime: "{{task}} · running",
+    subagents_one: "{{count}} subagent running",
+    subagents_other: "{{count}} subagents running",
+  },
   navDashboard: "Dashboard",
   navHistory: "History",
   navBoard: "Kanban",
   navScheduled: "Scheduled",
+  swapToStatus: "Show status",
+  swapToProjects: "Show projects",
   projectsHeader: "Projects",
   listOptionsTip: "Project list options",
   expandAll: "Expand all agents",
@@ -44,7 +55,7 @@ export default {
     tipEmpty: "{{label}}: no tasks",
   },
   filterBar: {
-    placeholder: "Filter tasks",
+    placeholder: "Filter projects and tasks",
     count: "{{shown}} of {{total}} tasks",
     hidden_one: "{{count}} project with no matches hidden",
     hidden_other: "{{count}} projects with no matches hidden",
@@ -78,7 +89,7 @@ export default {
   removeProjectMessage: "All tasks will be archived and their worktrees removed from disk. The repo folder is kept. This cannot be undone from inside Termic.",
   removingBusy: "Removing \"{{name}}\"…",
   removeProject: "Remove project",
-  inactiveHeader: "Inactive Projects",
+  inactiveHeader: "Inactive",
   inactiveTipOne: "{{count}} inactive project",
   inactiveTipMany: "{{count}} inactive projects",
   reportBug: "Report a bug",
@@ -98,6 +109,8 @@ export default {
   creatingWorktree: "Creating worktree…",
   taskNameTitle: "Task name: {{name}}",
   restoreFailed: "Restore failed",
+  expandTask: "Expand task",
+  collapseTask: "Collapse task",
   taskMenu: "Task menu",
   spotlightTip: "Spotlight: changes are synced with {{branch}}",
   menuNew: "New",
@@ -206,6 +219,14 @@ export default {
   // Subagent rows under a claude tab: the state badge (label, then the
   // tooltip that says what it means) and the chevron that folds a subtree.
   subagents: {
+    stateWord: {
+      running: "running",
+      done: "done",
+      failed: "failed",
+      interrupted: "interrupted",
+      unknown: "stopped",
+      expired: "expired",
+    },
     running: "Running",
     runningHint: "This subagent is still working.",
     done: "Done",

@@ -10,7 +10,6 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { Sun, Moon, Monitor, Code2, Sunrise, Droplet, Binary, Flower2 } from "lucide-react";
 import { usePrefs, resolveTheme } from "@/store/prefs";
-import { Button } from "@/components/ui/Button";
 import { Tip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { Check, Palette, FolderOpen } from "lucide-react";
@@ -97,9 +96,9 @@ export function ThemePicker() {
       }}
       onMouseLeave={scheduleClose}
     >
-      <Button size="icon" variant="icon" onClick={() => setOpen(v => !v)}>
-        <span className="relative inline-flex h-[18px] w-[18px] items-center justify-center">
-          <Icon className="h-[18px] w-[18px]" />
+      <button type="button" aria-label={t("themePicker.label")} className="sidebar-footer-btn" onClick={() => setOpen(v => !v)}>
+        <span className="relative inline-flex h-[17px] w-[17px] items-center justify-center">
+          <Icon className="h-[17px] w-[17px]" strokeWidth={1.8} />
           {themeMode === "auto" && (
             // Tiny "A" badge in the bottom-right corner to signal that
             // the visible Sun/Moon is the OS-resolved theme, not an
@@ -111,7 +110,7 @@ export function ThemePicker() {
             >A</span>
           )}
         </span>
-      </Button>
+      </button>
       {open && (
         <div
           className={cn(

@@ -34,7 +34,9 @@ const AGENT_ROW = '[data-testid="subagent-row"]';
 const RUN_ROW = '[data-testid="workflow-run-row"]';
 const PHASE_ROW = '[data-testid="workflow-phase-row"]';
 const PANE = '[data-testid="subagent-pane"]';
-const SELECTED = "bg-[var(--color-sel)]";
+/** Every tree row, task header to subagent, wears the one selected look. */
+const SELECTED = "sidebar-selected";
+const ROW_SELECTED = SELECTED;
 
 const RELEASE_RUN = "wf_e2erelease";
 const RELEASE_NAME = "acme-release";
@@ -141,7 +143,8 @@ describe("subagent workflow runs", () => {
           id,
           label: (el.textContent ?? "").trim(),
           depth: el.getAttribute("data-depth") ?? "",
-          left: el.getBoundingClientRect().left,
+          // Content start: the rows span the panel and indent by padding.
+          left: el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft),
           icon: icon?.getAttribute("data-icon") ?? null,
           iconLeft: icon?.getBoundingClientRect().left ?? -1,
           labelLeft: el.querySelector("span.truncate")!.getBoundingClientRect().left,
@@ -179,7 +182,9 @@ describe("subagent workflow runs", () => {
 
   /** The row's background once its colour transition has finished, so a
    *  screenshot taken next shows the selection rather than a frame of it. */
-  async function settledBackground(selector: string): Promise<string> {
+  /** The selection is a gradient over the row (`.sidebar-selected`), so it
+   *  is read from background-image; background-color stays transparent. */
+  async function settledSelectionPaint(selector: string): Promise<string> {
     await browser.waitUntil(
       () => browser.execute((sel) => {
         const el = document.querySelector(sel);
@@ -187,7 +192,7 @@ describe("subagent workflow runs", () => {
       }, selector),
       { timeout: 5_000, interval: 25, timeoutMsg: `${selector} never finished its transition` },
     );
-    return browser.execute((sel) => getComputedStyle(document.querySelector(sel)!).backgroundColor, selector);
+    return browser.execute((sel) => getComputedStyle(document.querySelector(sel)!).backgroundImage, selector);
   }
 
   async function setWorkflowFilterBySwitch(): Promise<void> {
@@ -373,24 +378,24 @@ describe("subagent workflow runs", () => {
     expect(openTab).toEqual({ type: "subagent", agentId: BUILD_AGENT });
     expect(await browser.execute((sel) => document.querySelector(sel)?.className ?? "", agentRow(BUILD_AGENT)))
       .toContain(SELECTED);
-    const selectedBackground = await settledBackground(agentRow(BUILD_AGENT));
-    expect(selectedBackground).not.toBe("rgba(0, 0, 0, 0)");
+    const selectedBackground = await settledSelectionPaint(agentRow(BUILD_AGENT));
+    expect(selectedBackground).toContain("linear-gradient");
     await snap("workflow-agent-open.png");
 
     await clickPresent(`${runRow(RELEASE_RUN)} [data-testid="workflow-run-fold"]`);
     await waitRun(RELEASE_RUN, facts => facts.expanded === "false", "the run never folded");
 
-    const selection = await browser.execute((task, sel) => {
+    const selection = await browser.execute((task, sel, rowSel) => {
       const scope = document.querySelector(`[data-sidebar-task-row="${task}"]`)!;
       const header = scope.querySelector(`[data-sidebar-task-id="${task}"]`)!;
-      const tabRow = scope.querySelector("div.ml-8")!;
+      const tabRow = scope.querySelector("[data-sidebar-tab-id]")!;
       const selectedRuns = [...scope.querySelectorAll('[data-testid="workflow-run-row"]')]
         .filter(el => el.className.includes(sel))
         .map(el => el.getAttribute("data-run-id"));
-      return { header: header.className.includes(sel), tabRow: tabRow.className.includes(sel), selectedRuns };
-    }, taskId, SELECTED);
+      return { header: header.className.includes(rowSel), tabRow: tabRow.className.includes(rowSel), selectedRuns };
+    }, taskId, SELECTED, ROW_SELECTED);
     expect(selection).toEqual({ header: false, tabRow: false, selectedRuns: [RELEASE_RUN] });
-    expect(await settledBackground(runRow(RELEASE_RUN))).toBe(selectedBackground);
+    expect(await settledSelectionPaint(runRow(RELEASE_RUN))).toBe(selectedBackground);
     await snap("workflow-run-folded-over-selection.png");
 
     await parentToFront();
@@ -399,9 +404,9 @@ describe("subagent workflow runs", () => {
       { timeout: 5_000, timeoutMsg: "the run kept the selection after the claude tab came back to the front" },
     );
     const tabRowSelected = await browser.execute(
-      (task, sel) => document.querySelector(`[data-sidebar-task-row="${task}"] div.ml-8`)!.className.includes(sel),
+      (task, sel) => document.querySelector(`[data-sidebar-task-row="${task}"] [data-sidebar-tab-id]`)!.className.includes(sel),
       taskId,
-      SELECTED,
+      ROW_SELECTED,
     );
     expect(tabRowSelected).toBe(true);
   });

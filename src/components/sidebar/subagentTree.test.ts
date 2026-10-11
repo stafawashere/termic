@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildSubagentTree, childRowCarriesSelection, createSubagentStructureSelector, createWorkflowRunCountsSelector,
   hasSubagentRow, isPastRetention, nextRetentionExpiry, parseSubagentStructureKey, subagentGroupStartsCollapsed,
-  subagentRowIndent, subagentRowsOfKey, subagentStructureKey, workflowRunName, EMPTY_SUBAGENT_TREE, MAX_SUBAGENT_INDENT_DEPTH,
+  subagentGuideLines, subagentRowIndent, subagentRowsOfKey, subagentStructureKey, workflowRunName, EMPTY_SUBAGENT_TREE, MAX_SUBAGENT_INDENT_DEPTH,
   type SubagentLink, type SubagentRowRules, type SubagentTreeRow,
 } from "./subagentTree";
 import { DEFAULT_SUBAGENT_TYPE_FILTER } from "@/lib/subagentPrefs";
@@ -571,3 +571,19 @@ describe("workflow runs", () => {
     expect(select({ byTab: { "tab-1": failed } })).toBe("1/2/1");
   });
 });
+
+describe("subagentGuideLines", () => {
+  it("stops a guide at the last sibling and carries an open ancestor's guide past its children", () => {
+    // a
+    //   a1
+    //   a2
+    //     a2x
+    // b
+    //   b1
+    const lines = subagentGuideLines([1, 2, 2, 3, 1, 2]);
+
+    expect(lines.map(line => line.last)).toEqual([false, false, true, true, true, true]);
+    expect(lines.map(line => line.through)).toEqual([[], [1], [1], [1], [], []]);
+  });
+});
+

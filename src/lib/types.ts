@@ -1602,6 +1602,9 @@ export interface TerminalTab extends BaseTab {
    *  goes back to "working". Runtime-only, like `workState` itself (never
    *  written to `persisted_tabs`). */
   workDoneAt?: number;
+  /** Wall-clock when `workState` last became "working". The sidebar's agent
+   *  readout shows the elapsed time from it. Runtime-only. */
+  workingSince?: number;
   /** Per-agent message queue (the "ralph loop"). The head item is sent
    *  next; on every work-done the next message is auto-submitted. Only
    *  meaningful for work-done-capable agent tabs. Edited via the message

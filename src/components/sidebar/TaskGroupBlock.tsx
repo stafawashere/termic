@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
 import { ContextMenuRoot, ContextMenuTrigger, ContextMenuContent } from "@/components/ui/ContextMenu";
 import { GroupActionsMenuItems } from "./GroupActionsMenuItems";
 import { accentCss } from "@/lib/accents";
@@ -108,19 +108,19 @@ export function TaskGroupBlock({ group, projectId, label, compact, count, member
       // The whole block rides the transform, members and their expanded tabs
       // with it, so nothing is left frozen in place under a moving caption.
       style={dragging ? { transform: `translateY(${dragTy}px)`, position: "relative", zIndex: 20 } : undefined}
-      className={cn("mb-px", dragging && "rounded-md bg-[var(--color-bg-1)] shadow-lg")}
+      className={cn(dragging && "rounded-[6px] bg-[var(--sidebar-drag-lift-bg)] shadow-[var(--sidebar-drag-lift-shadow)]")}
     >
       <ContextMenuRoot>
         <ContextMenuTrigger asChild>
-          {/* The caption copies a task row's box model (TaskRow's header: ml-3,
-              px-1, gap-1, an 18px chevron box, then a gap-1.5 name container),
-              so its icon sits in the chevron column and its label in the name
-              column of the loose rows around it, by construction rather than
-              by tuned pixels. */}
+          {/* The caption copies a task row's box model (TaskRow's header: the
+              project's --sb-task-pad, gap 8, a 10px chevron column, then a
+              gap-6 name container), so its chevron and label line up with the
+              loose rows around it by construction rather than by tuned
+              pixels. */}
           <div
             data-testid={`task-group-header-${group.id}`}
             // Hover like a task row: the caption is a clickable row, not a label.
-            className="ml-3 flex h-[var(--task-row-h)] cursor-pointer select-none items-center gap-1 rounded-md px-1 text-[13px] font-medium transition-colors hover:bg-[var(--color-hover)]"
+            className="mt-[2px] flex h-[var(--sidebar-task-row-h)] cursor-pointer select-none items-center gap-[8px] rounded-[6px] pl-[var(--sb-task-pad,42px)] pr-[8px] text-[13px] font-medium transition-[background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)]"
             style={{ color }}
             onPointerDown={onDragPointerDown ? (e) => onDragPointerDown(e, group.id, projectId) : undefined}
             // A click toggles, at once. A double-click still renames, and it
@@ -150,11 +150,12 @@ export function TaskGroupBlock({ group, projectId, label, compact, count, member
               aria-expanded={!collapsed}
               onClick={(e) => { e.stopPropagation(); if (e.detail <= 1) onToggleCollapsed?.(); }}
               onDoubleClick={(e) => e.stopPropagation()}
-              className="shrink-0 rounded p-0.5 hover:bg-[var(--color-bg-3)]"
+              className="flex h-[20px] w-[10px] shrink-0 items-center justify-center"
             >
-              {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              <TreeChevron open={!collapsed} />
             </button>
-            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <TintedFolderGlyph size={15} color={color} className="shrink-0" />
+            <div className="flex min-w-0 flex-1 items-center gap-[6px]">
               {renaming !== null ? (
                 // Same font, weight and colour as the label it replaces, with
                 // no padding or border in the box: the outline is drawn
@@ -184,10 +185,10 @@ export function TaskGroupBlock({ group, projectId, label, compact, count, member
             </div>
             {renaming === null && (summarized
               ? <GroupBadges groupId={group.id} memberIds={memberIds} count={count} />
-              : <span className="ml-auto shrink-0 pr-1 tabular-nums text-[11px] font-normal text-[var(--color-fg-faint)]">{count}</span>)}
+              : <span className="ml-auto shrink-0 tabular-nums text-[11px] font-normal text-[var(--sidebar-meta)]">{count}</span>)}
           </div>
         </ContextMenuTrigger>
-        <ContextMenuContent>
+        <ContextMenuContent className="sidebar-menu">
           <GroupActionsMenuItems
             name={label}
             accent={accentCss(group.color)}
@@ -198,18 +199,20 @@ export function TaskGroupBlock({ group, projectId, label, compact, count, member
           />
         </ContextMenuContent>
       </ContextMenuRoot>
-      {/* The rail is this wrapper's left border, at 24px: under the centre of
-          the caption's icon (12 margin + 4 padding + 2 + half of 14 = 25).
-          1px, the same weight as a project folder's guide line, so the
-          sidebar has one nesting style (docs/ui.md "One glyph per meaning");
-          the group's colour is what tells the two apart. The inner stack is
-          pulled back 1.5 spacing steps less the border so the members land
-          18px right of the loose rows (measured in the e2e spec), the step a
-          project folder gives its members; their tab rows move with them.
-          Spacing is rem-based and the root is 14px, so a hardcoded px here
-          drifts off the scale (5px landed them at 17). */}
-      <div data-task-group-rail className="ml-6 border-l" style={{ borderColor: color }}>
-        <div className="-ml-[calc(var(--spacing)*1.5-1px)]">{children}</div>
+      {/* The rail is a 1px guide under the caption's chevron, the same
+          weight as a project's guide line, so the sidebar has one nesting
+          style (docs/ui.md "One glyph per meaning"); the group's colour is
+          what tells the two apart. The members step one level in by taking
+          the project's member pad, which moves their chevrons and names 18px
+          right while their rows still span the panel. */}
+      <div className="relative">
+        <span
+          aria-hidden
+          data-task-group-rail
+          className="pointer-events-none absolute bottom-0 top-0 border-l"
+          style={{ left: "calc(var(--sb-task-pad, 42px) + 4px)", borderColor: color }}
+        />
+        <div style={{ "--sb-task-pad": "var(--sb-member-pad, 60px)" } as React.CSSProperties}>{children}</div>
       </div>
     </div>
   );
@@ -233,15 +236,15 @@ function GroupBadges({ groupId, memberIds, count }: { groupId: string; memberIds
   // The count stays beside the marks: it is what says "N tasks are tucked
   // away in here". With the marks alone, a collapsed group read as a group
   // whose tasks had vanished.
-  const countEl = <span className="shrink-0 tabular-nums text-[11px] font-normal text-[var(--color-fg-faint)]">{count}</span>;
+  const countEl = <span className="shrink-0 tabular-nums text-[11px] font-normal text-[var(--sidebar-meta)]">{count}</span>;
   if (!key) {
-    return <span className="ml-auto flex shrink-0 items-center pr-1">{countEl}</span>;
+    return <span className="ml-auto flex shrink-0 items-center">{countEl}</span>;
   }
   return (
     <span
       data-testid={`task-group-badges-${groupId}`}
       data-kinds={key}
-      className="ml-auto flex shrink-0 items-center gap-1 pr-1"
+      className="ml-auto flex shrink-0 items-center gap-1"
     >
       <WorkMarkList kinds={key} />
       <span className="ml-0.5" data-testid={`task-group-count-${groupId}`}>{countEl}</span>
