@@ -856,6 +856,391 @@
 .termic-tabstrip { scrollbar-width: none; }
 .termic-tabstrip::-webkit-scrollbar { display: none; }
 
+/* Session bar ("Refined tree" session bar, docs/ui.md "Session bar"): the
+   tab strip above the terminal, and every split pane's own strip. Its own
+   token family; wells, raised chips, hover ink and the settled dot reuse
+   the sidebar's and the title bar's. Dark+ values here, the other themes
+   derive theirs from --color-* in the layer below. */
+@theme {
+  --sessionbar-bg-top:     #1a1a1a;
+  --sessionbar-bg-bottom:  #171717;
+  --sessionbar-border:     #242424;
+  --sessionbar-shadow:     inset 0 1px 0 rgba(255, 255, 255, 0.035), inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  /* The title bar's grain tile with its half opacity baked into the alpha. */
+  --sessionbar-grain:      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .0175 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+  /* An idle tab's agent glyph is its brand colour mixed 40% into this. */
+  --sessionbar-glyph-dim:  #5a5a5a;
+  --sessionbar-close-ink:  #f0605a;
+}
+
+@layer base {
+  html.claude, html.cobalt, html.matrix, html.rosepine, html.solarized,
+  html.custom-theme:not(.light) {
+    --sessionbar-bg-top:     color-mix(in srgb, var(--color-bg-1) 97%, var(--color-fg));
+    --sessionbar-bg-bottom:  color-mix(in srgb, var(--color-bg-1) 98.5%, var(--color-fg));
+    --sessionbar-border:     color-mix(in srgb, var(--color-bg-1) 93%, var(--color-fg));
+    --sessionbar-shadow:     inset 0 1px 0 rgba(255, 255, 255, 0.035), inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+    --sessionbar-glyph-dim:  color-mix(in srgb, var(--color-fg-faint) 70%, var(--color-bg-1));
+    --sessionbar-close-ink:  var(--color-err);
+  }
+
+  html.light {
+    --sessionbar-bg-top:     var(--color-bg-1);
+    --sessionbar-bg-bottom:  color-mix(in srgb, var(--color-bg-1) 97%, var(--color-fg));
+    --sessionbar-border:     var(--color-border);
+    --sessionbar-shadow:     inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+    --sessionbar-grain:      none;
+    --sessionbar-glyph-dim:  var(--color-fg-faint);
+    --sessionbar-close-ink:  var(--color-err);
+  }
+}
+
+.sessionbar {
+  display: flex;
+  height: 42px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--sessionbar-border);
+  background-image: var(--sessionbar-grain), linear-gradient(180deg, var(--sessionbar-bg-top), var(--sessionbar-bg-bottom));
+  box-shadow: var(--sessionbar-shadow);
+  white-space: nowrap;
+  user-select: none;
+}
+/* Window in the background: text and glyphs fade, wells and chips do not. */
+.sessionbar[data-inactive] :is(.sessionbar-tab-label, .sessionbar-ind, .sessionbar-new > svg, .sessionbar-seg > svg) {
+  opacity: 0.55;
+}
+.sessionbar-main {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+}
+.sessionbar-well {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background-color: var(--sidebar-well-bg);
+  box-shadow: var(--titlebar-well-shadow);
+}
+.sessionbar-tools {
+  flex-shrink: 0;
+}
+/* The scrolling remainder. Padded a pixel top and bottom so the clip does
+   not shave the raised chip's drop shadow. */
+.sessionbar-scroll,
+.sessionbar-pinned {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  margin: -1px 0;
+  padding: 1px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.sessionbar-scroll::-webkit-scrollbar,
+.sessionbar-pinned::-webkit-scrollbar {
+  display: none;
+}
+.sessionbar-scroll {
+  flex: 0 1 auto;
+}
+.sessionbar-pinned {
+  max-width: 55%;
+  flex-shrink: 0;
+}
+/* A dragged pill escapes the clip so it stays visible across panes. */
+.sessionbar-well[data-dragging] :is(.sessionbar-scroll, .sessionbar-pinned) {
+  overflow: visible;
+}
+.sessionbar-well-rule {
+  width: 1px;
+  height: 16px;
+  flex-shrink: 0;
+  margin: 0 3px;
+  background-color: var(--titlebar-divider);
+}
+.sessionbar-empty {
+  padding: 0 8px;
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--sidebar-faint);
+}
+
+.sessionbar-tab {
+  position: relative;
+  display: flex;
+  height: 28px;
+  min-width: 96px;
+  max-width: 200px;
+  flex: 0 1 auto;
+  box-sizing: border-box;
+  align-items: center;
+  align-self: center;
+  gap: 12px;
+  padding: 0 4px 0 10px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--sidebar-muted);
+  cursor: default;
+  transition: background-color 120ms, color 120ms;
+}
+.sessionbar-tab:hover {
+  background-color: var(--sidebar-seg-hover);
+  color: var(--sidebar-ink);
+}
+.sessionbar-tab[data-active] {
+  background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+  box-shadow: var(--sidebar-chip-shadow);
+  font-weight: 600;
+  color: var(--sidebar-ink-strong);
+}
+.sessionbar-tab[data-dragging] {
+  background-color: var(--sidebar-drag-lift-bg);
+  box-shadow: var(--sidebar-drag-lift-shadow);
+  color: var(--sidebar-ink-strong);
+  cursor: grabbing;
+  transition: none;
+}
+.sessionbar-tab-label {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 7px;
+}
+.sessionbar-tab-glyph {
+  display: flex;
+  height: 14px;
+  width: 14px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+.sessionbar-tab-glyph > :is(svg, img) {
+  height: 14px;
+  width: 14px;
+}
+/* The svg's currentColor is the wrapper's brand colour, so the mix and the
+   glow both follow whichever agent the tab runs. */
+.sessionbar-tab:not([data-active]) .sessionbar-tab-glyph[data-brand] > svg {
+  color: color-mix(in srgb, currentColor 40%, var(--sessionbar-glyph-dim));
+}
+.sessionbar-tab[data-active] .sessionbar-tab-glyph[data-brand] > svg {
+  filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 45%, transparent));
+}
+.sessionbar-tab-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+.sessionbar-tab-name > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sessionbar-tab-underline {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 1px;
+  height: 1px;
+  border-radius: 1px;
+  background-image: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-accent) 40%, transparent) 35%, color-mix(in srgb, var(--color-accent) 40%, transparent) 65%, transparent);
+  pointer-events: none;
+}
+.sessionbar-rename {
+  height: 20px;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  padding: 0 4px;
+  background-color: var(--sidebar-input-bg);
+  font: inherit;
+  color: var(--sidebar-input-ink);
+  outline: none;
+}
+.sessionbar-run {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+}
+.sessionbar-run > button {
+  display: flex;
+  height: 18px;
+  width: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--sidebar-muted);
+  transition: background-color 120ms, color 120ms;
+}
+.sessionbar-run > button:hover {
+  background-color: var(--sidebar-row-hover);
+  color: var(--sidebar-ink);
+}
+.sessionbar-run > button[data-stop] {
+  color: var(--color-err);
+}
+
+/* The trailing slot: an indicator layer and the close layer stacked in one
+   fixed cell. Only the tab's right end (the 40px hit area) swaps them, so
+   hovering the name never hides the state. */
+.sessionbar-slot {
+  position: relative;
+  height: 20px;
+  width: 24px;
+  flex-shrink: 0;
+}
+.sessionbar-slot-hit {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  right: -4px;
+  width: 40px;
+}
+.sessionbar-ind {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 2px;
+  pointer-events: none;
+  transition: opacity 120ms;
+}
+.sessionbar-dot {
+  height: 6px;
+  width: 6px;
+  flex-shrink: 0;
+  margin-right: 5px;
+  border-radius: 50%;
+  background-color: var(--sidebar-settled);
+}
+.sessionbar-ring {
+  height: 7px;
+  width: 7px;
+  flex-shrink: 0;
+  margin-right: 4.5px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--sidebar-settled);
+  border-radius: 50%;
+}
+.sessionbar-dirty {
+  height: 6px;
+  width: 6px;
+  flex-shrink: 0;
+  margin-right: 5px;
+  border-radius: 50%;
+  background-color: var(--sidebar-muted);
+}
+.sessionbar-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  height: 20px;
+  width: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--sessionbar-close-ink) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sessionbar-close-ink) 22%, transparent);
+  color: var(--sessionbar-close-ink);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms, background-color 120ms;
+}
+.sessionbar-close:hover {
+  background-color: color-mix(in srgb, var(--sessionbar-close-ink) 24%, transparent);
+}
+.sessionbar-close[data-kind="unpin"] {
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--sidebar-muted);
+}
+.sessionbar-close[data-kind="unpin"]:hover {
+  background-color: var(--sidebar-row-hover);
+  color: var(--sidebar-ink);
+}
+.sessionbar-slot:hover .sessionbar-close,
+.sessionbar-close[data-shown],
+.sessionbar-close:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.sessionbar-slot:hover .sessionbar-ind,
+.sessionbar-slot:has(.sessionbar-close:focus-visible) .sessionbar-ind {
+  opacity: 0;
+}
+
+.sessionbar-trace-pulse {
+  animation: sessionbar-trace 1.4s linear infinite;
+}
+@keyframes sessionbar-trace { to { stroke-dashoffset: -48; } }
+@media (prefers-reduced-motion: reduce) {
+  .sessionbar-trace-pulse { display: none; }
+  svg[data-running] > .sessionbar-trace-ghost { opacity: 0.6; }
+}
+
+/* The + after the well, and the pane strip's close-pane button. */
+.sessionbar-new {
+  display: flex;
+  height: 28px;
+  width: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--sidebar-icon);
+  transition: background-color 120ms, color 120ms;
+}
+.sessionbar-new:hover,
+.sessionbar-new[aria-expanded="true"] {
+  background-color: var(--sidebar-row-hover);
+}
+.sessionbar-seg {
+  display: flex;
+  height: 26px;
+  width: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--sidebar-icon);
+  transition: background-color 120ms, color 120ms;
+}
+.sessionbar-seg:hover {
+  background-color: var(--sidebar-seg-hover);
+}
+.sessionbar-seg[data-split] {
+  color: var(--color-accent);
+}
+.sessionbar-seg[aria-pressed="true"] {
+  background-image: linear-gradient(180deg, var(--sidebar-chip-top), var(--sidebar-chip-bottom));
+  box-shadow: var(--sidebar-chip-shadow);
+  color: var(--color-accent);
+}
+.sessionbar-seg[aria-pressed="true"]:hover {
+  background-image: linear-gradient(180deg, var(--titlebar-chip-hover-top), var(--titlebar-chip-hover-bottom));
+}
+
 /* Cross-pane tab drop target: highlight the strip a tab is being dragged onto
    (another pane's header, or the main tab strip when dragging back to main). */
 [data-pane-header][data-drop-target],
