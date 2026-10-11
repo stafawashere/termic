@@ -1479,3 +1479,21 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   border-radius: 9999px;
   box-shadow: 0 0 0 2px var(--sidebar-bg-top);
 }
+.sidebar-text-btn {
+  flex-shrink: 0;
+  border-radius: 4px;
+  padding: 0 4px;
+  color: var(--sidebar-muted);
+  transition: color 120ms, background-color 120ms;
+}
+.sidebar-text-btn:hover {
+  background-color: var(--sidebar-row-hover);
+  color: var(--sidebar-btn-hover-ink);
+}
+/* One keyboard focus ring for the sidebar's controls, inset so a row flush
+   with the panel edge keeps all four sides of it. Inputs keep their accent
+   border and menus their highlight. */
+.sidebar-panel :is(button, [role="button"], [tabindex]):not(input):focus-visible {
+  outline: 2px solid var(--sidebar-focus-ring);
+  outline-offset: -2px;
+}

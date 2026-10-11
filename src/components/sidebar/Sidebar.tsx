@@ -2203,7 +2203,7 @@ export function Sidebar({ compact: compactProp, activityAnimates = true }: {
                   >
                     <span className="truncate">{t("taskFilter.noMatches")}</span>
                     <button
-                      className="shrink-0 rounded px-1 text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+                      className="sidebar-text-btn"
                       onClick={() => {
                         // The project's own filter is the nearer cause when
                         // both are on; clear that first.
@@ -2562,17 +2562,17 @@ export function Sidebar({ compact: compactProp, activityAnimates = true }: {
               {queryOn && activeProjects.length === 0 && (
                 <div
                   data-testid="sidebar-filter-empty"
-                  className="flex h-[var(--task-row-h)] items-center justify-center gap-1.5 px-2 text-[13px] text-[var(--color-fg-faint)]"
+                  className="flex h-[var(--sidebar-task-row-h)] items-center justify-center gap-[6px] px-[8px] text-[13px] text-[var(--sidebar-faint)]"
                 >
                   <span className="truncate">{t("filterBar.noMatches")}</span>
                   <button
-                    className="shrink-0 rounded px-1 text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+                    className="sidebar-text-btn"
                     onClick={() => setSidebarQuery("")}
                   >{t("filterBar.clear")}</button>
                 </div>
               )}
               {queryOn && activeProjects.length > 0 && projects.length > activeProjects.length && (
-                <div data-testid="sidebar-filter-hidden" className="px-2 pt-1.5 text-[11.5px] tabular-nums text-[var(--color-fg-faint)]">
+                <div data-testid="sidebar-filter-hidden" className="px-[8px] pt-[6px] text-[11.5px] tabular-nums text-[var(--sidebar-faint)]">
                   {t("filterBar.hidden", { count: projects.length - activeProjects.length })}
                 </div>
               )}
@@ -2889,7 +2889,7 @@ function RunTabControl({ taskId, tab, title, isMounted }: {
             const ptyId = tab.ptyId;
             if (ptyId) ptyKill(ptyId).catch(() => {});
           }}
-          className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--color-err)] hover:bg-[var(--color-bg-3)] hover:opacity-80"
+          className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[4px] text-[var(--color-err)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-tray-hover)]"
         >
           <Square className="h-2.5 w-2.5" fill="currentColor" />
         </button>
@@ -2928,7 +2928,7 @@ function RunTabControl({ taskId, tab, title, isMounted }: {
           }, 0);
         }
       }}
-      className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--color-fg-faint)] hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)]"
+      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[4px] text-[var(--sidebar-icon)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-tray-hover)] hover:text-[var(--sidebar-btn-hover-ink)]"
     >
       <Play className="h-2.5 w-2.5" />
     </button>
@@ -4166,18 +4166,17 @@ function PendingRepoRootRow({ mode, cli, value, branch, onChange, onBranchChange
   const handleBlur = (e: ReactFocusEvent) => {
     if (!containerRef.current?.contains(e.relatedTarget as Node | null)) onCancel();
   };
-  const inputCls =
-    "min-w-0 flex-1 rounded border-0 bg-[var(--color-bg-2)] px-1 py-[3px] text-[13px] text-[var(--color-fg)] outline-none ring-1 ring-inset ring-[var(--color-accent)]";
+  const inputCls = "sidebar-inline-input min-w-0 flex-1";
   return (
     <div
       ref={containerRef}
       onBlur={handleBlur}
-      className="ml-3 mr-1 flex flex-col gap-1 rounded-md px-1 py-1"
+      className="flex flex-col gap-[4px] py-[4px] pl-[var(--sb-task-pad,42px)] pr-[8px]"
     >
       {/* Both rows share an identical leading-icon column (same glyph box +
           same gap) so the name and branch inputs left-align exactly. */}
       <div className="flex items-center gap-1.5">
-        <span className={cn("shrink-0", CLI_BRAND_COLOR[iconId] || "text-[var(--color-fg-dim)]")}>
+        <span className={cn("shrink-0", CLI_BRAND_COLOR[iconId] || "text-[var(--sidebar-icon)]")}>
           <CliIcon cli={iconId} className="h-3.5 w-3.5" />
         </span>
         <input
@@ -4195,14 +4194,14 @@ function PendingRepoRootRow({ mode, cli, value, branch, onChange, onBranchChange
         // name icon 14px + gap 6px) so the GitBranch glyph lines up with the
         // START of the name input above it, reading as a child of the name.
         <div className="flex items-center gap-1.5 pl-5">
-          <GitBranch className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
+          <GitBranch className="h-3.5 w-3.5 shrink-0 text-[var(--sidebar-faint)]" />
           <input
             value={branch}
             onChange={e => onBranchChange(e.target.value)}
             onKeyDown={keyHandler}
             placeholder={t("branchPlaceholder")}
             autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-            className={cn(inputCls, "font-mono text-[12px] text-[var(--color-fg-dim)] ring-[var(--color-border)]")}
+            className={cn(inputCls, "border-[var(--sidebar-input-border)] font-mono text-[12px] text-[var(--sidebar-meta)]")}
           />
         </div>
       )}
