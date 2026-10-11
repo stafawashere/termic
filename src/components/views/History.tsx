@@ -9,7 +9,8 @@ import { CliIcon, CLI_BRAND_COLOR, resolveIconId } from "@/icons/cli";
 import { TaskLocationIcon } from "@/components/TaskLocationIcon";
 import { DropdownRoot, DropdownTrigger, DropdownMenu, DropdownItem, DropdownSeparator } from "@/components/ui/Dropdown";
 import { cn } from "@/lib/utils";
-import { Check, ChevronDown, ChevronRight, Search, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { MagnifierGlyph } from "@/components/task/panelIcons";
 import type { Task } from "@/lib/types";
 
 function groupLabel(iso: string, t: TFunction): string {
@@ -164,15 +165,17 @@ export function HistoryView() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden" data-testid="history-root">
-      {/* Search bar */}
-      <div className="shrink-0 flex items-center gap-2.5 border-b border-[var(--color-border-soft)] px-6 py-3 text-[var(--color-fg-faint)]">
-        <Search className="h-4 w-4 shrink-0" />
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder={t("history.filterPlaceholder")}
-          className="flex-1 bg-transparent text-[13.5px] text-[var(--color-fg)] placeholder:text-[var(--color-fg-faint)] outline-none"
-        />
+      {/* Filter bar */}
+      <div className="ui-view-bar">
+        <label className="ui-field min-w-0 flex-1">
+          <MagnifierGlyph size={13} className="shrink-0" />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder={t("history.filterPlaceholder")}
+            className="w-full"
+          />
+        </label>
         {/* Project filter. Single-select; lives in the store (view.projectId)
             so the sidebar's Resume › More… can land here pre-filtered. */}
         {projectOptions.length > 0 && (
@@ -182,16 +185,13 @@ export function HistoryView() {
                 type="button"
                 data-history-project-filter
                 title={t("history.projectFilterTip")}
-                className={cn(
-                  "flex min-w-0 max-w-[200px] shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12.5px] transition-colors hover:bg-[var(--color-hover)]",
-                  activeProject ? "text-[var(--color-fg)]" : "text-[var(--color-fg-dim)] hover:text-[var(--color-fg)]",
-                )}
+                className={cn("ui-raised min-w-0 max-w-[200px] gap-1 px-2.5", !activeProject && "text-[var(--sidebar-muted)]")}
               >
                 <span className="truncate">{activeProject?.name ?? t("history.allProjects")}</span>
                 <ChevronDown className="h-3.5 w-3.5 shrink-0" />
               </button>
             </DropdownTrigger>
-            <DropdownMenu align="end" className="max-w-[280px]">
+            <DropdownMenu align="end" className="sidebar-menu max-w-[280px]">
               <ProjectItem label={t("history.allProjects")} count={archivedAll.length} active={!activeProject} onSelect={() => setHistoryProject(undefined)} />
               <DropdownSeparator />
               {projectOptions.map(p => (
@@ -213,10 +213,10 @@ export function HistoryView() {
               ? t("history.emptyArchiveTipProject", { project: activeProject.name })
               : t("history.emptyArchiveTip")}
             className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[12.5px] transition-colors",
+              "flex h-[28px] shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-[12.5px] transition-[color,background-color] duration-[120ms]",
               emptying
-                ? "text-[var(--color-fg-faint)]"
-                : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-err)]",
+                ? "text-[var(--sidebar-faint)]"
+                : "text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--color-err)]",
             )}
           >
             <Trash2 className="h-3.5 w-3.5 shrink-0" />
@@ -226,19 +226,19 @@ export function HistoryView() {
       </div>
 
       {/* List */}
-      <div className="min-h-0 flex-1 overflow-auto px-6 py-4" data-testid="history-list">
+      <div className="ui-scroll min-h-0 flex-1 px-6 py-4" data-testid="history-list">
         <div className="mx-auto max-w-3xl">
           {archived.length === 0 ? (
-            <p className="py-8 text-[13.5px] text-[var(--color-fg-dim)]">
+            <p className="py-8 text-[13.5px] text-[var(--sidebar-muted)]">
               {query ? t("history.noMatch")
                 : activeProject ? t("history.noArchivedInProject", { project: activeProject.name })
                 : t("history.noArchived")}
             </p>
           ) : groups.map(([label, task]) => (
             <div key={label} className="mb-2">
-              <div className="flex items-baseline gap-2 px-3 py-2">
-                <span className="text-[12px] font-medium text-[var(--color-fg-dim)]">{label}</span>
-                <span className="text-[12px] text-[var(--color-fg-faint)]">{task.length}</span>
+              <div className="flex h-[32px] items-center gap-[7px] px-[10px]">
+                <span className="ui-eyebrow">{label}</span>
+                <span className="ui-count">{task.length}</span>
               </div>
               {task.map(w => {
                 const proj        = projects.find(x => x.id === w.project_id);
@@ -252,9 +252,9 @@ export function HistoryView() {
                     onMouseEnter={() => setHoveredId(w.id)}
                     onMouseLeave={() => setHoveredId(null)}
                     className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-[13px] select-none",
+                      "flex h-[36px] items-center gap-3 rounded-[6px] px-[10px] text-[13px] text-[var(--sidebar-ink)] select-none transition-[background-color] duration-[120ms]",
                       isRestoring ? "opacity-50" : "",
-                      isHovered ? "bg-[var(--color-hover)]" : "",
+                      isHovered ? "bg-[var(--sidebar-row-hover)]" : "",
                     )}
                   >
                     {/* CLI icon */}

@@ -501,8 +501,8 @@ export function BoardView() {
     <div className="flex h-full flex-col" data-testid="board-view">
       {boardEmpty ? (
         <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-          <div className="text-[14px] font-semibold">{t("board.emptyTitle")}</div>
-          <div className="text-[12.5px] text-[var(--color-fg-dim)]">{t("board.emptyBody")}</div>
+          <div className="text-[14px] font-semibold text-[var(--sidebar-ink-strong)]">{t("board.emptyTitle")}</div>
+          <div className="text-[12.5px] text-[var(--sidebar-muted)]">{t("board.emptyBody")}</div>
         </div>
       ) : (
         <>
@@ -555,24 +555,23 @@ export function BoardView() {
               data-board-archive
               data-testid="board-archive"
               className={cn(
-                "flex flex-col rounded-[10px] bg-[var(--color-bg-1)]", COLUMN_SIZE,
+                "ui-column flex flex-col", COLUMN_SIZE,
                 drag?.target?.kind === "archive" && "ring-1 ring-inset ring-[var(--color-accent-soft)]",
               )}
             >
-              <header className="flex shrink-0 items-center gap-2 px-2.5 pb-1 pt-2.5">
+              <header className="flex h-[38px] shrink-0 items-center gap-[7px] px-[12px] pt-[2px]">
                 <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-[var(--color-fg-faint)]" />
-                <span className="text-[12.5px] font-semibold text-[var(--color-fg-dim)]">{t("board.colArchived")}</span>
+                <span className="ui-eyebrow">{t("board.colArchived")}</span>
                 <span
                   data-testid="board-archive-count"
-                  className="ml-auto rounded px-2 py-0.5 text-[11px] font-medium tabular-nums text-[var(--color-fg-faint)]"
-                  style={archivedAll.length > 0 ? { backgroundColor: "var(--color-hover)" } : undefined}
+                  className="ui-count ml-auto"
                 >
                   {archivedAll.length}
                 </span>
               </header>
               <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2.5 pb-2.5">
                 {drag && (
-                  <div className="rounded-lg border border-dashed border-[var(--color-border)] px-2 py-2 text-center text-[11.5px] text-[var(--color-fg-faint)]">
+                  <div className="rounded-[8px] border border-dashed border-[var(--sidebar-card-border)] px-2 py-2 text-center text-[11.5px] text-[var(--sidebar-faint)]">
                     {t("board.archiveHint")}
                   </div>
                 )}
@@ -613,14 +612,14 @@ export function BoardView() {
             {hiddenCols.length > 0 && (
               <section
                 data-testid="board-hidden-columns"
-                className="flex w-[200px] shrink-0 flex-col rounded-[10px] bg-[var(--color-bg-1)]/60"
+                className="ui-column flex w-[200px] shrink-0 flex-col opacity-80"
               >
-                <header className="flex shrink-0 items-center gap-2 px-2.5 pb-1 pt-2.5">
+                <header className="flex h-[38px] shrink-0 items-center gap-[7px] px-[12px] pt-[2px]">
                   <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-[var(--color-fg-faint)]" />
-                  <span className="text-[12.5px] font-semibold text-[var(--color-fg-faint)]">
+                  <span className="ui-eyebrow">
                     {t("board.colInactive")}
                   </span>
-                  <span className="ml-auto rounded px-2 py-0.5 text-[11px] font-medium tabular-nums text-[var(--color-fg-faint)]">
+                  <span className="ui-count ml-auto">
                     {hiddenCols.length}
                   </span>
                 </header>
@@ -635,9 +634,9 @@ export function BoardView() {
                       aria-label={t("board.showColumn", { name: t(COL_LABEL[c]) })}
                       onClick={() => pinColumn(c)}
                       className={cn(
-                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px]",
-                        "text-[var(--color-fg-faint)] transition-colors",
-                        "hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)]",
+                        "flex h-[28px] items-center gap-2 rounded-[6px] px-2 text-left text-[12px]",
+                        "text-[var(--sidebar-muted)] transition-[color,background-color] duration-[120ms]",
+                        "hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--sidebar-ink-strong)]",
                         // Lit while a drag could land HERE. Each row is its
                         // own column's target, so only the row whose column
                         // the hovered command belongs to lights, exactly the
@@ -669,7 +668,7 @@ export function BoardView() {
           to move. */}
       {drag && dragTask && (
         <div
-          className="pointer-events-none fixed z-50 rounded-lg bg-[var(--color-bg-2)] px-3 py-2 shadow-lg ring-1 ring-[var(--color-accent-soft)]"
+          className="ui-popover pointer-events-none fixed z-50 px-3 py-2 ring-1 ring-[var(--color-accent-soft)]"
           style={{
             left: drag.x - drag.grabDX,
             top: drag.y - drag.grabDY,
@@ -766,17 +765,14 @@ const BoardColumnView = memo(function BoardColumnView({ column, laneIds, cellTas
       data-board-cell
       data-column={column}
       className={cn(
-        "flex flex-col rounded-[10px] bg-[var(--color-bg-1)]", COLUMN_SIZE,
+        "ui-column flex flex-col", COLUMN_SIZE,
         isCommandTarget && "ring-1 ring-inset ring-[var(--color-accent-soft)]",
       )}
     >
-      <header className="flex shrink-0 items-center gap-2 px-2.5 pb-1 pt-2.5">
+      <header className="flex h-[38px] shrink-0 items-center gap-[7px] px-[12px] pt-[2px]">
         <span className="h-[6px] w-[6px] shrink-0 rounded-full" style={{ backgroundColor: accent }} />
-        <span className="text-[12.5px] font-semibold text-[var(--color-fg-dim)]">{t(COL_LABEL[column])}</span>
-        <span
-          className="ml-auto rounded px-2 py-0.5 text-[11px] font-medium tabular-nums text-[var(--color-fg-faint)]"
-          style={count > 0 ? { backgroundColor: "var(--color-hover)" } : undefined}
-        >
+        <span className="ui-eyebrow">{t(COL_LABEL[column])}</span>
+        <span className="ui-count ml-auto">
           {count}
         </span>
         {/* Undo the pin. Present only on an empty pinned column, so the
@@ -789,7 +785,7 @@ const BoardColumnView = memo(function BoardColumnView({ column, laneIds, cellTas
             aria-label={t("board.hideColumn", { name: t(COL_LABEL[column]) })}
             title={t("board.hideColumn", { name: t(COL_LABEL[column]) })}
             onClick={() => onHide(column)}
-            className="-mr-1 shrink-0 rounded p-0.5 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+            className="sidebar-tray-btn -mr-1"
           >
             <X className="h-3 w-3" />
           </button>
@@ -797,7 +793,7 @@ const BoardColumnView = memo(function BoardColumnView({ column, laneIds, cellTas
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2.5 pb-2.5">
         {dragHint && (
-          <div className="rounded-lg border border-dashed border-[var(--color-border)] px-2 py-2 text-center text-[11.5px] text-[var(--color-fg-faint)]">
+          <div className="rounded-[8px] border border-dashed border-[var(--sidebar-card-border)] px-2 py-2 text-center text-[11.5px] text-[var(--sidebar-faint)]">
             {t(column === "settled" ? "board.settleHint" : "board.reviewHint")}
           </div>
         )}
@@ -812,7 +808,7 @@ const BoardColumnView = memo(function BoardColumnView({ column, laneIds, cellTas
                 data-board-lane-filter={lane}
                 title={t("board.filterBy", { value: `agent:${lane}` })}
                 onClick={() => onFilter("agent", lane)}
-                className="sticky top-0 z-10 -mx-0.5 flex items-center gap-1.5 bg-[var(--color-bg-1)] px-0.5 py-1 text-left text-[11px] font-medium text-[var(--color-fg-faint)] hover:text-[var(--color-fg)]"
+                className="sticky top-0 z-10 -mx-0.5 flex items-center gap-1.5 bg-[var(--sidebar-well-bg)] px-0.5 py-1 text-left text-[11px] font-medium text-[var(--sidebar-meta)] hover:text-[var(--sidebar-ink-strong)]"
               >
                 <span className={cn("shrink-0", CLI_BRAND_COLOR[resolveIconId(lane, ctx.agents)] || "text-[var(--color-fg-faint)]")}>
                   <CliIcon cli={resolveIconId(lane, ctx.agents)} className="h-3 w-3" />
@@ -884,7 +880,7 @@ const LaneGroups = memo(function LaneGroups({ lane, column, tasks, projectOrder,
               disabled={!project}
               title={project ? t("board.filterBy", { value: `project:${project.name}` }) : undefined}
               onClick={() => project && onFilter("project", project.name)}
-              className="flex items-center gap-1.5 px-1 pb-1 text-left text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[var(--color-fg-faint)] enabled:hover:text-[var(--color-fg)]"
+              className="flex items-center gap-1.5 px-1 pb-1 text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--sidebar-eyebrow)] enabled:hover:text-[var(--sidebar-ink-strong)]"
             >
               <span
                 className="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -976,7 +972,7 @@ const BoardCard = memo(function BoardCard({ task: w, ctx, column, lane, isDragSo
       }}
       style={{ borderLeftColor: edge }}
       className={cn(
-        "flex cursor-pointer flex-col gap-1 rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-bg-2)] px-3 py-2 text-left hover:shadow-sm",
+        "ui-board-card flex cursor-pointer flex-col gap-1 px-3 py-2 text-left",
         isDragSource && "border-dashed opacity-40",
       )}
     >
@@ -1247,7 +1243,7 @@ const ArchivedCard = memo(function ArchivedCard({ task: w, project, ctx }: {
   return (
     <div
       data-board-task-id={w.id}
-      className="flex items-center gap-2 rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-bg-2)] px-3 py-2 opacity-70"
+      className="ui-board-card flex items-center gap-2 px-3 py-2 opacity-70"
     >
       <span className={cn("shrink-0", CLI_BRAND_COLOR[resolveIconId(w.cli, ctx.agents)] || "text-[var(--color-fg-faint)]")}>
         <CliIcon cli={resolveIconId(w.cli, ctx.agents)} className="h-3.5 w-3.5" />

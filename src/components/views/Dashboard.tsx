@@ -43,9 +43,9 @@ interface TaskRowContext {
 // the same session render the logo statically.
 let logoHasAnimated = false;
 import { cn } from "@/lib/utils";
+import { TreeChevron } from "@/components/sidebar/sidebarIcons";
 import {
   FolderPlus, Settings as SettingsIcon, Compass, Cog, Boxes, Plus, Folder,
-  ChevronDown, ChevronRight,
 } from "lucide-react";
 import { DropdownRoot, DropdownTrigger, DropdownMenu } from "@/components/ui/Dropdown";
 import { ContextMenuRoot, ContextMenuTrigger, ContextMenuContent } from "@/components/ui/ContextMenu";
@@ -105,7 +105,7 @@ export function Dashboard() {
             logoHasAnimated = true;
             return <TermicBlockmark cellSize={10} gap={2} animate={shouldAnimate} />;
           })()}
-          <div className="text-[11.5px] uppercase tracking-[0.3em] text-[var(--color-fg-faint)]">
+          <div className="text-[11.5px] uppercase tracking-[0.3em] text-[var(--sidebar-eyebrow)]">
             {t("dashboard.tagline")}
           </div>
         </header>
@@ -137,7 +137,7 @@ export function Dashboard() {
             the screen. */}
         {recent.length > 0 && (
           <div className="mb-8" data-testid="dashboard-recents">
-            <h2 className="mb-3 text-[14px] font-semibold">{t("dashboard.recent")}</h2>
+            <h2 className="ui-eyebrow mb-3 block">{t("dashboard.recent")}</h2>
             <div className="flex flex-wrap gap-2">
               {recent.map(w => (
                 <RecentChip
@@ -157,9 +157,9 @@ export function Dashboard() {
           <EmptyProjectsCard onClick={openNewProject} />
         ) : (
           <>
-            <div className="mb-3 flex items-baseline justify-between">
-              <h2 className="text-[14px] font-semibold">{t("dashboard.projects")}</h2>
-              <span className="text-[12px] text-[var(--color-fg-faint)]">{projects.length}</span>
+            <div className="mb-3 flex items-center gap-[7px]">
+              <h2 className="ui-eyebrow">{t("dashboard.projects")}</h2>
+              <span className="ui-count">{projects.length}</span>
             </div>
             <div className="flex flex-col gap-3">
               {sections.map(sec => sec.kind === "loose" ? (
@@ -236,16 +236,14 @@ function GroupSection({
             // Inline colour deliberately beats the hover class — a coloured
             // folder stays its colour under the cursor, same as the sidebar.
             style={accent ? { color: accent } : undefined}
-            className="mb-2 flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-1 text-[12px] font-semibold uppercase tracking-[0.06em] text-[var(--color-fg-faint)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+            className="mb-2 flex h-[28px] cursor-pointer items-center gap-[7px] rounded-[6px] px-[8px] text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--sidebar-eyebrow)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--sidebar-ink-strong)]"
           >
-            {collapsed
-              ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />
-              : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--color-fg-faint)]" />}
+            <TreeChevron open={!collapsed} className="shrink-0 text-[var(--sidebar-chevron)]" />
             {/* No own colour class when accented — inherits the header's
                 currentColor so glyph + name match. */}
-            <Folder className={cn("h-3.5 w-3.5 shrink-0", !accent && "text-[var(--color-fg-faint)]")} />
+            <Folder className={cn("h-3.5 w-3.5 shrink-0", !accent && "text-[var(--sidebar-icon)]")} />
             <span className="truncate">{name}</span>
-            <span className="ml-auto shrink-0 tabular-nums text-[11px] text-[var(--color-fg-faint)]">
+            <span className="ui-count ml-auto">
               {members.length}
             </span>
           </div>
@@ -265,7 +263,7 @@ function GroupSection({
           // list stays attributable mid-scroll. If color-mix is unavailable
           // the invalid value is dropped and the class's border colour applies.
           style={accent ? { borderColor: `color-mix(in srgb, ${accent} 45%, transparent)` } : undefined}
-          className="ml-[7px] flex flex-col gap-3 border-l border-[var(--color-border-soft)] pl-3"
+          className="ml-[13px] flex flex-col gap-3 border-l border-[var(--sidebar-guide)] pl-3"
         >
           {members.map(p => (
             <DashboardProjectCard key={p.id} project={p} tasks={tasks} ctx={ctx} onSettings={() => onSettings(p.id)} />
@@ -287,7 +285,7 @@ function DashboardProjectCard({ project, tasks, ctx, onSettings }: {
   return (
     <ProjectCard projectId={project.id} name={project.name} onSettings={onSettings}>
       {taskList.length === 0 ? (
-        <div className="px-3 py-2 text-[12.5px] text-[var(--color-fg-faint)]">
+        <div className="px-[14px] py-[10px] text-[12.5px] text-[var(--sidebar-faint)]">
           {/* The source copy marks up "+" and "main checkout" in bold; Trans
               keeps the tags in the locale string without dangerouslySetInnerHTML. */}
           <Trans t={t} i18nKey="dashboard.emptyProject" components={{ b: <b /> }} />
@@ -347,7 +345,7 @@ function DashboardTaskRow({ task: w, ctx }: { task: Task; ctx: TaskRowContext })
       // Dim the task name to match the sidebar's task rows
       // (fg-dim by default, fg on hover); the "on" / branch
       // keep their own explicit colors.
-      className="group flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+      className="group flex h-[34px] cursor-pointer items-center gap-3 rounded-[6px] px-[10px] text-left text-[var(--sidebar-ink)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--sidebar-ink-strong)]"
     >
       {/* Use the CLI brand icon for main-checkout rows
           too — matches the sidebar's unified rendering.
@@ -413,7 +411,7 @@ function RecentChip({ task: w, ctx, projectName, onOpen }: {
       data-dashboard-recent-task-id={w.id}
       onClick={onOpen}
       title={projectName ? `${projectName} · ${w.branch}` : w.branch}
-      className="flex max-w-[220px] items-center gap-2 rounded-md border border-[var(--color-border-soft)] bg-[var(--color-bg-1)] px-2.5 py-1.5 text-left text-[12.5px] text-[var(--color-fg-dim)] transition-colors hover:border-[var(--color-accent-soft)] hover:text-[var(--color-fg)]"
+      className="ui-raised max-w-[220px] justify-start gap-2 px-2.5 text-left text-[12.5px] font-medium"
     >
       <span className={cn(
         "shrink-0",
@@ -433,12 +431,13 @@ function ActionCard({ icon, label, hint, onClick }: {
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-start gap-2 rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-bg-1)] p-4 text-left transition-colors hover:border-[var(--color-accent-soft)]"
+      className="ui-card group flex flex-col items-start gap-2 p-4 text-left"
+      data-interactive="true"
     >
-      <span className="text-[var(--color-fg-dim)]">{icon}</span>
+      <span className="ui-card-glyph">{icon}</span>
       <div>
-        <div className="text-[13.5px] font-semibold">{label}</div>
-        <div className="text-[12px] text-[var(--color-fg-faint)]">{hint}</div>
+        <div className="text-[13.5px] font-semibold text-[var(--sidebar-ink-strong)]">{label}</div>
+        <div className="text-[12px] text-[var(--sidebar-muted)]">{hint}</div>
       </div>
     </button>
   );
@@ -452,16 +451,16 @@ function ProjectCard({ projectId, name, onSettings, children }: {
 }) {
   const { t } = useTranslation("chrome");
   return (
-    <div className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-bg-1)]" data-dashboard-project-id={projectId}>
-      <header className="flex items-center justify-between border-b border-[var(--color-border-soft)] px-3 py-2">
+    <div className="ui-card" data-dashboard-project-id={projectId}>
+      <header className="ui-card-head">
         <div className="flex items-center gap-2">
-          <span className="text-[13.5px] font-semibold">{name}</span>
+          <span className="text-[13.5px] font-semibold text-[var(--sidebar-ink-strong)]">{name}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             title={t("dashboard.projectSettingsTip")}
             onClick={onSettings}
-            className="rounded p-1.5 text-[var(--color-fg-faint)] hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)]"
+            className="ui-icon-btn"
           ><Cog className="h-4 w-4" /></button>
           {/* Shared per-agent "Open repo with X" + New worktree menu —
               same component the sidebar uses, so the option list stays
@@ -470,10 +469,10 @@ function ProjectCard({ projectId, name, onSettings, children }: {
             <DropdownTrigger asChild>
               <button
                 title={t("dashboard.newTaskTip")}
-                className="rounded p-1.5 text-[var(--color-fg-faint)] hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)] data-[state=open]:bg-[var(--color-bg-3)] data-[state=open]:text-[var(--color-fg)]"
+                className="ui-icon-btn"
               ><Plus className="h-4 w-4" /></button>
             </DropdownTrigger>
-            <DropdownMenu align="end" sideOffset={4} className="w-[276px]">
+            <DropdownMenu align="end" sideOffset={4} className="sidebar-menu w-[276px]">
               <ProjectActionsMenuItems projectId={projectId} />
             </DropdownMenu>
           </DropdownRoot>
@@ -493,9 +492,10 @@ function EmptyProjectsCard({ onClick }: { onClick: () => void }) {
     <button
       data-testid="empty-projects-card"
       onClick={onClick}
-      className="flex w-full flex-col items-center gap-3 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg-1)] p-8 text-center transition-colors hover:border-[var(--color-accent-soft)] hover:bg-[var(--color-bg-2)]"
+      className="ui-card flex w-full flex-col items-center gap-3 border-dashed p-8 text-center"
+      data-interactive="true"
     >
-      <Boxes className="h-8 w-8 text-[var(--color-fg-faint)]" />
+      <Boxes className="h-8 w-8 text-[var(--sidebar-faint)]" />
       <div>
         <div className="text-[14px] font-semibold">{t("dashboard.emptyTitle")}</div>
         <div className="mt-1 text-[12.5px] text-[var(--color-fg-dim)]">

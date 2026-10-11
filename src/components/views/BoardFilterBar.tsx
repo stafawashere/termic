@@ -258,7 +258,7 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
             // like its row: the root font size here is 14px, not 16.
             sidebar
               ? "rounded-[7px] py-0 pl-[31px] pr-[52px] text-[13px] leading-[28px] text-[var(--sidebar-input-ink)] shadow-[var(--sidebar-input-shadow)] placeholder:text-[var(--sidebar-placeholder)]"
-              : "rounded-md py-1 pl-8 pr-6 text-[12.5px] leading-[calc(1.25rem-2px)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-faint)]",
+              : "rounded-[7px] py-1 pl-8 pr-6 text-[12.5px] leading-[calc(1.25rem-2px)] text-[var(--sidebar-input-ink)] shadow-[var(--sidebar-input-shadow)] placeholder:text-[var(--sidebar-placeholder)]",
             // Out of flow in the sidebar (the wrapper holds the row's height),
             // so growing never moves what is under it. Wrapping only while
             // focused; otherwise, and always on the board, one clipped line.
@@ -271,7 +271,7 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
             !grown && (sidebar ? "h-[30px]" : "h-7"),
             // The sidebar's field is sunk into the panel like the toolbar's
             // wells, and opaque, so a grown field covers the chips under it.
-            sidebar ? "bg-[var(--sidebar-input-bg)]" : "bg-[var(--color-bg)]",
+            "bg-[var(--sidebar-input-bg)]",
             // Sidebar, list open: square the bottom and quiet its edge, so
             // the field and the list under it draw as ONE outlined shape with
             // a hairline between them (see the listbox below).
@@ -285,7 +285,7 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
               ? "border-[var(--color-accent)]/50"
               : sidebar
                 ? "border-[var(--sidebar-input-border)] focus:border-[var(--color-accent)]/50"
-                : "border-[var(--color-border-soft)] focus:border-[var(--color-accent)]/50",
+                : "border-[var(--sidebar-input-border)] focus:border-[var(--color-accent)]/50",
           )}
         />
         {sidebar && text === "" && <FilterKeycap />}
@@ -301,7 +301,7 @@ export const BoardFilterBar = memo(function BoardFilterBar({ text, onTextChange:
             // so a clipped query ran on underneath this button.
             className={cn(
               "absolute z-40 rounded p-0.5 text-[var(--color-fg-faint)] hover:text-[var(--color-fg)]",
-              sidebar ? "right-[8px] bg-[var(--sidebar-input-bg)]" : "right-1 bg-[var(--color-bg)]",
+              sidebar ? "right-[8px] bg-[var(--sidebar-input-bg)]" : "right-1 bg-[var(--sidebar-input-bg)]",
             )}
           ><X className="h-3.5 w-3.5" /></button>
         )}
@@ -408,12 +408,12 @@ function BoardFilterMenu({ text, setText, tid, sidebar, side, focusHint, section
             "absolute z-40 flex rounded",
             sidebar
               ? "left-[7px] p-[4px] hover:bg-[var(--sidebar-row-hover)] data-[state=open]:bg-[var(--sidebar-row-hover)]"
-              : "left-1 p-1 hover:bg-[var(--color-bg-3)] data-[state=open]:bg-[var(--color-bg-3)]",
+              : "left-1 p-1 hover:bg-[var(--sidebar-row-hover)] data-[state=open]:bg-[var(--sidebar-row-hover)]",
             active
               ? "text-[var(--color-accent)]"
               : sidebar
                 ? "text-[var(--sidebar-placeholder)] hover:text-[var(--sidebar-btn-hover-ink)]"
-                : "text-[var(--color-fg-faint)] hover:text-[var(--color-fg)]",
+                : "text-[var(--sidebar-placeholder)] hover:text-[var(--sidebar-btn-hover-ink)]",
           )}
         >
           {sidebar ? <SearchGlyph size={13} /> : <ListFilter className="h-3.5 w-3.5" />}
@@ -426,15 +426,15 @@ function BoardFilterMenu({ text, setText, tid, sidebar, side, focusHint, section
         onCloseAutoFocus={e => { e.preventDefault(); onClosed(); }}
       >
         <div data-testid={`${tid}-menu`} className="flex min-h-0 flex-col">
-          <header className="flex shrink-0 items-center gap-2 border-b border-[var(--color-border-soft)] px-3 py-2">
-            <ListFilter className="h-3.5 w-3.5 text-[var(--color-fg-faint)]" />
-            <span className="text-[12.5px] font-semibold">{t("board.filterMenuTitle")}</span>
+          <header className="flex h-[40px] shrink-0 items-center gap-2 border-b border-[var(--sidebar-divider)] px-3">
+            <ListFilter className="h-3.5 w-3.5 text-[var(--sidebar-icon)]" />
+            <span className="text-[12.5px] font-semibold text-[var(--sidebar-ink-strong)]">{t("board.filterMenuTitle")}</span>
             {active && (
               <button
                 type="button"
                 data-testid={`${tid}-menu-clear`}
                 onClick={() => setText("")}
-                className="ml-auto rounded px-1.5 py-0.5 text-[11.5px] text-[var(--color-fg-dim)] hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)]"
+                className="sidebar-text-btn ml-auto h-[22px] text-[11.5px]"
               >
                 {t("board.filterMenuClear")}
               </button>
@@ -444,7 +444,7 @@ function BoardFilterMenu({ text, setText, tid, sidebar, side, focusHint, section
           <div className="flex min-h-0 flex-col gap-3 overflow-y-auto px-3 py-3">
             {sections.filter(sec => sec.options.length > 0).map(sec => (
               <section key={sec.id} data-board-filter-section={sec.id} className="flex flex-col gap-1.5">
-                <h3 className="text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[var(--color-fg-faint)]">
+                <h3 className="ui-eyebrow">
                   {sec.title}
                 </h3>
                 <div className="flex flex-wrap gap-1.5">
@@ -461,7 +461,7 @@ function BoardFilterMenu({ text, setText, tid, sidebar, side, focusHint, section
             ))}
           </div>
 
-          <footer className="flex shrink-0 flex-col gap-1.5 border-t border-[var(--color-border-soft)] bg-[var(--color-bg)] px-3 py-2 text-[11px] text-[var(--color-fg-faint)]">
+          <footer className="flex shrink-0 flex-col gap-1.5 border-t border-[var(--sidebar-divider)] bg-[var(--sidebar-well-bg)] px-3 py-2 text-[11px] text-[var(--sidebar-faint)]">
             <span>{t("board.filterMenuCycle")}</span>
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Syntax code="-agent:x" label={t("board.filterSynExclude")} />
@@ -479,7 +479,7 @@ function BoardFilterMenu({ text, setText, tid, sidebar, side, focusHint, section
 function Syntax({ code, label }: { code: string; label: string }) {
   return (
     <span className="flex items-center gap-1">
-      <code className="rounded bg-[var(--color-bg-3)] px-1 py-px font-mono text-[10.5px] text-[var(--color-fg-dim)]">{code}</code>
+      <code className="ui-keycap font-mono">{code}</code>
       {label}
     </span>
   );
@@ -503,7 +503,7 @@ function FacetChip({ option: o, state, onClick }: {
       onClick={onClick}
       className={cn(
         "flex h-6 max-w-full items-center gap-1.5 rounded-full border px-2 text-[11.5px]",
-        state === null && "border-[var(--color-border-soft)] text-[var(--color-fg-dim)] hover:bg-[var(--color-bg-3)] hover:text-[var(--color-fg)]",
+        state === null && "border-[var(--sidebar-card-border)] text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--sidebar-ink-strong)]",
         state === "include" && "border-[var(--color-accent)] text-[var(--color-fg)]",
         state === "exclude" && "border-[var(--color-err)] text-[var(--color-err)]",
       )}

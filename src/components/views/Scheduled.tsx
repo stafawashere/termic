@@ -10,7 +10,8 @@ import { useUI } from "@/store/ui";
 import { useProfiles } from "@/store/profiles";
 import { CliIcon, CLI_BRAND_COLOR, resolveIconId } from "@/icons/cli";
 import { cn } from "@/lib/utils";
-import { CalendarClock, ChevronDown, ChevronRight, Pencil, Play, Plus, Trash2 } from "lucide-react";
+import { TreeChevron } from "@/components/sidebar/sidebarIcons";
+import { CalendarClock, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { deleteSchedule, runScheduleNow, updateSchedule } from "@/lib/schedules/runner";
 import { openReport } from "@/lib/schedules/watcher";
 import { cadenceText, nextRun, outcomeText, slotText } from "@/lib/schedules/display";
@@ -31,30 +32,32 @@ export function ScheduledView() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden" data-testid="scheduled-root">
-      <div className="flex shrink-0 items-center gap-3 border-b border-[var(--color-border-soft)] px-6 py-3">
-        <CalendarClock className="h-4 w-4 shrink-0 text-[var(--color-fg-faint)]" />
-        <span className="text-[13.5px] font-medium text-[var(--color-fg)]">{t("scheduled.title")}</span>
+      <div className="ui-view-bar">
+        <CalendarClock className="h-4 w-4 shrink-0 text-[var(--sidebar-icon)]" />
+        <span className="text-[14px] font-semibold text-[var(--sidebar-ink-strong)]">{t("scheduled.title")}</span>
         <button
           type="button"
           data-testid="schedule-new"
           onClick={openNew}
-          className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[12.5px] text-[var(--color-fg-dim)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+          className="ui-raised ml-auto gap-1.5"
+          data-tone="accent"
         >
           <Plus className="h-3.5 w-3.5" />
           {t("scheduled.newSchedule")}
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-6 py-4" data-testid="scheduled-list">
+      <div className="ui-scroll min-h-0 flex-1 px-6 py-4" data-testid="scheduled-list">
         <div className="mx-auto max-w-3xl">
-          <p className="mb-3 px-3 text-[12px] leading-snug text-[var(--color-fg-faint)]" data-testid="scheduled-ceiling">
+          <p className="mb-3 px-1 text-[12px] leading-snug text-[var(--sidebar-faint)]" data-testid="scheduled-ceiling">
             {IS_MAC ? t("scheduled.ceiling") : t("scheduled.ceilingSystem")}
             {profilesExist && <> {t("scheduled.ceilingProfile")}</>}
           </p>
           {parents.length === 0 ? (
-            <div className="px-3 py-8">
-              <p className="text-[13.5px] text-[var(--color-fg-dim)]">{t("scheduled.empty")}</p>
-              <p className="mt-1 text-[12.5px] leading-snug text-[var(--color-fg-faint)]">{t("scheduled.emptyHint")}</p>
+            <div className="ui-card flex flex-col items-center px-6 py-10 text-center">
+              <span className="ui-card-glyph mb-3"><CalendarClock className="h-4 w-4" /></span>
+              <p className="text-[13.5px] font-semibold text-[var(--sidebar-ink-strong)]">{t("scheduled.empty")}</p>
+              <p className="mt-1 text-[12.5px] leading-snug text-[var(--sidebar-muted)]">{t("scheduled.emptyHint")}</p>
             </div>
           ) : parents.map(p => <ScheduleRow key={p.id} parent={p} lang={i18n.language} />)}
         </div>
@@ -95,7 +98,7 @@ function ScheduleRow({ parent, lang }: { parent: Task; lang: string }) {
     <div
       data-testid={`schedule-row-${parent.id}`}
       data-schedule-enabled={s.enabled ? "true" : "false"}
-      className="mb-1 rounded-md px-3 py-2 hover:bg-[var(--color-hover)]"
+      className="ui-card mb-2 px-[14px] py-[10px]"
     >
       <div className="flex items-center gap-3 text-[13px]">
         <span className={cn("shrink-0", CLI_BRAND_COLOR[iconId] || "text-[var(--color-fg-faint)]")}>
@@ -149,9 +152,9 @@ function ScheduleRow({ parent, lang }: { parent: Task; lang: string }) {
           type="button"
           data-testid={`schedule-history-toggle-${parent.id}`}
           onClick={() => setOpen(o => !o)}
-          className="mt-1 ml-7 flex items-center gap-1 text-[11.5px] text-[var(--color-fg-faint)] hover:text-[var(--color-fg)]"
+          className="mt-1 ml-7 flex items-center gap-[6px] text-[11.5px] text-[var(--sidebar-faint)] transition-[color] duration-[120ms] hover:text-[var(--sidebar-ink-strong)]"
         >
-          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          <TreeChevron open={open} />
           {open ? t("scheduled.hideHistory") : t("scheduled.history")}
         </button>
       )}
@@ -218,10 +221,7 @@ function IconButton({ children, label, onClick, testId, danger }: {
       title={label}
       aria-label={label}
       onClick={onClick}
-      className={cn(
-        "rounded p-1.5 text-[var(--color-fg-dim)] transition-colors hover:bg-[var(--color-bg-3)]",
-        danger ? "hover:text-[var(--color-err)]" : "hover:text-[var(--color-fg)]",
-      )}
+      className={cn("ui-icon-btn", danger && "hover:text-[var(--color-err)]")}
     >
       {children}
     </button>
@@ -244,7 +244,7 @@ function Switch({ value, onChange, label, testId }: {
       data-testid={testId}
       onClick={() => onChange(!value)}
       className="relative mr-1 inline-block h-[18px] w-8 shrink-0 rounded-full p-0"
-      style={{ background: value ? "var(--color-accent)" : "var(--color-bg-3)" }}
+      style={{ background: value ? "var(--color-accent)" : "var(--sidebar-well-bg)", boxShadow: value ? undefined : "var(--sidebar-well-shadow)" }}
     >
       <span
         className="absolute top-[2px] h-[14px] w-[14px] rounded-full"
