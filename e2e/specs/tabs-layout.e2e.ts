@@ -866,6 +866,30 @@ describe("layout", () => {
     await snap("layout.png");
   });
 
+  // The toolbar holds only the view switcher since the activity readout
+  // moved to the title bar's session strip, so the switcher sits centred.
+  it("centres the view switcher in the toolbar, with no activity readout", async () => {
+    for (const px of [260, 338, 480]) {
+      await browser.execute((w) => window.__termic!.useApp.getState().setSidebarWidth(w), px);
+      await browser.waitUntil(async () => (await width()) === px, { timeout: 5_000 });
+      const row = await browser.execute(() => {
+        const toolbar = document.querySelector('[data-testid="sidebar-toolbar"]') as HTMLElement;
+        const switcher = document.querySelector('[data-testid="sidebar-view-switcher"]') as HTMLElement;
+        const toolbarBox = toolbar.getBoundingClientRect();
+        const switcherBox = switcher.getBoundingClientRect();
+        return {
+          offset: switcherBox.left + switcherBox.width / 2 - (toolbarBox.left + toolbarBox.width / 2),
+          readout: !!toolbar.querySelector('[data-testid="sidebar-agent-activity"]'),
+          children: toolbar.children.length,
+        };
+      });
+      expect(Math.abs(row.offset)).toBeLessThanOrEqual(0.5);
+      expect(row.readout).toBe(false);
+      expect(row.children).toBe(1);
+    }
+    await snap("sidebar-toolbar-centred.png");
+  });
+
   // The sidebar's right edge is a ResizeHandle: a MOUSE drag (resize handles
   // are the one gesture family that isn't pointer-based), persisted to
   // localStorage so the width survives a relaunch.
@@ -1732,7 +1756,7 @@ describe("compact rail", () => {
     await snap("compact-rail-tooltip.png");
   });
 
-  it("stacks the views in a well over the activity readout and marks the open task", async () => {
+  it("stacks the views in a well with no activity readout, and marks the open task", async () => {
     const rail = await browser.execute((id) => {
       const views = document.querySelector('[data-testid="sidebar-rail-views"]') as HTMLElement | null;
       const head = views?.parentElement;
@@ -1741,7 +1765,7 @@ describe("compact rail", () => {
         direction: views ? getComputedStyle(views).flexDirection : null,
         buttons: views?.querySelectorAll("button[aria-pressed]").length ?? 0,
         pressed: views?.querySelectorAll('button[aria-pressed="true"]').length ?? 0,
-        readout: !!head?.querySelector('[data-testid="sidebar-agent-activity"]'),
+        readout: !!document.querySelector('[data-testid="sidebar-agent-activity"]'),
         tileSelected: tile?.dataset.selected === "true",
         tileHeight: tile ? Math.round(tile.getBoundingClientRect().height) : 0,
       };
@@ -1750,7 +1774,8 @@ describe("compact rail", () => {
     expect(rail.buttons).toBeGreaterThanOrEqual(2);
     // A task is open, so no view segment reads as the current one.
     expect(rail.pressed).toBe(0);
-    expect(rail.readout).toBe(true);
+    // The title bar's session strip took over the readout's job.
+    expect(rail.readout).toBe(false);
     expect(rail.tileSelected).toBe(true);
     expect(rail.tileHeight).toBe(32);
   });

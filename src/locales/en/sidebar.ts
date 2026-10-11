@@ -1,15 +1,6 @@
 // Sidebar: project tree, task rows, compact rail, footer, the update card,
 // and the shared menu bodies (project actions, group actions).
 export default {
-  activity: {
-    agents_one: "{{count}} agent",
-    agents_other: "{{count}} agents",
-    idle: "No agents working",
-    line: "{{task}} · running {{elapsed}}",
-    lineNoTime: "{{task}} · running",
-    subagents_one: "{{count}} subagent running",
-    subagents_other: "{{count}} subagents running",
-  },
   navDashboard: "Dashboard",
   navHistory: "History",
   navBoard: "Kanban",

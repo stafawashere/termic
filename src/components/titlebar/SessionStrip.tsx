@@ -19,7 +19,7 @@ import { focusMainTab } from "@/lib/tabFocus";
 import { formatTerminalTitle } from "@/lib/terminalTitle";
 import { resolveIconId } from "@/icons/cli";
 import { formatClock, parseSessionStripKey, sessionStripKey } from "@/lib/sessionStrip";
-import { useDocumentVisible } from "@/components/sidebar/AgentActivityReadout";
+import { useDocumentVisible } from "@/hooks/useDocumentVisible";
 import { Tip } from "@/components/ui/Tooltip";
 import { StopGlyph, WrenchGlyph } from "@/components/titlebar/titlebarIcons";
 import type { TerminalTab } from "@/lib/types";

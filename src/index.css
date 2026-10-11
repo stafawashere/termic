@@ -1371,14 +1371,6 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 .sidebar-scroll::-webkit-scrollbar-thumb:hover { background-color: var(--sidebar-scroll-thumb-hover); }
 .sidebar-scroll::-webkit-scrollbar-thumb:active { background-color: var(--sidebar-scroll-thumb-active); }
 
-/* The agent readout's pulse: a 12-unit dash running along the dim trace.
-   A retracted hover overlay (aria-hidden) and reduced motion hold it still. */
-@keyframes sidebar-trace { to { stroke-dashoffset: -48; } }
-.sidebar-trace-pulse { animation: sidebar-trace 1.4s linear infinite; }
-[aria-hidden="true"] .sidebar-trace-pulse { animation: none; }
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-trace-pulse { animation: none; }
-}
 
 /* Tree rows (Sidebar.tsx). The project tray fades on its own layer, so the
    fade never repaints the row under it. */
@@ -1780,8 +1772,10 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 .titlebar-session-more:hover {
   color: var(--sidebar-ink);
 }
+/* The trace's pulse: a 12-unit dash running along the dim line. */
+@keyframes titlebar-trace { to { stroke-dashoffset: -48; } }
 .titlebar-trace-pulse {
-  animation: sidebar-trace 1.4s linear infinite;
+  animation: titlebar-trace 1.4s linear infinite;
   filter: drop-shadow(0 0 3px color-mix(in srgb, var(--color-accent) 60%, transparent));
 }
 @media (prefers-reduced-motion: reduce) {

@@ -247,8 +247,12 @@ it keeps now (the "Lens" concept of the sidebar rethink):
   weight, same meaning: these belong together.
 - **The nav is one segmented control,** a recessed well of icons with the
   current view raised, each with its name as a tooltip and as
-  screen-reader text. It runs across the toolbar, and down the icon rail. Four full-width rows took the top of the sidebar
-  before anything about your work showed.
+  screen-reader text. It sits centred in the toolbar, and runs down the
+  icon rail. Four full-width rows took the top of the sidebar before
+  anything about your work showed. The toolbar held an agent activity
+  readout beside it until the title bar's session strip took that job
+  (docs/ui.md "Title bar contents"); neither the toolbar nor the rail draws
+  one now.
 
 ## The refined tree (GH #90)
 
@@ -278,11 +282,9 @@ accent is the theme's, never a literal.
   other bottom bar). Its glyphs are the sidebar's own, 17px, in 30px
   buttons; the row is shifted so the gear's glyph ends where the tree's
   badges do.
-- **The icon rail** stacks the views in the same well, over the activity
-  readout in its narrow form. Every row is a 32px tile (`.sidebar-rail-tile`)
-  with a corner dot for what its full row would draw. The hover reveal
-  mounts the rail and the overlay at once, so `activityAnimates` lets only
-  the one on screen run the readout.
+- **The icon rail** stacks the views in the same well. Every row is a 32px
+  tile (`.sidebar-rail-tile`) with a corner dot for what its full row would
+  draw.
 - **Keyboard focus** is one inset ring, `--sidebar-focus-ring`, on every
   button and `role=button` row in the panel. Inputs keep their accent
   border (`.sidebar-inline-input`) and menu items their highlight.

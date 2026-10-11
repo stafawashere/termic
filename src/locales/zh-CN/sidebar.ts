@@ -1,15 +1,6 @@
 // 侧边栏：项目树、任务行、紧凑模式图标栏、页脚、更新卡片，
 // 以及共享的菜单内容（项目操作、分组操作）。
 export default {
-  activity: {
-    agents_one: "{{count}} 个智能体",
-    agents_other: "{{count}} 个智能体",
-    idle: "没有正在工作的智能体",
-    line: "{{task}} · 已运行 {{elapsed}}",
-    lineNoTime: "{{task}} · 运行中",
-    subagents_one: "{{count}} 个子智能体运行中",
-    subagents_other: "{{count}} 个子智能体运行中",
-  },
   navDashboard: "仪表盘",
   navHistory: "历史",
   navBoard: "看板",
