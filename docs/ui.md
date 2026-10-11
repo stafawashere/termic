@@ -1645,26 +1645,67 @@ either, restore fails with an error instead of doing that.
 
 ## Title bar contents, and what moved out of it
 
-Left to right: traffic lights (reserved unless full-screen), sidebar toggle,
-the profile chip, the updater pill, the waiting-agents pill, then the task
-breadcrumb.
+The "Focus title" design (2026-10): the refined tree's material on a 50px
+bar, three columns in a grid (`.titlebar`, `minmax(0,1fr) auto
+minmax(0,1fr)`). It is a grid and not three `flex:1` columns because the
+traffic-light reservation is padding inside the left column, and flex
+columns with unequal padding come out unequal: the title sat 34px off the
+window's centre until the switch.
+
+- **Left**, after the traffic lights (84px, unless full-screen): the
+  sidebar toggle and the profiles button as 28px icon buttons
+  (`.titlebar-icon-btn`), then the session strip, the waiting-agents pill
+  and the build badge (DEV / E2E / BETA, or the update button). The design
+  labels its second button "Agents" but draws the profiles glyph; termic
+  has no Agents view, so it is the profiles button, the dot and name once
+  profiles exist.
+- **Centre**: the task title (`FocusTitle`), agent glyph, task, project,
+  branch, the link glyph on a main checkout, a chevron. The whole pill opens
+  the task finder, the same dialog as its shortcut, rather than a second
+  switcher, and the finder sits 6px under the bar. A label that IS the
+  branch drops the branch segment, so the branch shows once.
+- **Right**: two recessed wells (`.titlebar-action-well`). Do holds the Run
+  split (one raised chip, two buttons: run or stop, and the run menu) and
+  Prompts; Manage holds the terminal panel toggle (raised while the bottom
+  terminal is open), Send to main, sandbox (raised while any sandbox is on),
+  archive and the open-with split. Then the command palette and the
+  right-panel toggle. Every segment is icon-only with its label in the
+  tooltip and its `aria-label`.
+
+**The session strip** (`SessionStrip`, `lib/sessionStrip.ts`) speaks for the
+open task only: the newest running agent tab, else the newest one blocked on
+you, else the newest done one, as trace, tab name, state word, elapsed clock
+and a stop button past a groove (it kills that tab's PTY after a confirm). A
+`+N` chip switches to another running agent. Its data is what the tab
+already carries; there is no live tool-call channel, so the tool slot only
+appears for a permission request, whose hook body names the tool
+(agent-hooks.md). Two rules keep it cheap: the pick is ONE string
+subscription (`sessionStripKey`), so output stamps and live titles re-render
+nothing, and the clock ticks in local state, mounted only while the window is
+visible.
 
 The bar carries the current profile's accent as a wash from the left edge,
-fading out by the first third (`profileWashCss`, docs/profiles.md). The chip
+fading out by the first third (`profileWashCss`, docs/profiles.md), as a
+custom property under the bar's own gradient (`--titlebar-wash`). The chip
 sits inside that wash, so the colour and the name are one signal rather than
-two. Nothing else in the bar may take a background of its own: a tinted surface
-inside a tinted one reads as a rendering fault.
+two. The wash is the bar's only tint: wells and chips are the neutral
+material, and only the build badge is coloured, as status.
+
+Window in the background (`windowFocused` false): text and glyphs marked
+`.titlebar-ink` drop to 55% opacity, wells and chips do not, and the trace
+keeps running.
 
 **The theme picker is NOT here.** It lives in the sidebar footer, first in the
 row, and moved there when the profile chip took the space. It is a set-once
 preference; the title bar is the strip you drive agents from. Anything proposed
-for this bar has to earn its width against the breadcrumb, which is the thing
+for this bar has to earn its width against the title, which is the thing
 people actually read.
 
 ### The folder button is a picker, not one action
 
 `OpenWithButton` replaced a fixed "Open in Finder". Left half launches the app
-picked last, a 14px chevron opens the menu of everything detected. Finder is
+picked last, a 21px chevron half opens the menu of everything detected (the
+pair is 48px, the cap `task.e2e.ts` holds it to). Finder is
 first in the list and the default, so the old behaviour is one click away and
 nothing that worked stopped working. It earns the extra width because a git
 worktree is rarely something you want in a file manager: the tools you want on
@@ -1689,7 +1730,8 @@ deleted while the menu was open, so it is not a second-best fallback.
 with zero IPC. Decoding in a selector instead would mint a fresh object per
 store notification and re-render the bar on unrelated prefs writes.
 
-Icons are per GROUP, not per app (`FolderOpen` / `Code2` / `SquareTerminal`):
+Icons are per GROUP, not per app (the design's open-folder glyph for the file
+manager, `Code2` / `SquareTerminal` for the others):
 lucide has no Cursor or Warp glyph, and eight brand SVGs is a bigger change
 than the feature. The label carries the identity, the tooltip spells it out.
 
@@ -1700,7 +1742,7 @@ attributes, so its rows cannot carry a test id.
 
 ## Window chrome / drag
 
-macOS overlay title bar, hidden title, 84px reserved left for traffic lights. Windows and Linux have no native frame at all (`decorations(false)` in `build_profile_window`): the same bar drags the window through `startDragging()`, a double click maximizes (read off the mousedown's click count), and `WindowControls` draws minimize, maximize / restore and close at its right end, in each platform's own look (Windows' caption glyphs and red Close; GNOME's small round buttons on Linux). Linux dropped GTK's title bar because it spent ~58px on the word "Termic" above a bar that already says where you are. The window still resizes from its edges (tao hit-tests the outer 5px of an undecorated window), and `WindowResizeEdges` lays transparent strips over that same 5px purely for the resize CURSOR, which tao sets on the toplevel window and which never shows over the webview. On Linux the window has no shadow, and the title-bar context menu (Move, Always on Top) is gone with the bar; the compositor's own Super+drag still moves it. The Activity window keeps its native title bar everywhere. Three drag mechanisms (each fails differently):
+macOS overlay title bar, hidden title, 84px reserved left for traffic lights. Their inset (`traffic_y` in `build_profile_window`, 16, or 21 on Tahoe) was tuned for the old 38.5px bar and has not been re-measured against the 50px one; `TERMIC_TRAFFIC_Y` overrides it for tuning. Windows and Linux have no native frame at all (`decorations(false)` in `build_profile_window`): the same bar drags the window through `startDragging()`, a double click maximizes (read off the mousedown's click count), and `WindowControls` draws minimize, maximize / restore and close at its right end, in each platform's own look (Windows' caption glyphs and red Close; GNOME's small round buttons on Linux). Linux dropped GTK's title bar because it spent ~58px on the word "Termic" above a bar that already says where you are. The window still resizes from its edges (tao hit-tests the outer 5px of an undecorated window), and `WindowResizeEdges` lays transparent strips over that same 5px purely for the resize CURSOR, which tao sets on the toplevel window and which never shows over the webview. On Linux the window has no shadow, and the title-bar context menu (Move, Always on Top) is gone with the bar; the compositor's own Super+drag still moves it. The Activity window keeps its native title bar everywhere. Three drag mechanisms (each fails differently):
 
 1. `data-tauri-drag-region` — primary (Tauri 2 JS handler)
 2. `WebkitAppRegion: "drag"` — backup (native AppKit hint)
@@ -1738,9 +1780,9 @@ Theme comes from importing `@/store/prefs` (the module applies the persisted pal
 
 ## Top-bar tooltips that name a shortcut
 
-`CommandPaletteButton.tsx` opens the right-hand cluster in `UnifiedBar.tsx`, before Run and the rest of the task-scoped actions (a divider separates it from them), and renders with or without a task (the palette's global commands do not need one). The palette button is a bare icon (`SquareChevronRight`, the ">" prompt) matching its neighbours: the shortcut lives in the tooltip only, built from the LIVE `command-palette` binding via `bindingGlyphs` rather than a hard-coded "⇧⌘P", so a rebind retitles it. An earlier version printed the glyphs on the button face as a bordered chip, which read as a foreign element in a row of bare icons.
+`CommandPaletteButton.tsx` sits after the two action wells in `UnifiedBar.tsx`, before the right-panel toggle, and renders with or without a task (the palette's global commands do not need one). The palette button is a bare 28px icon (a window with a ">" prompt) matching its neighbours: the shortcut lives in the tooltip only, built from the LIVE `command-palette` binding via `bindingGlyphs` rather than a hard-coded "⇧⌘P", so a rebind retitles it. An earlier version printed the glyphs on the button face as a bordered chip, which read as a foreign element in a row of bare icons.
 
-Prompts (⌥⌘P, the searchable palette over the same list) and the right-panel toggle (⌥⌘B) get the same treatment through the local `tipWithKey(text, id)` helper in `UnifiedBar.tsx`, which appends the live glyphs or nothing. Wrap the tooltip OUTSIDE a `DropdownTrigger asChild` (`<Tip><DropdownTrigger asChild><Button/></DropdownTrigger></Tip>`), and give that menu `onCloseAutoFocus={e => e.preventDefault()}` or the focus snapping back to the trigger re-fires the tooltip and leaves it stuck open.
+Prompts (⌥⌘P, the searchable palette over the same list), the terminal panel (⌘J), the task title (⌘O) and the right-panel toggle (⌥⌘B) get the same treatment through the local `tipWithKey(text, id)` helper in `UnifiedBar.tsx`, which appends the live glyphs or nothing. Wrap the tooltip OUTSIDE a `DropdownTrigger asChild` (`<Tip><DropdownTrigger asChild><Button/></DropdownTrigger></Tip>`), and give that menu `onCloseAutoFocus={e => e.preventDefault()}` or the focus snapping back to the trigger re-fires the tooltip and leaves it stuck open.
 
 The palette button toggles on `pointerdown`, not `click`, and that is load-bearing: the palette is a non-modal Radix dialog whose dismissable layer closes it on document pointerdown, so a click handler reading `commandPaletteOpen` always sees `false` and reopens what the user just dismissed. `onClick` remains as the keyboard path (Enter / Space fire no pointer event) and no-ops when pointerdown already handled the press.
 

@@ -154,6 +154,26 @@ any custom theme, gets them derived from its own `bg-1`, `fg`, `accent` and
 palette, so a custom theme restyles the sidebar without naming one. They
 are not keys in a theme file.
 
+## Title bar tokens
+
+The title bar (docs/ui.md "Title bar contents") is the same material
+family, so it reuses the `--sidebar-*` tokens wherever the value matches
+(wells, raised chips, segment and icon hover, inks, menu rows and
+dividers, the running and settled colours, the focus ring) and adds
+`--titlebar-*` only for what the sidebar has no value for: the bar's own
+gradient, border, shadow, sheen and grain opacity (`bg-top`, `bg-bottom`,
+`border`, `shadow`, `sheen`, `grain-opacity`), the well shadow with its
+inner rim (`well-shadow`), raised-chip hover and pressed states
+(`chip-hover-top`, `chip-hover-bottom`, `pressed-bg`, `pressed-shadow`),
+dividers (`divider`, `title-divider`, `groove`), the title pill's hover
+(`title-hover-bg`, `title-hover-border`, `title-hover-shadow`,
+`title-text-shadow`) and the menu material (`menu-top`, `menu-bottom`,
+`menu-shadow`). Same arrangement as the sidebar's: Dark+ literals in
+`@theme`, derived from `--color-*` for the other dark themes and custom
+themes, and their own block for light, where the grain is off. The
+session strip's running word and trace take `--color-accent`. They are not
+keys in a theme file.
+
 ## The subagent view paints with claude's palette
 
 The subagent transcript view (docs/ui.md "The subagent transcript view")
