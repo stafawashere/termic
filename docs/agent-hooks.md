@@ -833,6 +833,72 @@ apart from a subagent's by `agent_id`. The claude table above came from
 exactly that, and it took four scenarios because the first one accidentally
 launched a command that failed instantly.
 
+## Subagent reports: information for the sidebar, never state for the tab
+
+claude's `SubagentStart` and `SubagentStop` (installed since
+`SCHEMA_VERSION` 16, claude only) feed the subagent rows in the sidebar
+and nothing else. The rows and the transcript view are described in
+[ui.md](ui.md) "Subagent rows in the sidebar"; phases 2 and 3 (workflow
+run nodes, a running count and finish or fail alerts) are not built and
+live in [ideas/claude-subagents.md](ideas/claude-subagents.md).
+
+**Fields used.** Of the payload (measured against claude 2.1.296; the
+full field list is in the idea doc) the script reads three:
+`session_id`, `agent_id` and `agent_type`. It never reads
+`transcript_path` or `agent_transcript_path`: every path the transcript
+reader opens is derived on the host from the task, the agent entry and
+the session id (`subagents_dir_for` in `subagent_transcripts.rs`).
+SubagentStop carries no outcome field, so a stop says only that the agent
+ended; done or failed is read from its transcript afterwards.
+
+**The body.** `subagent start|stop <session> <agent> <type>` on the
+usual OSC 777 channel with the trusted `termic` sender, told apart by
+its prefix (`SUBAGENT_BODY_PREFIX` in `agent_hooks.rs`,
+`HOOK_OSC_SUBAGENT_PREFIX` in `lib/subagentHooks.ts`). A test pins that
+the prefix is neither a prefix of another body nor prefixed by one.
+
+**What the script rejects, writing nothing.** The script flattens the
+payload, removes line breaks and the space a pretty printer puts after a
+key's colon, and cuts out the `background_tasks` array before matching,
+because its entries describe other work and carry `agent_id` keys of
+their own. Then it exits silently when:
+
+- the hook is not running under a termic task, or grok runs it;
+- `CLAUDE_CODE_ENTRYPOINT` is not `cli`, so a nested `claude -p` that
+  inherited `TERMIC_PTY` cannot report its subagents into this tab;
+- `session_id` is not a UUID;
+- `agent_id`, after one leading `agent-` is stripped, is empty, longer
+  than 64, or has anything outside `A-Za-z0-9_-`. Live payloads carry
+  the bare id while the file is `agent-<id>.jsonl`, so the prefix is
+  stripped whichever form arrives;
+- `agent_type` is empty, longer than 128, or has anything outside
+  `A-Za-z0-9_:.-` (plugin agents spell types like `plugin:name`).
+
+The write is `printf` with `%s` for every field, through the same bounded
+three-target emit as every other hook (`$TERMIC_PTY`, then
+`/proc/1/fd/1` for a Docker container, then `/dev/tty`), so Docker and
+the Windows pipe path needed no change.
+
+**The webview side.** `TerminalPane` checks the subagent prefix before
+the ready, session and attention paths and returns from every subagent
+body, parsed or not, because a trusted body that falls through badges
+the tab. `parseSubagentBody` applies the same alphabets again, and
+`sessionMatches` drops a report whose session is not the tab's current
+`sessionId` (a tab with no session yet claims nothing). A rejected body is
+logged as `subagent-rejected` with `why=foreign-session` or
+`why=unparsed` in `termic-workstate.log`. An accepted one goes to the
+store through `deliverSubagentEvent` and pokes an open transcript view
+(`subagent_watch_poke`). With the master toggle off
+(`lib/subagentGate.ts`) the body is still swallowed, and nothing else
+happens.
+
+**What a report does.** A start records the agent as `running` in
+`useSubagents`; a stop records `unknown` and asks `subagent_list` for the
+transcript's outcome, which upgrades it to `done` or `failed`. The
+parent tab's work state still comes only from its own `Stop`, and no
+subagent state reaches attention, the done badge, the bell or the ring.
+That is the same rule as the trap below: `SubagentStop` is not a done.
+
 ## Interrupts: the one thing hooks do not cover
 
 Measured on every agent, both keys, mid-generation:
@@ -877,7 +943,9 @@ job, and it fails quietly, since a stale install still reports itself installed
 while reporting less than it could. v2 added the heartbeat; v3 added the
 container transport, which a v2 install does not have at all; v15 makes a held
 done speak, so a v14 install still spins on a tab whose agent left a shell
-running, which is the entire bug that version exists to fix.
+running, which is the entire bug that version exists to fix. v16 adds
+claude's `SubagentStart` / `SubagentStop`; a v15 install reports
+everything it did before and never mentions a subagent.
 
 Sync only touches agents already installed, so it never introduces hooks for
 one the user declined, and re-running `install` preserves the pre-install
@@ -1181,6 +1249,7 @@ to check and the easiest to get wrong.
 - **`SubagentStop` is not a done.** 107 fires against 2 real Stops in one run.
   `background_tasks` already covers subagents (`type: "subagent"` ×1006,
   `"shell"` ×1529).
+  The v16 hook reports it for the sidebar only (see "Subagent reports").
 - **"Is anything in flight" is not "is the agent working".** The registry holds
   ambient monitors that outlive every turn. Whitelist the types that mean the
   agent will be woken again; see the guard section above.

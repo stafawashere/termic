@@ -386,6 +386,12 @@ badge, and none of them touches the parent tab's work badge or bell.
   type `"subagent"` whose `subagentAgentId` has a row in this task carries the
   selection like a terminal child does, so the header drops its highlight and
   that row draws `--color-sel`.
+- **A row names the agent by its `.meta.json` description**, falling back
+  to the agent type, with `type: description` as its tooltip. Clicking it
+  calls `setActiveTask` and only then `openSubagentPreview`, because
+  activating a task brings back the tab it last had in front, which would
+  cover a transcript opened first (see gotchas.md "A sidebar row click
+  restores the previous tab after it activates the task").
 - **Rows are rebuilt from disk, never persisted.** `lib/subagentRebuild.ts`
   scans a tab's `<sessionId>/subagents/` (the newest
   `SUBAGENT_HISTORY_CAP` = 50 transcripts by mtime) on three triggers: app

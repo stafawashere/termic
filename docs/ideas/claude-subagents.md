@@ -1,25 +1,31 @@
 # Claude subagents in the sidebar
 
-**Status: idea, not approved.** No GitHub issue exists and none gets
-opened until the maintainer approves it. This file is a description of
-the feature as decided so far, plus the measurements it rests on. It is
-not a build order.
+**Status: idea, not approved.** Phase 1 is built; phases 2 and 3 below
+are not, and no GitHub issue exists for them. None gets opened until the
+maintainer approves the rest. This file keeps the open design for those
+phases plus the measurements the whole feature rests on.
 
-When a claude task spawns subagents (the Agent tool, custom agents,
-forks, and agents run by the Workflow tool), termic would add a sub-item
-under that task's sidebar row for each one. Clicking a sub-item opens a
-read-only tab that renders the subagent's transcript live, styled like
-the Claude CLI. A subagent runs inside the parent claude process and has
-no session or PTY of its own, so there is nothing to attach to. Steering
-stays in the parent claude, and the view only reads.
+## Shipped in phase 1
 
-Detection is hybrid. SubagentStart and SubagentStop hooks create and
-close rows quickly over the existing OSC 777 transport, and the
-transcript files on disk supply the content and catch what hooks miss.
-Both sources are keyed on the tab's `sessionId`, never on the newest file
-in a directory, because main-checkout tasks share their cwd with the
-user's own claude sessions (see the comment above the transcript lookup
-in `src-tauri/src/cli_server.rs`).
+A claude task now shows one sidebar row per subagent under the tab that
+spawned it, nested by spawn depth, badged running, done, failed,
+interrupted, unknown or expired, and never touching the parent tab's work
+state, attention or bell. Clicking a row opens a live, read-only,
+Claude-styled transcript view in the task's preview slot. Rows come from
+claude's `SubagentStart` / `SubagentStop` hooks (`SCHEMA_VERSION` 16) and
+from the transcripts on disk, which also rebuild them after a relaunch, a
+resume or a session change; nothing is persisted. A refcounted notify
+watcher tails only the transcripts a view has open, and Settings > Tasks
+has a "Claude subagents" block (master toggle, type filters, retention,
+auto-collapse, view options). Host and Docker are covered on macOS and
+Linux; workflow agents are recorded but get no row. Where each part is
+documented: the hook bodies and their rejection rules in
+[docs/agent-hooks.md](../agent-hooks.md) "Subagent reports", the rows, the
+view and the settings in [docs/ui.md](../ui.md) "Subagent rows in the
+sidebar", the separate store and the watcher's cost in
+[docs/performance.md](../performance.md), the path, session and watch traps
+in [docs/gotchas.md](../gotchas.md), and the commands and events in
+[docs/ipc.md](../ipc.md).
 
 ## Measured hook payloads
 
@@ -36,7 +42,7 @@ session's transcript.
 `permission_mode` and `effort`. It has no outcome or error field. A
 subagent that failed and one that finished cleanly produce the same
 SubagentStop shape, which is why done and failed are read from the
-transcript (see ## States).
+transcript (docs/ui.md, "Subagent rows in the sidebar").
 
 Both events fire for Agent-tool subagents and for agents run by the
 Workflow tool. Workflow agents arrive with `agent_type` set to
@@ -55,9 +61,9 @@ started. Tool calls made by a subagent already fire hooks in the parent
 session, marked by `agent_id` and `agent_type` (`docs/agent-hooks.md`,
 "Subagent tool calls fire hooks in the PARENT session").
 
-None of these events is wired today. The claude hook table in
-`src-tauri/src/agent_hooks.rs` registers SessionStart, UserPromptSubmit,
-PreToolUse, PermissionRequest and Stop only.
+Phase 1 reads only `session_id`, `agent_id` and `agent_type` (see
+docs/agent-hooks.md). Nothing uses the `tool_use_id` link yet, and
+`workflowPhase` is read into the summary but drawn nowhere until phase 2.
 
 ## Transcript layout
 
@@ -97,114 +103,42 @@ claude release, so every reader parses them leniently: an unknown key is
 ignored, a missing key is absent rather than an error, and a line that
 does not parse is skipped without dropping the rest of the file.
 
-## States
-
-A subagent row is in one of six states.
-
-- **running.** SubagentStart arrived, or a rebuild from disk found a
-  transcript whose parent is still live and whose last entry is not an
-  end.
-- **done.** SubagentStop arrived and the transcript's last entry is an
-  ordinary final assistant message.
-- **failed.** SubagentStop arrived and the transcript's last entry is an
-  error-shaped tool result or an API error.
-- **interrupted.** The parent PTY exited while the agent was still
-  running.
-- **unknown.** A rebuild from disk found no end entry and cannot tell
-  whether the agent is still going. If the parent PTY is not running,
-  the row is interrupted instead.
-- **expired.** The transcript file was deleted after the row existed.
-  The row stays, but the view has nothing to show.
-
-Hooks create and close rows. The transcript decides between done and
-failed, because SubagentStop carries no outcome.
-
-SubagentStop is not a done for the parent task. The parent's work state
-still comes only from its own Stop, and subagent state never feeds task
-attention, the bell, or any ring logic. Alerts for subagents are a
-separate, opt-in phase (see ## Phases).
-
-## Path trust
-
-The hook payload is attacker-shaped input: it comes from whatever is
-running in the PTY, including a container. So no path is ever read from
-a hook payload, `transcript_path` and `agent_transcript_path` included.
-Every path is derived on the host from three things termic already
-holds: the project slug (`claude_project_dir_name` in
-`src-tauri/src/cli_server.rs`), the config or account dir, and the tab's
-`sessionId`.
-
-`agent_id` must match a strict charset (ASCII letters, digits, `_` and
-`-`, bounded length) after an optional leading `agent-` is stripped. An
-id that fails the check drops the event.
-
-Every read is canonicalised and must land under
-`<slug>/<sessionId>/subagents/`. A symlink that resolves outside that
-directory is refused, and so is any path that canonicalises elsewhere.
-
-An event whose `session_id` differs from the tab's `sessionId` is
-dropped. Nested `claude -p` runs write into the parent's tty
-(`docs/agent-hooks.md`), so a session check is the only thing that keeps
-their subagents off this tab.
-
-Docker is a second realm (`docs/gotchas.md`, "Docker is a SECOND REALM").
-The container writes transcripts into the mounted projects dir
-(`/root/.claude/projects`), and the host reads the same files through
-the host path. On macOS and Linux the container workdir equals the host
-path, so the slug matches. On Windows the container sees a translated
-path, the slug differs, and that translation is deferred.
-
-## Phases
-
-**Phase 1: subagent rows and the live view.**
-
-- One row per subagent under its claude task, nested by spawn depth, up
-  to claude's three levels, each level collapsible.
-- Clicking a row opens a live, read-only transcript view in the preview
-  slot (`openPreviewTab` in `src/store/app.ts`). The view renders
-  assistant text, tool calls and results in the Claude TUI style.
-- The view tails its file through a notify watcher that is refcounted
-  per open view. Nothing watches a transcript nobody is looking at.
-- Nothing is persisted. On relaunch, rows are rebuilt from disk, capped
-  to the newest N.
-- Rows follow the tab's current `sessionId`, so a `/clear` or resume
-  moves the tab to the new session's subagents.
-- Workflow agents are recorded but not rendered.
-- A settings section: master toggle, per-type filters (built-in,
-  custom, workflow, fork), retention and auto-collapse, and view
-  options (thinking, tool inputs and outputs, truncation, auto-scroll).
-- Host and Docker on macOS and Linux.
+## Open design: phases 2 and 3
 
 **Phase 2: workflow run nodes.** Each workflow run becomes one row,
-collapsed by default, expanding to its phases and then its agents. Each
-agent opens the same view as a plain subagent.
+collapsed by default, expanding to its phases (`workflowPhase` in the
+sidecar) and then its agents. Each agent opens the same view as a plain
+subagent. Phase 1 already keeps workflow agents in the store
+(`isWorkflow`) and leaves them off the row selector, the workflow type
+filter in Settings is drawn disabled until this exists, and
+`subagent_list` already lists `subagents/workflows/wf_<runid>/`. Not yet
+decided: whether the run node reads `workflows/wf_<runid>.json` or the
+run's `journal.jsonl` for its phase list, and what the node shows while
+a run has started no agent yet.
 
 **Phase 3: alerts.** A running-subagent count on the parent row, and
 finish and fail notifications wired into the attention notifier, off
-unless the settings turn them on.
+unless the settings turn them on. This is the one place subagent state
+would reach attention, so it has to stay opt-in and must not change the
+rule that a SubagentStop is never a done for the parent task.
 
-**Out of scope:** gemini and codex tasks. This is claude only.
+**Out of scope:** gemini and codex tasks. This is claude only. Windows
+Docker path translation is deferred: the container sees a translated
+path there, so the slug differs from the host's.
 
-Constraints every phase keeps:
+Constraints phases 2 and 3 keep from phase 1:
 
-- Subagent records live in their own zustand store and never on
-  `TerminalTab`. A new tab field re-renders its sidebar row on every
-  change, because the row comparator only skips the fields listed in
-  `ROW_HIDDEN_TAB_FIELDS` (`src/store/sidebarTabs.ts`).
-- Every setter bails on an unchanged value (`docs/performance.md` bear
-  trap 8). Per-tab selectors return frozen empty constants.
-- The header highlight (`activeTabIsTerminalChild` in
-  `src/components/sidebar/Sidebar.tsx`) has to learn the new row type,
-  or the task header and the subagent row both show selection.
-- Rust emits go through `emit_to_window` to the owning window, not a
-  broadcast. No `thread::sleep` poll loops (bear trap 9).
-- Transcript text is untrusted. No raw HTML is rendered, ANSI escapes
-  are stripped, and redacted thinking shows as a placeholder.
-- A view opens on the last 500 entries, with a control to load earlier
-  ones.
-- Every fixture is synthetic, and e2e drives the feature through a new
-  `scripts/fake-agent.sh` directive that writes a synthetic subagent
-  transcript and the matching OSC bodies.
+- Subagent records stay in `useSubagents`, never on `TerminalTab`, and
+  every setter bails on an unchanged value (docs/performance.md, "A store
+  setter that writes an UNCHANGED value is an idle CPU leak").
+- A new row type has to teach `childRowCarriesSelection`
+  (`src/components/sidebar/subagentTree.ts`) about itself, or the task
+  header and the row both draw the selection.
+- Rust emits go through `emit_to_window` to the owning window, and nothing
+  polls with `thread::sleep` (docs/performance.md, "PTY firehose").
+- No path is read from a hook payload, and every read stays confined to
+  the session's `subagents/` directory.
+- Every fixture is synthetic and driven through `scripts/fake-agent.sh`.
 
 ## Docker and file events
 

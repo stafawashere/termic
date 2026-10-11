@@ -1243,6 +1243,12 @@ The schedule watcher opened a run's report tab that way: the tab existed, the
 agent tab was in front. Deferring the open to the next task fixed it, and the
 watcher test that replays the click's two calls pins it.
 
+A subagent row has the same ordering problem in the other direction: it
+opens a transcript into the preview slot, and the activation restores
+whatever tab the task had in front. `SubagentRow` calls `setActiveTask`
+first and `openSubagentPreview` second, in that order, so the transcript is
+the last thing brought to the front.
+
 ## A srcdoc iframe takes the PARENT's base URL and CSP
 
 An `<iframe srcdoc>` document has no URL of its own (`about:srcdoc`), so it
@@ -1263,3 +1269,71 @@ WKWebView while building the HTML preview:
 the srcdoc can narrow the inherited policy but never widen it, and WebKit
 ignores one that lands in `<body>`. See `lib/htmlPreview.ts` and
 docs/sandbox.md, "HTML preview: the iframe is the boundary".
+
+## A trusted subagent body that falls through badges the tab
+
+claude's `SubagentStart` / `SubagentStop` hooks write on the same trusted
+OSC 777 channel as attention, and a trusted body skips every notification
+filter. So `TerminalPane` must return from EVERY body that starts with
+`subagent `, parsed or not, from the other session or this one, and with the
+feature switched off. A body that fails to parse and falls through to the
+attention path rings a bell for an event that was never about the user. The
+check sits before the ready, session and attention paths; the agent.e2e.ts
+"subagent hook reports" cases drive the own-session, foreign-session and
+malformed bodies and assert no badge for any of them.
+
+## A subagent hook payload names paths, and none of them is read
+
+SubagentStart carries `transcript_path` and SubagentStop adds
+`agent_transcript_path`. Both come from whatever runs in the PTY, a
+container included, so termic reads neither. The script forwards three ids,
+the webview passes only ids to Rust (task, session, agent, workflow run),
+and `subagents_dir_for` in `subagent_transcripts.rs` derives the directory
+from the task record, the agent entry the tab runs (a clone's own
+`CLAUDE_CONFIG_DIR`, a named account's store, or the Docker agent dir) and
+the session id. Every id is checked against a strict charset before it is
+joined, and the resolved file must canonicalise under the canonical
+`<sessionId>/subagents/` directory, so a symlink planted there that points
+elsewhere is refused (`Escapes`) rather than followed; `subagent_list`
+skips such a file or workflow run directory instead of failing the scan.
+The watcher resolves through the same function.
+
+## A subagent report from another session is not this tab's
+
+Two things put a session that is not the tab's on the tab's terminal. A
+nested `claude -p` started by the agent inherits `TERMIC_PTY` and would
+report its own subagents there, which the script refuses on
+`CLAUDE_CODE_ENTRYPOINT` other than `cli`. And the tab's own session moves:
+`/clear`, `/resume` and a fork all change the id. So the webview drops a
+report whose `session_id` is not the tab's current `sessionId`, a tab with
+no session claims nothing, `setTabSessionId` forgets the old session's
+rows before the new session is rescanned from disk, and a scan that comes
+back after the tab's session moved, the tab closed or its claude stopped is
+thrown away instead of applied (`subagentRebuild.ts`). Keying anything on
+the newest file in the project directory instead would pick up the user's
+own claude sessions in a main-checkout task, which share its cwd.
+
+## A subagent stop payload carries decoy fields
+
+The SubagentStop payload holds the agent's `last_assistant_message` and the
+parent's `background_tasks`, and the second has entries with their own
+`agent_id` and `agent_type`. The hook script matches fields with shell
+pattern expansion, not a JSON parser, so it cuts the `background_tasks`
+array out before matching. The message cannot fake a field, because inside
+a JSON string every quote is escaped. It also strips the space a pretty
+printer puts after a key's colon but no other whitespace, so an agent id
+containing a space is rejected rather than glued into a different id.
+`claude_subagent_stop_reads_its_fields_wherever_they_sit` pins the decoys
+on both sides of `agent_id`.
+
+## A subagent watch closed before its open lands is never released
+
+The host keeps one watch per transcript and counts holders, so every
+`subagent_watch_open` has to be matched by exactly one close. A view that
+unmounts while its open is still in flight would send a close the host
+does not know yet (released nothing) and then the open would land (held
+forever). `subagentWatchOpen` in `lib/subagentWatch.ts` returns a dispose
+that waits for the in-flight open and closes only if it succeeded, and the
+listener goes up before the open so no batch emitted between the two is
+lost. Archiving a task and destroying a window release everything they held
+on the Rust side, because neither runs the views' cleanup.
