@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { TranscriptEntry } from "@/lib/types";
 import {
-  appendBatch, formatToolInput, pairToolCalls, positionOfEntry, prependPage, rowOffsets, rowsForView, shouldFollowTail,
+  appendBatch, formatToolInput, groupToolRuns, pairToolCalls, positionOfEntry, prependPage, rowOffsets, rowsForView, shouldFollowTail,
   stripAnsi, toTranscriptRow, toTranscriptRows, truncateLines, visibleRange, type TranscriptWindow,
 } from "@/lib/subagentTranscript";
 
@@ -259,5 +259,27 @@ describe("pairToolCalls", () => {
 
     expect(shown.map(row => row.index)).toEqual([0]);
     expect(shown[0].toolState).toBe("ok");
+  });
+});
+
+describe("groupToolRuns", () => {
+  it("folds each run of calls, results and thinking into one group keyed by its first entry", () => {
+    const rows = toTranscriptRows([
+      entry("userText", "go"),
+      entry("thinking", "hmm"),
+      entry("toolUse", "{}", { name: "Read", toolUseId: "a" }),
+      entry("toolResult", "x", { toolUseId: "a" }),
+      entry("toolResult", "lone", { toolUseId: "gone" }),
+      entry("assistantText", "done"),
+      entry("toolUse", "{}", { name: "Bash", toolUseId: "b" }),
+    ], 0);
+    const display = groupToolRuns(pairToolCalls(rows));
+
+    expect(display.map(row => [row.index, row.kind])).toEqual([
+      [0, "userText"], [1, "group"], [5, "assistantText"], [6, "group"],
+    ]);
+    expect(display[1].members.map(member => member.index)).toEqual([1, 2, 4]);
+    expect(display[1].entry).toBeNull();
+    expect(display[2].entry?.row.text).toBe("done");
   });
 });

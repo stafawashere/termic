@@ -178,7 +178,7 @@ export function lineDiff(before: string, after: string): DiffLine[] {
 }
 
 // `cat -n` puts a tab after the number; Claude's Read puts an arrow there.
-const NUMBERED_LINE = /^\s*(\d+)(?:\t|→)(.*)$/;
+const NUMBERED_LINE = /^\s*(\d+)(?:\t|\u2192)(.*)$/;
 
 /** Number a diff from the snippet an Edit result prints, by finding where its
  *  first new-side line sits. Lines before the edit are assumed unshifted. */
@@ -380,4 +380,151 @@ export function transcriptStats(rows: readonly TranscriptRow[]): TranscriptStats
     lastAtMs = at;
   }
   return { toolUses, outputTokens, model, firstAtMs, lastAtMs };
+}
+
+/** What one collapsed run of tool calls and thinking adds up to, counted the
+ *  way Claude Code counts its own collapsed groups. */
+export interface GroupCounts {
+  hasThinking: boolean;
+  thinkingMs: number;
+  editFiles: number;
+  linesAdded: number;
+  linesRemoved: number;
+  searches: number;
+  reads: number;
+  lists: number;
+  mcpCalls: number;
+  mcpServers: string[];
+  agents: number;
+  otherTools: number;
+}
+
+const EDIT_TOOLS: ReadonlySet<string> = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
+const SEARCH_TOOLS: ReadonlySet<string> = new Set(["Grep", "Glob"]);
+const AGENT_TOOLS: ReadonlySet<string> = new Set(["Task", "Agent"]);
+
+function editLines(name: string, inputJson: string): { added: number; removed: number } {
+  const fields = parseFields(inputJson);
+  if (name === "Write") return { added: outputLines(text(fields, "content") ?? "").length, removed: 0 };
+
+  const editsField = fields?.edits;
+  const edits: Fields[] = Array.isArray(editsField)
+    ? editsField.filter((edit): edit is Fields => typeof edit === "object" && edit !== null)
+    : fields ? [fields] : [];
+
+  let added = 0;
+  let removed = 0;
+  for (const edit of edits) {
+    const diff = lineDiff(text(edit, "old_string") ?? "", text(edit, "new_string") ?? "");
+    added += diff.filter(line => line.kind === "add").length;
+    removed += diff.filter(line => line.kind === "remove").length;
+  }
+  return { added, removed };
+}
+
+export function countGroup(rows: readonly Pick<TranscriptRow, "kind" | "toolName" | "text" | "durationMs">[]): GroupCounts {
+  const counts: GroupCounts = {
+    hasThinking: false, thinkingMs: 0, editFiles: 0, linesAdded: 0, linesRemoved: 0, searches: 0, reads: 0,
+    lists: 0, mcpCalls: 0, mcpServers: [], agents: 0, otherTools: 0,
+  };
+
+  for (const row of rows) {
+    const isThinking = row.kind === "thinking" || row.kind === "redactedThinking";
+    if (isThinking) {
+      counts.hasThinking = true;
+      counts.thinkingMs += row.durationMs ?? 0;
+      continue;
+    }
+    if (row.kind !== "toolUse") continue;
+
+    const name = row.toolName ?? "";
+    const mcp = /^mcp__(.+?)__/.exec(name);
+    if (EDIT_TOOLS.has(name)) {
+      const lines = editLines(name, row.text);
+      counts.editFiles++;
+      counts.linesAdded += lines.added;
+      counts.linesRemoved += lines.removed;
+    } else if (SEARCH_TOOLS.has(name)) {
+      counts.searches++;
+    } else if (name === "Read") {
+      counts.reads++;
+    } else if (name === "LS") {
+      counts.lists++;
+    } else if (AGENT_TOOLS.has(name)) {
+      counts.agents++;
+    } else if (mcp) {
+      counts.mcpCalls++;
+      if (!counts.mcpServers.includes(mcp[1])) counts.mcpServers.push(mcp[1]);
+    } else {
+      counts.otherTools++;
+    }
+  }
+  return counts;
+}
+
+/** One clause of a group summary: plain `lead`, a bold `count`, plain
+ *  `tail`, and an optional `+added -removed` stat. */
+export interface SummaryPart {
+  lead: string;
+  count: string | null;
+  tail: string;
+  added: number;
+  removed: number;
+}
+
+function plural(count: number, one: string, many: string): string {
+  return count === 1 ? one : many;
+}
+
+/** The clauses Claude Code 2.1.296 writes for a collapsed group, in its
+ *  order, past tense once the group is done and "-ing" while it is the
+ *  active one. The first clause is capitalised. */
+export function groupSummaryParts(counts: GroupCounts, active: boolean): SummaryPart[] {
+  const parts: SummaryPart[] = [];
+  const add = (lead: string, count: number, tail: string, stat = { added: 0, removed: 0 }) => {
+    parts.push({ lead: `${lead} `, count: String(count), tail, ...stat });
+  };
+  const verb = (doing: string, done: string) => (active ? doing : done);
+
+  if (counts.hasThinking) {
+    parts.push({
+      lead: `${verb("Thinking", "Thought")} for `,
+      count: formatElapsed(Math.max(1000, counts.thinkingMs)),
+      tail: "",
+      added: 0,
+      removed: 0,
+    });
+  }
+  if (counts.editFiles > 0) {
+    const stat = { added: counts.linesAdded, removed: counts.linesRemoved };
+    add(verb("editing", "edited"), counts.editFiles, ` ${plural(counts.editFiles, "file", "files")}`, stat);
+  }
+  if (counts.searches > 0) {
+    add(verb("searching for", "searched for"), counts.searches, ` ${plural(counts.searches, "pattern", "patterns")}`);
+  }
+  if (counts.reads > 0) add(verb("reading", "read"), counts.reads, ` ${plural(counts.reads, "file", "files")}`);
+  if (counts.lists > 0) {
+    add(verb("listing", "listed"), counts.lists, ` ${plural(counts.lists, "directory", "directories")}`);
+  }
+  if (counts.mcpCalls > 0) {
+    const servers = counts.mcpServers.join(", ") || "MCP";
+    const many = counts.mcpCalls > 1;
+    parts.push({
+      lead: `${verb("calling", "called")} ${servers}${many ? " " : ""}`,
+      count: many ? String(counts.mcpCalls) : null,
+      tail: many ? " times" : "",
+      added: 0,
+      removed: 0,
+    });
+  }
+  if (counts.agents > 0) add(verb("running", "ran"), counts.agents, ` ${plural(counts.agents, "agent", "agents")}`);
+  if (counts.otherTools > 0) {
+    add(verb("calling", "called"), counts.otherTools, ` ${plural(counts.otherTools, "tool", "tools")}`);
+  }
+
+  if (parts.length > 0) {
+    const first = parts[0];
+    parts[0] = { ...first, lead: first.lead[0].toUpperCase() + first.lead.slice(1) };
+  }
+  return parts;
 }

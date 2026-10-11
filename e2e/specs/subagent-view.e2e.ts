@@ -212,15 +212,27 @@ describe("subagent transcript view", () => {
     const facts = (await paneFacts(agentId))!;
     expect(facts.visible).toBe(true);
     expect(facts.hasTerminal).toBe(false);
+    // As in Claude Code, the thinking and the tool call fold into one
+    // summary line until it is clicked.
+    expect(facts.kinds).toEqual(["userText", "group", "assistantText"]);
+    expect(facts.texts[1]).toMatch(/^Thought for \d+s, read 1 file$/);
+
+    await clickWhenVisible(`${paneSelector(agentId)} [data-testid="subagent-group"]`);
+    const members = () => browser.execute((sel) =>
+      [...document.querySelectorAll<HTMLElement>(`${sel} [data-testid="subagent-group-member"]`)]
+        .map(el => [el.getAttribute("data-entry-kind"), el.textContent ?? ""]), paneSelector(agentId));
+    await browser.waitUntil(async () => (await members()).length === 3, {
+      timeout: 5_000,
+      timeoutMsg: "clicking the summary line never unfolded the group",
+    });
+    const unfolded = await members();
     // The result answers the call by id, so it hangs under the call's row
     // instead of drawing as a row of its own.
-    expect(facts.kinds).toEqual([
-      "userText", "thinking", "redactedThinking", "toolUse", "assistantText",
-    ]);
-    expect(facts.texts[3]).toContain("Read");
-    expect(facts.texts[3]).toContain("/Users/u/dev/acme/README.md");
-    expect(facts.texts[3]).toContain("Read 1 line");
-    expect(facts.texts[2]).not.toContain("opaque");
+    expect(unfolded.map(([kind]) => kind)).toEqual(["thinking", "redactedThinking", "toolUse"]);
+    expect(unfolded[2][1]).toContain("Read");
+    expect(unfolded[2][1]).toContain("/Users/u/dev/acme/README.md");
+    expect(unfolded[2][1]).toContain("Read 1 line");
+    expect(unfolded[1][1]).not.toContain("opaque");
 
     const tabs = await subagentTabs();
     expect(tabs).toEqual([{ id: tabs[0].id, agentId, preview: true }]);
@@ -241,7 +253,7 @@ describe("subagent transcript view", () => {
       interval: 50,
       timeoutMsg: "the appended line never reached the open view",
     });
-    expect((await paneFacts(agentId))!.count).toBe(6);
+    expect((await paneFacts(agentId))!.count).toBe(4);
     await snap("subagent-view-live-tail.png");
   });
 
@@ -426,28 +438,88 @@ describe("subagent transcript view", () => {
     const toolStates = () => browser.execute((sel) =>
       [...document.querySelectorAll(`${sel} [data-testid="subagent-tool-state"]`)]
         .map(el => el.getAttribute("data-tool-state")), pane);
-    expect(await toolStates()).toEqual(["ok", "pending"]);
+    const groups = () => browser.execute((sel) =>
+      [...document.querySelectorAll<HTMLElement>(`${sel} [data-testid="subagent-group"]`)]
+        .map(el => ({ text: el.textContent ?? "", unfolded: el.getAttribute("data-group-unfolded") === "true" })), pane);
+    const facts = (await paneFacts(agentId))!;
+    expect(facts.kinds).toEqual(["userText", "group", "assistantText", "group"]);
+    expect(await toolStates()).toEqual([]);
+    expect((await groups()).map(group => group.text)).toEqual([
+      "Thought for 4s",
+      "Reading 1 file, calling 1 tool\u2026",
+    ]);
 
     const footer = `${pane} [data-testid="subagent-footer"]`;
     await waitVisible(footer, 5_000);
     expect(await browser.execute((sel) => document.querySelector(sel)?.getAttribute("data-footer-state"), footer)).toBe("running");
     const footerText = (await textOf(footer)).replace(/\s+/g, " ");
-    expect(footerText).toMatch(/Working\u2026 \(\d+s \u00B7 \u2193 1\.1k tokens\)/);
+    expect(footerText).toContain("Working\u2026");
+    expect(footerText).toContain("general-purpose Bash(npm run build)");
+    expect(await textOf(`${pane} [data-testid="subagent-footer-stats"]`)).toMatch(/^\d+s \u00B7 \u2193 1\.1k tokens$/);
     expect(await textOf(`${pane} [data-testid="subagent-header"]`)).toContain("claude-test-model");
 
-    const thinking = `${pane} [data-testid="subagent-thinking-toggle"]`;
-    expect(await textOf(thinking)).toContain("Thought for 4s");
+    // The cell grid: an assistant bullet's text starts two cells in, every
+    // block sits one blank row under the one above, and the pane draws in
+    // claude's dark palette.
+    const grid = await browser.execute((sel) => {
+      const root = document.querySelector<HTMLElement>(sel)!;
+      const style = getComputedStyle(root);
+      const cell = parseFloat(style.getPropertyValue("--cell"));
+      const row = parseFloat(style.getPropertyValue("--row"));
+      const said = root.querySelector<HTMLElement>('[data-entry-kind="assistantText"]')!;
+      const bullet = said.querySelector<HTMLElement>("span[aria-hidden]")!;
+      const text = bullet.nextElementSibling as HTMLElement;
+      const entries = [...root.querySelectorAll<HTMLElement>('[data-testid="subagent-entry"]')];
+      const gaps = entries.slice(1).map((entry, position) => {
+        const above = entries[position];
+        const content = above.firstElementChild as HTMLElement;
+        return entry.getBoundingClientRect().top - content.getBoundingClientRect().bottom;
+      });
+      return {
+        cell,
+        row,
+        textOffset: text.getBoundingClientRect().left - bullet.getBoundingClientRect().left,
+        gaps,
+        lineHeight: parseFloat(style.lineHeight),
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        theme: root.getAttribute("data-claude-theme"),
+        textColor: getComputedStyle(text).color,
+        bulletText: bullet.textContent,
+        summaryColor: getComputedStyle(root.querySelector('[data-testid="subagent-group"]')!).color,
+        background: style.backgroundColor,
+      };
+    }, pane);
+    expect(grid.cell).toBeGreaterThan(4);
+    expect(grid.row).toBeGreaterThan(8);
+    expect(Math.abs(grid.textOffset - 2 * grid.cell)).toBeLessThanOrEqual(0.5);
+    expect(grid.gaps.length).toBe(3);
+    for (const gap of grid.gaps) expect(Math.abs(gap - grid.row)).toBeLessThanOrEqual(0.5);
+    expect(grid.lineHeight).toBe(grid.row);
+    expect(grid.fontWeight).toBe("400");
+    expect(grid.theme).toBe("dark");
+    expect(grid.bulletText).toBe("\u25CF");
+    expect(grid.textColor).toBe("rgb(255, 255, 255)");
+    expect(grid.summaryColor).toBe("rgba(255, 255, 255, 0.5)");
+    await snap("subagent-cli-running.png");
 
-    // Every column lines up in the terminal's font: the hook sits two cells
-    // in from the dot and its text five, as in Claude Code.
+    await clickWhenVisible(`${pane} [data-entry-kind="group"]:last-of-type [data-testid="subagent-group"]`);
+    await browser.waitUntil(async () => (await toolStates()).join() === "ok,pending", {
+      timeout: 5_000,
+      timeoutMsg: `clicking the running group never unfolded it: ${JSON.stringify(await toolStates())}`,
+    });
+
+    // Inside an unfolded group the columns are Claude Code's too: the hook
+    // sits two cells in from the dot and its text five.
     const layout = await browser.execute((sel) => {
       const root = document.querySelector<HTMLElement>(sel)!;
+      const cell = parseFloat(getComputedStyle(root).getPropertyValue("--cell"));
       const dot = root.querySelector<HTMLElement>('[data-testid="subagent-tool-state"]')!;
       const gutter = dot.parentElement!;
       const hookBlock = root.querySelector<HTMLElement>('[data-testid="subagent-tool-result"]')!;
       const hook = hookBlock.firstElementChild as HTMLElement;
       const hookText = hookBlock.lastElementChild as HTMLElement;
-      const cell = gutter.getBoundingClientRect().width / 2;
       const fonts = [root, dot, hookText, root.querySelector<HTMLElement>('[data-testid="subagent-tool-name"]')!]
         .map(el => getComputedStyle(el).fontFamily);
       return {
@@ -458,13 +530,16 @@ describe("subagent transcript view", () => {
         blinking: getComputedStyle(root.querySelectorAll<HTMLElement>('[data-testid="subagent-tool-state"]')[1]).animationName,
       };
     }, pane);
-    expect(layout.cell).toBeGreaterThan(4);
-    expect(Math.abs(layout.hookOffset - 2 * layout.cell)).toBeLessThanOrEqual(1);
-    expect(Math.abs(layout.textOffset - 5 * layout.cell)).toBeLessThanOrEqual(1);
+    expect(Math.abs(layout.hookOffset - 2 * layout.cell)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(layout.textOffset - 5 * layout.cell)).toBeLessThanOrEqual(0.5);
     expect(new Set(layout.fonts).size).toBe(1);
     expect(layout.blinking).toBe("termic-cli-blink");
-    await snap("subagent-cli-running.png");
+    await snap("subagent-cli-group-open.png");
 
+    await clickWhenVisible(`${pane} [data-testid="subagent-group"]`);
+    const thinking = `${pane} [data-testid="subagent-thinking-toggle"]`;
+    await waitVisible(thinking, 5_000);
+    expect(await textOf(thinking)).toContain("Thought for 4s");
     await clickWhenVisible(thinking);
     await browser.waitUntil(async () => (await textOf(`${pane}`)).includes("the port lives in src/config.ts"), {
       timeout: 5_000,
@@ -478,10 +553,11 @@ describe("subagent transcript view", () => {
       timeoutMsg: "the build result never reached its call",
     });
     const buildRowText = () => browser.execute((sel) =>
-      [...document.querySelectorAll<HTMLElement>(`${sel} [data-testid="subagent-entry"]`)]
+      [...document.querySelectorAll<HTMLElement>(`${sel} [data-testid="subagent-group-member"]`)]
         .map(el => el.innerText)
         .find(text => text.includes("npm run build")) ?? "", pane);
     expect(await buildRowText()).toContain("+37 lines");
+    expect(await textOf(`${pane} [data-testid="subagent-footer"]`)).not.toContain("Bash(npm run build)");
     await snap("subagent-cli-bash-done.png");
 
     appendTranscript(agentId, call(22, "toolu_edit", "Edit", {
@@ -500,6 +576,8 @@ describe("subagent transcript view", () => {
     appendTranscript(agentId, result(30, "toolu_test", "Error: 2 tests failed\n  at acme.test.ts:12", true));
     appendTranscript(agentId, said(31, "The port is **4000** now; two tests still fail."));
 
+    // The calls join the group that is already unfolded, since nothing but
+    // calls and results arrived between them.
     await browser.waitUntil(async () => (await toolStates()).length === 5, {
       timeout: 10_000,
       timeoutMsg: `the edit, todo and test calls never arrived: ${JSON.stringify(await toolStates())}`,
@@ -527,21 +605,100 @@ describe("subagent transcript view", () => {
     expect(tools.diff.map(([kind]) => kind)).toEqual(["remove", "add", "add"]);
     expect(tools.diff[0][1]).toContain("12");
     expect(tools.todos.map(([status]) => status)).toEqual(["completed", "in_progress", "pending"]);
-    expect(tools.removedTint).not.toBe("rgba(0, 0, 0, 0)");
+    expect(tools.removedTint).toBe("rgb(122, 41, 54)");
     expect(tools.doneStrike).toBe("line-through");
     expect(await textOf(pane)).toContain("Updated src/config.ts with 2 additions and 1 removal");
     expect(await textOf(pane)).toContain("Error: 2 tests failed");
     await snap("subagent-cli-tools.png");
 
+    // ctrl+o in the focused pane unfolds every group, and again folds them
+    // all back to their summary lines.
+    const pressCtrlO = async () => {
+      await browser.execute((sel) => document.querySelector<HTMLElement>(sel)!.focus(), pane);
+      await browser.keys(["Control", "o"]);
+      await browser.keys(["Control"]);
+    };
+    await pressCtrlO();
+    await browser.waitUntil(async () => (await groups()).every(group => group.unfolded), {
+      timeout: 5_000,
+      timeoutMsg: `ctrl+o never unfolded every group: ${JSON.stringify(await groups())}`,
+    });
+    await snap("subagent-cli-verbose.png");
+    await pressCtrlO();
+    await browser.waitUntil(async () => (await groups()).every(group => !group.unfolded), {
+      timeout: 5_000,
+      timeoutMsg: `a second ctrl+o never folded the groups: ${JSON.stringify(await groups())}`,
+    });
+    expect(await toolStates()).toEqual([]);
+    expect((await groups()).map(group => group.text)).toEqual([
+      "Thought for 4s",
+      "Edited 1 file +2 -1, read 1 file, called 3 tools",
+    ]);
+    await snap("subagent-cli-collapsed.png");
+
+    const paneCell = await browser.execute((sel) => {
+      const style = getComputedStyle(document.querySelector<HTMLElement>(sel)!);
+      return {
+        cell: parseFloat(style.getPropertyValue("--cell")),
+        row: parseFloat(style.getPropertyValue("--row")),
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+      };
+    }, pane);
+
     await parentToFront();
+    // The parent tab's xterm draws on the grid the view copies: its screen
+    // is a whole number of the view's cells across and rows down. xterm 5.5
+    // measures on an OffscreenCanvas, so there is no measure span to read
+    // its font from; both take the same font options from prefs.
+    const xterm = await browser.execute((task) => {
+      const screen = document.querySelector<HTMLElement>(`[data-task-id="${task}"] .xterm-screen`)!.getBoundingClientRect();
+      return { width: screen.width, height: screen.height };
+    }, taskId);
+    const prefsFontSize = await browser.execute(() => window.__termic!.usePrefs.getState().terminalFontSize as number);
+    expect(paneCell.fontSize).toBe(`${prefsFontSize}px`);
+    const columns = xterm.width / paneCell.cell;
+    const lines = xterm.height / paneCell.row;
+    expect(Math.abs(columns - Math.round(columns))).toBeLessThanOrEqual(0.01);
+    expect(Math.abs(lines - Math.round(lines))).toBeLessThanOrEqual(0.01);
+    expect(Math.round(columns)).toBeGreaterThan(20);
+    expect(Math.round(lines)).toBeGreaterThan(5);
+
     await submitToAgent(taskId, `#subagent stop ${sessionId} ${agentId} general-purpose`);
     await openFromRow(agentId);
     await browser.waitUntil(
       async () => browser.execute((sel) => document.querySelector(sel)?.getAttribute("data-footer-state"), footer).then(state => state === "done"),
       { timeout: 15_000, timeoutMsg: "the footer never turned to done after the stop" },
     );
-    expect(await textOf(footer)).toContain("Done (5 tool uses \u00B7 2.6k tokens \u00B7 31s)");
+    expect((await textOf(footer)).replace(/\s+/g, " ")).toContain("general-purpose Done (5 tool uses)");
+    expect(await textOf(`${pane} [data-testid="subagent-footer-stats"]`)).toBe("31s \u00B7 \u2193 2.6k tokens");
+    expect(await browser.execute((sel) => document.querySelector(`${sel} [data-testid="subagent-working"]`) === null, pane)).toBe(true);
     await snap("subagent-cli-done.png");
+  });
+
+  it("follows claude's own theme setting when the window regains focus", async function () {
+    this.timeout(30_000);
+    const agentId = "e2ecli1";
+    const pane = paneSelector(agentId);
+    writeFileSync(path.join(CONFIG_DIR, "settings.json"), JSON.stringify({ theme: "light" }));
+    try {
+      await browser.execute(() => window.dispatchEvent(new Event("focus")));
+      await browser.waitUntil(
+        async () => browser.execute((sel) => document.querySelector(sel)?.getAttribute("data-claude-theme"), pane).then(theme => theme === "light"),
+        { timeout: 10_000, timeoutMsg: "the view never picked up the light theme" },
+      );
+      const colors = await browser.execute((sel) => {
+        const root = document.querySelector<HTMLElement>(sel)!;
+        const text = root.querySelector<HTMLElement>('[data-entry-kind="assistantText"] span[aria-hidden]')!;
+        return { text: getComputedStyle(text).color, user: getComputedStyle(root.querySelector<HTMLElement>('[data-entry-kind="userText"] > div')!).backgroundColor };
+      }, pane);
+      expect(colors.text).toBe("rgb(0, 0, 0)");
+      expect(colors.user).toBe("rgb(240, 240, 240)");
+      await snap("subagent-cli-light.png");
+    } finally {
+      rmSync(path.join(CONFIG_DIR, "settings.json"), { force: true });
+      await browser.execute(() => window.dispatchEvent(new Event("focus")));
+    }
   });
 
   it("closes every subagent view when the task is archived", async function () {

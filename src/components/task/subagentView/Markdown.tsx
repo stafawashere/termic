@@ -11,7 +11,7 @@ function Spans({ spans }: { spans: readonly MarkdownSpan[] }) {
           className={cn(
             span.bold && "font-bold",
             span.italic && "italic",
-            span.code && "text-[var(--color-palette-blue)]",
+            span.code && "text-[var(--cc-permission)]",
           )}
         >
           {span.text}
@@ -24,7 +24,7 @@ function Spans({ spans }: { spans: readonly MarkdownSpan[] }) {
 function Block({ block }: { block: MarkdownBlock }) {
   switch (block.kind) {
     case "blank":
-      return <div aria-hidden>{" "}</div>;
+      return <div aria-hidden>{"\u00A0"}</div>;
 
     case "paragraph":
       return <div><Spans spans={block.spans} /></div>;
@@ -34,31 +34,31 @@ function Block({ block }: { block: MarkdownBlock }) {
 
     case "bullet":
       return (
-        <div className="flex" style={{ paddingLeft: `${block.depth * 2}ch` }}>
-          <span aria-hidden className="w-[2ch] shrink-0">-</span>
+        <div className="flex" style={{ paddingLeft: `calc(var(--cell) * ${block.depth * 2})` }}>
+          <span aria-hidden className="w-[calc(var(--cell)*2)] shrink-0">-</span>
           <div className="min-w-0 flex-1"><Spans spans={block.spans} /></div>
         </div>
       );
 
     case "numbered":
       return (
-        <div className="flex" style={{ paddingLeft: `${block.depth * 2}ch` }}>
-          <span className="shrink-0" style={{ width: `${block.marker.length + 1}ch` }}>{block.marker}</span>
+        <div className="flex" style={{ paddingLeft: `calc(var(--cell) * ${block.depth * 2})` }}>
+          <span className="shrink-0" style={{ width: `calc(var(--cell) * ${block.marker.length + 1})` }}>{block.marker}</span>
           <div className="min-w-0 flex-1"><Spans spans={block.spans} /></div>
         </div>
       );
 
     case "quote":
       return (
-        <div className="pl-[2ch] italic text-[var(--color-fg-dim)]">
+        <div className="pl-[calc(var(--cell)*2)] italic text-[var(--cc-dim)]">
           <Spans spans={block.spans} />
         </div>
       );
 
     case "code":
       return (
-        <div className="whitespace-pre-wrap pl-[2ch] text-[var(--color-fg-dim)]">
-          {block.lines.length > 0 ? block.lines.join("\n") : " "}
+        <div className="whitespace-pre-wrap pl-[calc(var(--cell)*2)] text-[var(--cc-dim)]">
+          {block.lines.length > 0 ? block.lines.join("\n") : "\u00A0"}
         </div>
       );
   }

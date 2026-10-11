@@ -151,6 +151,18 @@ export function resolveClaudePalette(theme: ClaudeTheme, terminal: Record<string
   return resolved;
 }
 
+/** A colour as a terminal draws it under SGR 2 (claude's `dimColor`):
+ *  xterm halves its alpha. Anything not rgb() or #rrggbb is mixed. */
+export function dimColor(color: string): string {
+  const rgb = /^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/.exec(color);
+  if (rgb) return `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, 0.5)`;
+
+  const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  if (hex) return `rgba(${hex.slice(1).map(pair => parseInt(pair, 16)).join(", ")}, 0.5)`;
+
+  return `color-mix(in srgb, ${color} 50%, transparent)`;
+}
+
 /** The palette as custom properties for the view's root, `--cc-<role>`. */
 export function paletteStyle(palette: Palette): Record<string, string> {
   const style: Record<string, string> = {};

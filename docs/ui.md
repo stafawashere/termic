@@ -468,49 +468,69 @@ id, session id and agent id, never a path, and is never persisted: only
 terminal tabs are durable.
 
 - **No terminal, but it reads as one.** `SubagentPane.tsx` is a lazy React
-  list drawn the way Claude Code draws its own transcript, so flipping from
-  the claude tab to a subagent tab looks like the same screen. It mounts no
-  xterm and creates no WebGL context. The font family and size are the
-  terminal's (`currentTerminalStack()`, `terminalFontSize`) at a 1.2 line
-  height, on `--color-bg` like the terminal host, and every colour is a
-  theme token.
-- **Columns in `ch`.** Each entry has a two-cell gutter for its glyph, and a
-  tool result hangs from a hook two cells in with its text from cell five,
-  as in Claude Code. Widths are `ch`, never px, so the columns hold in any
-  monospace font even when a glyph falls back to another font. Glyphs live
-  by code point in `subagentView/glyphs.ts`. The e2e spec measures both
-  offsets and that every part uses one font family.
-- **A tool result draws under its call.** `pairToolCalls`
-  (`lib/subagentTranscript.ts`) matches results to calls by `toolUseId`, so
-  the result is not a row of its own and `data-entry-count` counts calls,
-  not calls plus results. The call's dot blinks dim while pending (a CSS
-  `steps()` animation), then turns `--color-ok` or `--color-err`. A result
-  whose call is on a page not loaded yet still draws alone.
-  `lib/subagentCliView.ts` heads a call the way Claude prints it
-  (`Read(path)`, `Update(path)`, `Search(pattern: "x")`, `Update Todos`,
-  `server - tool (MCP)`, paths inside the worktree relative) and summarises
-  the result: lines read, files found, an Edit's line diff on tinted rows,
-  the TodoWrite checklist, an error in red, or the first three output lines
-  with a dim "+N lines" that unfolds on click. Tool labels stay English in
-  every locale, as Claude Code's do.
-- **Markdown as React text.** Assistant text goes through the subset in
-  `lib/subagentMarkdown.ts` (bold, italic, inline code, headings, lists,
-  quotes, fences) into React elements. There is no HTML path, and a unit
-  test renders `<script>` and raw tags and checks they come out escaped.
-- **Thinking folds.** A thinking entry draws as "Thought for Ns" (from the
-  line's `thinkingDurationMs`) and unfolds on click.
-- **Header and footer.** A rounded box with the star, the record's
-  description (else its agent type) and a dim line of agent type, model,
-  workflow phase and read-only replaces the old toolbar. Under the scroller
-  the footer reads the subagent record by primitive selectors: while
-  running, an orange glyph cycling through a strip of frames on a CSS
-  `steps()` animation plus "Working... (Ns, output tokens)", where only the
-  seconds tick, from a 1 s interval that exists only while the agent runs
-  and the pane is mounted; once stopped, "Done (N tool uses, tokens,
-  duration)", red "Failed", or "Interrupted". Counts and tokens come from
-  the entries the view holds, so before every earlier page is loaded they
-  cover the newest part only; times come from the transcript's own
-  timestamps when entry 0 is held, else from the record.
+  list drawn the way Claude Code 2.1.296 draws its own transcript, so
+  flipping from the claude tab to a subagent tab looks like the same
+  screen. It mounts no xterm and creates no WebGL context. It takes the
+  font, weight 400, line height 1.0 and letter spacing from exactly what
+  TerminalPane hands xterm (the constants live in `lib/terminalCell.ts`),
+  and the background from the active terminal theme.
+- **A cell grid, measured like xterm.** `useTerminalCell` measures a run of
+  `W` in the terminal font and `cellFromGlyph` rounds it to device pixels
+  the way xterm's WebGL renderer sizes a cell (width floored, height
+  ceiled, plus letter spacing). The pane sets `--cell` and `--row`, and
+  every indent is `calc(var(--cell) * N)` and every vertical gap a whole
+  `--row`: one blank row between blocks, the text of a bullet two cells
+  in, a tool result's hook two cells in with its text from cell five. The
+  e2e spec checks the font against the live terminal's, the two-cell
+  offset, and the one-row gap.
+- **Claude's palette, not termic's.** Colours are claude's theme roles as
+  `--cc-*` properties on the pane root (`lib/claudePalette.ts`, see
+  docs/themes.md "The subagent view paints with claude's palette"). The
+  theme is the claude config's own `theme` key, read by
+  `subagent_claude_theme` once per session and again on window focus
+  (`store/claudeTheme.ts`). `--cc-dim` is the text colour at half
+  strength, which is how a terminal draws claude's `dimColor`.
+- **Tool runs collapse to one line.** `groupToolRuns`
+  (`lib/subagentTranscript.ts`) folds each run of tool calls and thinking
+  into one group row, and `countGroup` plus `groupSummaryParts`
+  (`lib/subagentCliView.ts`) write it the way claude does, a dim line two
+  cells in: "Thought for 2s, read 2 files, called 1 tool", numbers bold,
+  an edit's `+A -R` in the diff word colours, the group still running in
+  the "-ing" form with an ellipsis. Clicking the line unfolds that group,
+  and ctrl+o while the pane has focus flips every group, as claude's
+  verbose toggle does. The phrases stay English in every locale, like the
+  tool labels.
+- **A tool result draws under its call.** In an unfolded group
+  `pairToolCalls` matches results to calls by `toolUseId`, so the result is
+  not a row of its own. The call's dot blinks dim while pending (a CSS
+  `steps()` animation), then turns success or error. A result whose call is
+  on a page not loaded yet joins the group alone. `lib/subagentCliView.ts`
+  heads a call the way Claude prints it (`Read(path)`, `Update(path)`,
+  `Search(pattern: "x")`, `Update Todos`, `server - tool (MCP)`, paths
+  inside the worktree relative) and summarises the result: lines read,
+  files found, an Edit's line diff on claude's diff rows, the TodoWrite
+  checklist, an error, or the first three output lines with a dim "+N
+  lines" that unfolds on click.
+- **Text and prompts.** Assistant text is a U+25CF bullet in the text
+  colour with the text two cells in, through the markdown subset in
+  `lib/subagentMarkdown.ts` (bold, italic, inline code in the permission
+  colour, headings, lists, quotes, fences) as React elements. There is no
+  HTML path, and a unit test renders `<script>` and raw tags and checks
+  they come out escaped. The prompt the agent was given is a U+276F
+  pointer on claude's `userMessageBackground` across the row.
+- **Top row and footer.** No box: one dim row at the top names the
+  description (else agent type), model, workflow phase and read-only.
+  Under the scroller, while the agent runs, a dim glyph cycling through a
+  strip of frames on a CSS `steps()` animation and "Working...", then a
+  blank row and the agent's row: U+25CB, the agent type and the call in
+  flight on the left, elapsed time and output tokens on the right, where
+  only the seconds tick, from a 1 s interval that exists only while the
+  agent runs and the pane is mounted. Once stopped the ring becomes a
+  green or red U+25CF and the left reads "Done (N tool uses)", "Failed" or
+  "Interrupted". Counts and tokens come from the entries the view holds,
+  so before every earlier page is loaded they cover the newest part only;
+  times come from the transcript's own timestamps when entry 0 is held,
+  else from the record.
 - **Windowed by hand.** Only rows near the viewport are mounted, measured in
   a layout effect so a corrected height lands before paint. Row keys are
   entry indices in the whole transcript, so a page loaded above keeps every

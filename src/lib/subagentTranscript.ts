@@ -198,6 +198,48 @@ export function pairToolCalls(rows: readonly TranscriptRow[]): ViewRow[] {
   return paired;
 }
 
+export type DisplayRowKind = TranscriptRowKind | "group";
+
+/** What the windowed list mounts: a single entry, or a run of tool calls
+ *  and thinking that Claude Code collapses into one summary line. A group's
+ *  index is its first member's, so its key survives the run growing. */
+export interface DisplayRow {
+  index: number;
+  kind: DisplayRowKind;
+  entry: ViewRow | null;
+  members: readonly ViewRow[];
+}
+
+const GROUPED_KINDS: ReadonlySet<TranscriptRowKind> = new Set<TranscriptRowKind>([
+  "thinking", "redactedThinking", "toolUse", "toolResult",
+]);
+
+const NO_MEMBERS: readonly ViewRow[] = Object.freeze([]);
+
+/** Fold every run of tool calls, lone results and thinking into one group
+ *  row; everything else stays a row of its own. */
+export function groupToolRuns(rows: readonly ViewRow[]): DisplayRow[] {
+  const display: DisplayRow[] = [];
+  let run: ViewRow[] | null = null;
+
+  for (const row of rows) {
+    if (!GROUPED_KINDS.has(row.kind)) {
+      run = null;
+      display.push({ index: row.index, kind: row.kind, entry: row, members: NO_MEMBERS });
+      continue;
+    }
+
+    if (run) {
+      run.push(row);
+      continue;
+    }
+
+    run = [row];
+    display.push({ index: row.index, kind: "group", entry: null, members: run });
+  }
+  return display;
+}
+
 const TOOL_INPUT_MAX = 240;
 
 function scalarText(value: unknown): string | null {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ansiKey, asClaudeTheme, CLAUDE_ROLES, CLAUDE_THEMES, paletteStyle, resolveClaudePalette } from "@/lib/claudePalette";
+import { ansiKey, asClaudeTheme, dimColor, CLAUDE_ROLES, CLAUDE_THEMES, paletteStyle, resolveClaudePalette } from "@/lib/claudePalette";
 
 const TERMINAL: Record<string, string> = {
   background: "rgb(1,1,1)",
@@ -66,6 +66,12 @@ describe("claude palettes", () => {
     expect(asClaudeTheme("light-daltonized")).toBe("light-daltonized");
     expect(asClaudeTheme("neon")).toBe("dark");
     expect(asClaudeTheme(null)).toBe("dark");
+  });
+
+  it("dims a colour the way xterm draws faint text, at half alpha", () => {
+    expect(dimColor("rgb(255,255,255)")).toBe("rgba(255, 255, 255, 0.5)");
+    expect(dimColor("#1a2B3c")).toBe("rgba(26, 43, 60, 0.5)");
+    expect(dimColor("hsl(0 0% 50%)")).toBe("color-mix(in srgb, hsl(0 0% 50%) 50%, transparent)");
   });
 
   it("names each role as a custom property", () => {

@@ -17,25 +17,28 @@
 //
 // Every string in a transcript is untrusted and is rendered as React text.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { SubagentTab, Task } from "@/lib/types";
 import {
-  EMPTY_WINDOW, pairToolCalls, positionOfEntry, rowOffsets, rowsForView, shouldFollowTail, visibleRange,
+  EMPTY_WINDOW, groupToolRuns, pairToolCalls, positionOfEntry, rowOffsets, rowsForView, shouldFollowTail, visibleRange,
+  type DisplayRow,
 } from "@/lib/subagentTranscript";
-import { transcriptStats } from "@/lib/subagentCliView";
+import { toolDisplay, transcriptStats } from "@/lib/subagentCliView";
+import { dimColor, paletteStyle, resolveClaudePalette } from "@/lib/claudePalette";
+import { TERMINAL_FONT_WEIGHT } from "@/lib/terminalCell";
+import { useClaudeTheme } from "@/store/claudeTheme";
 import { openTranscriptSession, type TranscriptSession, type TranscriptSnapshot } from "@/store/subagentPreview";
-import { currentTerminalStack, usePrefs } from "@/store/prefs";
+import { currentTerminalStack, currentTerminalTheme, usePrefs, useResolvedThemeFull } from "@/store/prefs";
 import { useSubagents, type SubagentState } from "@/store/subagents";
-import { EntryRow, type EntryRowOptions } from "./subagentView/EntryRow";
+import { EntryRow, GroupRow, type EntryRowOptions } from "./subagentView/EntryRow";
+import { useTerminalCell } from "./subagentView/useTerminalCell";
 import { Footer, type FooterState } from "./subagentView/Footer";
 import { Header } from "./subagentView/Header";
 import { GLYPH } from "./subagentView/glyphs";
 
 const ESTIMATED_ROW_PX = 28;
 const OVERSCAN_PX = 600;
-/** Close to the cell height xterm gives the same font. */
-const LINE_HEIGHT = 1.2;
 
 const INITIAL: TranscriptSnapshot = { status: "loading", window: EMPTY_WINDOW, loadingEarlier: false };
 
@@ -57,6 +60,8 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   const rowElementsRef = useRef(new Map<number, HTMLElement>());
   const [layoutVersion, setLayoutVersion] = useState(0);
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
+  const [unfoldedGroups, setUnfoldedGroups] = useState<ReadonlySet<number>>(() => new Set());
+  const [verbose, setVerbose] = useState(false);
 
   const subagentsEnabled = usePrefs(s => s.subagentsEnabled);
   const showThinking = usePrefs(s => s.subagentViewShowThinking);
@@ -66,7 +71,31 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   const autoScroll = usePrefs(s => s.subagentViewAutoScroll);
   const terminalFontId = usePrefs(s => s.terminalFontId);
   const terminalFontSize = usePrefs(s => s.terminalFontSize);
+  const terminalLetterSpacing = usePrefs(s => s.terminalLetterSpacing);
   const fontFamily = useMemo(() => currentTerminalStack(), [terminalFontId]);
+  const cell = useTerminalCell(fontFamily, terminalFontSize, terminalLetterSpacing);
+
+  const termicTheme = useResolvedThemeFull();
+  const claudeTheme = useClaudeTheme(task.id, tab.sessionId);
+  const paneStyle = useMemo<CSSProperties>(() => {
+    const terminal = currentTerminalTheme();
+    const palette = resolveClaudePalette(claudeTheme, terminal);
+    return {
+      ...paletteStyle(palette),
+      "--cc-dim": dimColor(palette.text),
+      "--cell": `${cell.width}px`,
+      "--row": `${cell.height}px`,
+      fontFamily,
+      fontSize: terminalFontSize,
+      fontWeight: TERMINAL_FONT_WEIGHT,
+      lineHeight: `${cell.height}px`,
+      letterSpacing: `${terminalLetterSpacing}px`,
+      background: terminal.background,
+      color: palette.text,
+    } as CSSProperties;
+    // termicTheme stands in for the terminal palette currentTerminalTheme reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claudeTheme, termicTheme, cell, fontFamily, terminalFontSize, terminalLetterSpacing]);
 
   const agentOf = (s: ReturnType<typeof useSubagents.getState>) => s.byTab[tab.parentTabId]?.agents[tab.subagentAgentId];
   const agentState = useSubagents(s => agentOf(s)?.state ?? null);
@@ -89,6 +118,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
     followingRef.current = true;
     setFollowing(true);
     setExpanded(new Set());
+    setUnfoldedGroups(new Set());
     setSnapshot(INITIAL);
 
     const session = openTranscriptSession(
@@ -112,8 +142,8 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   const { window: transcript, status, loadingEarlier } = snapshot;
   const heldRows = transcript.rows;
   const pairedRows = useMemo(() => pairToolCalls(heldRows), [heldRows]);
-  const rows = useMemo(
-    () => rowsForView(pairedRows, { showThinking, showToolOutputs }),
+  const rows = useMemo<DisplayRow[]>(
+    () => groupToolRuns(rowsForView(pairedRows, { showThinking, showToolOutputs })),
     [pairedRows, showThinking, showToolOutputs],
   );
   const stats = useMemo(() => transcriptStats(heldRows), [heldRows]);
@@ -136,7 +166,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   useEffect(() => {
     heightsRef.current.clear();
     setLayoutVersion(version => version + 1);
-  }, [showToolInputs, showToolOutputs, maxOutputLines, fontFamily, terminalFontSize]);
+  }, [showToolInputs, showToolOutputs, maxOutputLines, cell, verbose]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -240,6 +270,26 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
     });
   }, []);
 
+  const toggleGroup = useCallback((index: number) => {
+    setUnfoldedGroups(current => {
+      const next = new Set(current);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }, []);
+
+  // ctrl+o, as in Claude Code: every group unfolds into its calls, or folds
+  // back to its summary line.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const isToggle = event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "o";
+    if (!isToggle) return;
+
+    event.preventDefault();
+    setVerbose(current => !current);
+    setUnfoldedGroups(new Set());
+  };
+
   const bindRow = (index: number) => (element: HTMLElement | null) => {
     if (element) rowElementsRef.current.set(index, element);
     else rowElementsRef.current.delete(index);
@@ -260,6 +310,17 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
           : null;
 
   const title = agentDescription || agentType || tab.title;
+  const isRunning = agentState === "running";
+  const lastRow = rows[rows.length - 1];
+  const pendingCall = lastRow?.kind === "group"
+    ? [...lastRow.members].reverse().find(member => member.toolState === "pending") ?? null
+    : null;
+  const activeGroupIndex = isRunning && pendingCall ? lastRow.index : null;
+  const pendingDisplay = pendingCall ? toolDisplay(pendingCall.row.toolName ?? "?", pendingCall.row.text, task.path) : null;
+  const pendingActivity = pendingDisplay
+    ? pendingDisplay.args ? `${pendingDisplay.label}(${pendingDisplay.args})` : pendingDisplay.label
+    : null;
+  const activity = isRunning ? pendingActivity ?? agentDescription : null;
   const hasFooter = agentState !== null && FOOTER_STATES.has(agentState);
   const footerState = hasFooter ? (agentState as FooterState) : null;
 
@@ -279,9 +340,13 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
       data-agent-id={tab.subagentAgentId}
       data-transcript-start={transcript.start}
       data-entry-count={rows.length}
+      data-claude-theme={claudeTheme}
+      data-verbose={verbose}
       aria-label={t("subagentView.ariaLabel")}
-      className="relative flex h-full w-full flex-col bg-[var(--color-bg)] text-[var(--color-fg)]"
-      style={{ fontFamily, fontSize: terminalFontSize, lineHeight: LINE_HEIGHT }}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      className="relative flex h-full w-full flex-col pt-[var(--row)] outline-none"
+      style={paneStyle}
     >
       <Header
         title={title}
@@ -292,26 +357,26 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
       />
 
       {isExpired && (
-        <div data-testid="subagent-expired" className="shrink-0 px-3 pt-[0.6em] text-[var(--color-fg-dim)]">
+        <div data-testid="subagent-expired" className="shrink-0 px-[var(--cell)] pb-[var(--row)] text-[var(--cc-warning)]">
           <span className="font-bold">{t("subagentView.expired")}</span>
-          <span className="text-[var(--color-fg-faint)]"> {GLYPH.middot} {t("subagentView.expiredHint")}</span>
+          <span className="text-[var(--cc-dim)]"> {GLYPH.middot} {t("subagentView.expiredHint")}</span>
         </div>
       )}
 
       {stoppedNote && (
-        <div data-testid="subagent-stopped" className="shrink-0 px-3 pt-[0.6em] text-[var(--color-fg-dim)]">
+        <div data-testid="subagent-stopped" className="shrink-0 px-[var(--cell)] pb-[var(--row)] text-[var(--cc-dim)]">
           {stoppedNote}
         </div>
       )}
 
       {hasEarlier && (
-        <div className="shrink-0 px-3" style={{ paddingBottom: `${LINE_HEIGHT}em` }}>
+        <div className="shrink-0 px-[var(--cell)] pb-[var(--row)]">
           <button
             type="button"
             data-testid="subagent-load-earlier"
             disabled={loadingEarlier}
             onClick={() => sessionRef.current?.loadEarlier()}
-            className="text-left text-[var(--color-fg-faint)] hover:text-[var(--color-fg-dim)] disabled:hover:text-[var(--color-fg-faint)]"
+            className="text-left text-[var(--cc-dim)] hover:text-[var(--cc-inactive)] disabled:hover:text-[var(--cc-dim)]"
           >
             {GLYPH.up} {loadingEarlier ? t("subagentView.loadingEarlier") : t("subagentView.loadEarlier")}
           </button>
@@ -325,30 +390,45 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
         className="relative min-h-0 flex-1 overflow-y-auto"
       >
         {placeholder && (
-          <div data-testid="subagent-placeholder" className="px-3 text-[var(--color-fg-faint)]">{placeholder}</div>
+          <div data-testid="subagent-placeholder" className="px-[var(--cell)] text-[var(--cc-dim)]">{placeholder}</div>
         )}
         <div style={{ height: totalHeight, position: "relative" }}>
-          {rows.slice(range.first, range.end).map((viewRow, offset) => {
+          {rows.slice(range.first, range.end).map((displayRow, offset) => {
             const position = range.first + offset;
+            const entry = displayRow.entry;
             return (
               <div
-                key={viewRow.index}
-                ref={bindRow(viewRow.index)}
+                key={displayRow.index}
+                ref={bindRow(displayRow.index)}
                 data-testid="subagent-entry"
-                data-entry-kind={viewRow.kind}
-                data-entry-index={viewRow.index}
-                className="absolute left-0 right-0 px-3"
-                style={{ top: offsets[position], paddingBottom: `${LINE_HEIGHT}em` }}
+                data-entry-kind={displayRow.kind}
+                data-entry-index={displayRow.index}
+                className="absolute left-0 right-0 px-[var(--cell)] pb-[var(--row)]"
+                style={{ top: offsets[position] }}
               >
-                <EntryRow
-                  row={viewRow.row}
-                  result={viewRow.result}
-                  toolState={viewRow.toolState}
-                  expanded={expanded.has(viewRow.index)}
-                  onToggle={toggleExpanded}
-                  options={rowOptions}
-                  t={t}
-                />
+                {entry ? (
+                  <EntryRow
+                    row={entry.row}
+                    result={entry.result}
+                    toolState={entry.toolState}
+                    expanded={expanded.has(entry.index)}
+                    onToggle={toggleExpanded}
+                    options={rowOptions}
+                    t={t}
+                  />
+                ) : (
+                  <GroupRow
+                    index={displayRow.index}
+                    members={displayRow.members}
+                    unfolded={verbose || unfoldedGroups.has(displayRow.index)}
+                    active={activeGroupIndex === displayRow.index}
+                    expandedEntries={expanded}
+                    onToggleGroup={toggleGroup}
+                    onToggleEntry={toggleExpanded}
+                    options={rowOptions}
+                    t={t}
+                  />
+                )}
               </div>
             );
           })}
@@ -358,6 +438,8 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
       {footerState && (
         <Footer
           state={footerState}
+          agentType={agentType ?? tab.title}
+          activity={activity}
           startedAt={startedAt}
           durationMs={durationMs}
           toolUses={stats.toolUses}
@@ -371,7 +453,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
           type="button"
           data-testid="subagent-jump-latest"
           onClick={jumpToLatest}
-          className="absolute bottom-10 right-4 rounded border border-[var(--color-border)] bg-[var(--color-bg-1)] px-[1ch] text-[var(--color-fg-dim)] hover:text-[var(--color-fg)]"
+          className="absolute bottom-[calc(var(--row)*4)] right-[calc(var(--cell)*2)] bg-[var(--cc-userMessageBackground)] px-[var(--cell)] text-[var(--cc-inactive)] hover:text-[var(--cc-text)]"
         >
           {GLYPH.down} {t("subagentView.jumpToLatest")}
         </button>

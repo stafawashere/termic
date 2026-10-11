@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  displayPath, formatElapsed, formatTokens, lineDiff, toolDisplay, toolSummary, transcriptStats,
+  countGroup, displayPath, formatElapsed, formatTokens, groupSummaryParts, lineDiff, toolDisplay, toolSummary, transcriptStats,
 } from "@/lib/subagentCliView";
 import { toTranscriptRows } from "@/lib/subagentTranscript";
 
@@ -92,7 +92,7 @@ describe("toolSummary", () => {
   });
 
   it("counts lines read, without a trailing system reminder", () => {
-    const text = "     1→one\n     2→two\n\n<system-reminder>\nnote\n</system-reminder>";
+    const text = "     1\u2192one\n     2\u2192two\n\n<system-reminder>\nnote\n</system-reminder>";
     expect(toolSummary("Read", "{}", ok(text), null)).toEqual({ kind: "readLines", count: 2 });
   });
 
@@ -187,5 +187,42 @@ describe("transcriptStats", () => {
       firstAtMs: Date.parse("2026-01-01T00:00:00.000Z"),
       lastAtMs: Date.parse("2026-01-01T00:01:03.000Z"),
     });
+  });
+});
+
+describe("countGroup and groupSummaryParts", () => {
+  const call = (name: string, input: Record<string, unknown> = {}) =>
+    ({ kind: "toolUse" as const, toolName: name, text: JSON.stringify(input), durationMs: null });
+  const thought = (durationMs: number | null) =>
+    ({ kind: "thinking" as const, toolName: null, text: "", durationMs });
+  const sentence = (rows: Parameters<typeof countGroup>[0], active = false) =>
+    groupSummaryParts(countGroup(rows), active)
+      .map(part => `${part.lead}${part.count ?? ""}${part.tail}${part.added ? ` +${part.added}` : ""}${part.removed ? ` -${part.removed}` : ""}`)
+      .join(", ");
+
+  it("writes Claude Code's clauses in its order, the first capitalised", () => {
+    const rows = [
+      thought(1500), thought(900), call("Agent", { description: "x" }), call("Bash", { command: "ls" }),
+    ];
+    expect(sentence(rows)).toBe("Thought for 2s, ran 1 agent, called 1 tool");
+  });
+
+  it("counts reads, searches, lists, edits with their line stat, and MCP servers", () => {
+    const rows = [
+      call("Read"), call("Read"), call("Grep"), call("LS"),
+      call("Edit", { old_string: "a", new_string: "b\nc" }), call("Write", { content: "x\ny\n" }),
+      call("mcp__acme__find"), call("mcp__acme__get"),
+    ];
+    expect(sentence(rows)).toBe(
+      "Edited 2 files +4 -1, searched for 1 pattern, read 2 files, listed 1 directory, called acme 2 times",
+    );
+  });
+
+  it("uses the -ing forms while the group is the active one, and a one-second floor on thinking", () => {
+    expect(sentence([thought(null), call("Read"), call("Task")], true)).toBe("Thinking for 1s, reading 1 file, running 1 agent");
+  });
+
+  it("names a single MCP call without a count", () => {
+    expect(sentence([call("mcp__acme__find")])).toBe("Called acme");
   });
 });

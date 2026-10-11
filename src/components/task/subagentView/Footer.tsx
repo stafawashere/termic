@@ -6,47 +6,49 @@ import { GLYPH, SPINNER_FRAMES } from "./glyphs";
 
 export type FooterState = "running" | "done" | "failed" | "interrupted";
 
-/** The glyph that cycles while the agent works: one line of a strip of
+/** The glyph that cycles while the agent works: one row of a strip of
  *  frames, moved by a CSS animation so no script runs per frame. */
 function Spinner() {
   return (
-    <span aria-hidden className="inline-block h-[1lh] w-[2ch] shrink-0 overflow-hidden align-top text-[var(--color-cli-claude)]">
+    <span aria-hidden className="inline-block h-[var(--row)] w-[calc(var(--cell)*2)] shrink-0 overflow-hidden align-top">
       <span className="termic-cli-spinner block">
-        {SPINNER_FRAMES.map((frame, position) => <span key={position} className="block h-[1lh]">{frame}</span>)}
+        {SPINNER_FRAMES.map((frame, position) => <span key={position} className="block h-[var(--row)]">{frame}</span>)}
       </span>
     </span>
   );
 }
 
-/** Seconds since `since`, ticking once a second while mounted. */
-function useElapsed(since: number): number {
+/** Milliseconds since `since`, ticking once a second while `live`. */
+function useElapsed(since: number, live: boolean): number {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
+    if (!live) return;
+
+    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [live]);
 
   return Math.max(0, now - since);
 }
 
-function Working({ since, outputTokens, t }: { since: number; outputTokens: number; t: TFunction<"task"> }) {
-  const elapsed = useElapsed(since);
-  const stats = [formatElapsed(elapsed), `${GLYPH.down} ${t("subagentView.tokens", { value: formatTokens(outputTokens) })}`];
+const STATE_DOT: Record<FooterState, string> = {
+  running: "",
+  done: "text-[var(--cc-success)]",
+  failed: "text-[var(--cc-error)]",
+  interrupted: "",
+};
 
-  return (
-    <div className="flex">
-      <Spinner />
-      <span className="text-[var(--color-cli-claude)]">{t("subagentView.working")}{GLYPH.ellipsis}</span>
-      <span className="pl-[1ch] text-[var(--color-fg-dim)]">({stats.join(` ${GLYPH.middot} `)})</span>
-    </div>
-  );
-}
-
-/** The status line under the transcript, as Claude Code draws it under a
- *  Task call: working while the agent runs, a summary once it stops. */
-export function Footer({ state, startedAt, durationMs, toolUses, outputTokens, t }: {
+/** The bottom of Claude Code's screen for one agent: a working line while it
+ *  runs, then the agent's row with what it is doing on the left and the
+ *  elapsed time and output tokens on the right. */
+export function Footer({ state, agentType, activity, startedAt, durationMs, toolUses, outputTokens, t }: {
   state: FooterState;
+  agentType: string;
+  /** What the running agent is doing: the call in flight, else its
+   *  description, else null. */
+  activity: string | null;
   startedAt: number;
   durationMs: number | null;
   toolUses: number;
@@ -55,34 +57,39 @@ export function Footer({ state, startedAt, durationMs, toolUses, outputTokens, t
 }) {
   const isRunning = state === "running";
   const isFailed = state === "failed";
-  const isInterrupted = state === "interrupted";
+  const isDone = state === "done";
+  const elapsed = useElapsed(startedAt, isRunning);
+  const shownTime = isRunning ? elapsed : durationMs;
 
-  const stats = [
-    t("subagentView.toolUses", { count: toolUses }),
-    t("subagentView.tokens", { value: formatTokens(outputTokens) }),
-    ...(durationMs === null ? [] : [formatElapsed(durationMs)]),
+  const toolCount = t("subagentView.toolUses", { count: toolUses });
+  const working = `${t("subagentView.working")}${GLYPH.ellipsis}`;
+  const statusText =
+    isRunning ? activity ?? ""
+      : isFailed ? `${t("subagentView.footerFailed")} (${toolCount})`
+        : isDone ? `${t("subagentView.footerDone")} (${toolCount})`
+          : t("subagentView.footerInterrupted");
+
+  const right = [
+    ...(shownTime === null ? [] : [formatElapsed(shownTime)]),
+    `${GLYPH.down} ${t("subagentView.tokens", { value: formatTokens(outputTokens) })}`,
   ].join(` ${GLYPH.middot} `);
-  const verdict = isFailed ? t("subagentView.footerFailed") : t("subagentView.footerDone");
 
   return (
-    <div
-      data-testid="subagent-footer"
-      data-footer-state={state}
-      className={cn(
-        "shrink-0 px-3 pt-[0.3em] pb-[0.6em]",
-        isFailed && "text-[var(--color-err)]",
-        !isFailed && "text-[var(--color-fg-dim)]",
-      )}
-    >
-      {isRunning && <Working since={startedAt} outputTokens={outputTokens} t={t} />}
-      {!isRunning && (
-        <div className="flex">
-          <span aria-hidden className="w-[3ch] shrink-0">{GLYPH.hook}</span>
-          <span className="min-w-0 flex-1 truncate">
-            {isInterrupted ? t("subagentView.footerInterrupted") : `${verdict} (${stats})`}
-          </span>
+    <div data-testid="subagent-footer" data-footer-state={state} className="shrink-0 px-[var(--cell)] text-[var(--cc-dim)]">
+      {isRunning && (
+        <div data-testid="subagent-working" className="flex">
+          <Spinner />
+          <span>{working}</span>
         </div>
       )}
+      <div className="flex pt-[var(--row)]">
+        <span className="min-w-0 flex-1 truncate whitespace-pre">
+          <span aria-hidden className={STATE_DOT[state]}>{isRunning ? GLYPH.ring : GLYPH.bullet}</span>
+          {` ${agentType}  `}
+          <span className={cn(isFailed && "text-[var(--cc-error)]")}>{statusText}</span>
+        </span>
+        <span data-testid="subagent-footer-stats" className="shrink-0 pl-[calc(var(--cell)*2)]">{right}</span>
+      </div>
     </div>
   );
 }
