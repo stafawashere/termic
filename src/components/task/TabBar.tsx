@@ -312,7 +312,7 @@ function SplitToggle({ taskId, direction }: { taskId: string; direction: "h" | "
 function WorkingTrace() {
   const visible = useDocumentVisible();
 
-  return <TabTrace running={visible} />;
+  return <TabTrace paused={!visible} />;
 }
 
 export function TabPill({ task, tab, active, paneFocused, compact, onSelect, onClose, onUnpin, renaming, onStartRename, onChangeRename, onCommitRename, onCancelRename, dragging, dragTx, onStartDrag }: {

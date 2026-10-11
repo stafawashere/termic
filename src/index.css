@@ -1193,10 +1193,13 @@
 .sessionbar-trace-pulse {
   animation: sessionbar-trace 1.4s linear infinite;
 }
+svg[data-paused] > .sessionbar-trace-pulse {
+  animation-play-state: paused;
+}
 @keyframes sessionbar-trace { to { stroke-dashoffset: -48; } }
 @media (prefers-reduced-motion: reduce) {
   .sessionbar-trace-pulse { display: none; }
-  svg[data-running] > .sessionbar-trace-ghost { opacity: 0.6; }
+  .sessionbar-trace-ghost { opacity: 0.6; }
 }
 
 /* The + after the well, and the pane strip's close-pane button. */

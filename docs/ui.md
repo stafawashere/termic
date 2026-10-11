@@ -1783,10 +1783,12 @@ button on the end, and the bottom shell strip reuses the same `TabPill`.
   the unseen pad ring and the dirty dot. A pinned tab has a neutral unpin
   button in the close layer, shown at rest when no indicator outranks it.
 - **The trace** animates only while a tab is working: its component
-  mounts only then, the pulse is dropped while the window is hidden
-  (`useDocumentVisible`), and reduced motion leaves a static trace.
-  `data-mark` moves to the pulse while it runs, so the e2e suite reads the
-  mark and its 1.4s duration off the same element.
+  mounts only then, the pulse is paused (`animation-play-state`, not
+  unmounted) while the window is hidden (`useDocumentVisible`), and
+  reduced motion leaves a static trace. `data-mark` sits on the pulse, so
+  the e2e suite reads the mark and its 1.4s duration off one element. The
+  e2e window is hidden, so a pulse that unmounted when hidden read as no
+  animation at all there.
 
 Window in the background: labels, indicators and icons drop to 55%
 opacity; wells and chips do not. Tokens are `--sessionbar-*` for the bar

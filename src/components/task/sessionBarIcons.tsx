@@ -25,9 +25,10 @@ export function SplitRightGlyph(props: GlyphProps) {
   return <Glyph {...props}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M12 4v16" /></Glyph>;
 }
 
-/** The working agent's heart-monitor trace. The moving pulse is only drawn
- *  while `running`; the caller turns that off while the window is hidden. */
-export function TabTrace({ running }: { running: boolean }) {
+/** The working agent's heart-monitor trace. The pulse stays mounted and is
+ *  paused, not removed, while the window is hidden, so it resumes where it
+ *  stopped and its mark keeps its speed. */
+export function TabTrace({ paused }: { paused: boolean }) {
   return (
     <svg
       width={22}
@@ -41,13 +42,10 @@ export function TabTrace({ running }: { running: boolean }) {
       aria-hidden
       className="shrink-0"
       data-testid="tab-trace"
-      data-running={running || undefined}
-      // The e2e suite reads the badge's mark and its animation off whichever
-      // element carries data-mark, so it moves to the pulse while one runs.
-      data-mark={running ? undefined : "trace"}
+      data-paused={paused || undefined}
     >
       <path d={TRACE_PATH} opacity={0.22} className="sessionbar-trace-ghost" />
-      {running && <path d={TRACE_PATH} strokeDasharray="12 36" className="sessionbar-trace-pulse" data-mark="trace" />}
+      <path d={TRACE_PATH} strokeDasharray="12 36" className="sessionbar-trace-pulse" data-mark="trace" />
     </svg>
   );
 }
