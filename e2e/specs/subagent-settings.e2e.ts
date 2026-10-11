@@ -119,6 +119,7 @@ describe("subagent settings", () => {
       p.setSubagentTypeFilter("builtIn", true);
       p.setSubagentTypeFilter("custom", true);
       p.setSubagentTypeFilter("fork", true);
+      p.setSubagentTypeFilter("workflow", true);
       p.setSubagentRetention("session");
       p.setSubagentAutoCollapse("never");
     });
@@ -199,34 +200,48 @@ describe("subagent settings", () => {
     rmSync(CONFIG_DIR, { recursive: true, force: true });
   });
 
-  it("renders in Settings > Tasks with the workflow filter disabled and no capped text", async () => {
+  it("renders in Settings > Tasks with a working workflow switch and no capped text", async () => {
     await openTasksSettings();
 
-    const block = await browser.execute((sel, workflow, master) => {
+    const workflowSwitch = switchIn("subagent-setting-type-workflow");
+    const readBlock = () => browser.execute((sel, workflow, master) => {
       const root = document.querySelector(sel)!;
-      const workflowSwitch = document.querySelector<HTMLButtonElement>(workflow)!;
+      const workflowButton = document.querySelector<HTMLButtonElement>(workflow)!;
       return {
         text: root.textContent ?? "",
-        workflowDisabled: workflowSwitch.disabled,
-        workflowChecked: workflowSwitch.getAttribute("aria-checked"),
+        workflowDisabled: workflowButton.disabled,
+        workflowChecked: workflowButton.getAttribute("aria-checked"),
         masterChecked: document.querySelector(master)?.getAttribute("aria-checked") ?? null,
         cappedNodes: root.querySelectorAll('[class*="max-w-"]').length,
       };
-    }, BLOCK, switchIn("subagent-setting-type-workflow"), switchIn("subagent-setting-enabled"));
+    }, BLOCK, workflowSwitch, switchIn("subagent-setting-enabled"));
+    const storedWorkflow = () => browser.execute(
+      () => window.__termic!.usePrefs.getState().subagentTypeFilter.workflow as boolean);
 
+    const block = await readBlock();
     expect(block.text).toContain("Claude subagents");
-    expect(block.text).toContain("Workflow agents are not shown in the sidebar yet.");
-    expect(block.workflowDisabled).toBe(true);
-    expect(block.workflowChecked).toBe("false");
+    expect(block.text).toContain("Workflow runs and the agents they start. Off hides each run's row and every agent under it.");
+    expect(block.text).not.toContain("Workflow agents are not shown in the sidebar yet.");
+    expect(block.workflowDisabled).toBe(false);
+    expect(block.workflowChecked).toBe("true");
     expect(block.masterChecked).toBe("true");
     expect(block.cappedNodes).toBe(0);
+    expect(await storedWorkflow()).toBe(true);
     await snap("subagent-settings-en.png");
 
-    // A click on the disabled workflow switch changes nothing.
-    await clickPresent(switchIn("subagent-setting-type-workflow"));
-    const workflow = await browser.execute(
-      () => window.__termic!.usePrefs.getState().subagentTypeFilter.workflow as boolean);
-    expect(workflow).toBe(false);
+    await clickPresent(workflowSwitch);
+    await browser.waitUntil(async () => (await readBlock()).workflowChecked === "false", {
+      timeout: 5_000,
+      timeoutMsg: "clicking the workflow switch did not turn it off",
+    });
+    expect(await storedWorkflow()).toBe(false);
+
+    await clickPresent(workflowSwitch);
+    await browser.waitUntil(async () => (await readBlock()).workflowChecked === "true", {
+      timeout: 5_000,
+      timeoutMsg: "clicking the workflow switch again did not turn it back on",
+    });
+    expect(await storedWorkflow()).toBe(true);
     await closeSettings();
   });
 
@@ -308,9 +323,9 @@ describe("subagent settings", () => {
     }), BLOCK, switchIn("subagent-setting-type-workflow"));
 
     expect(block.text).toContain("Claude 子智能体");
-    expect(block.text).toContain("工作流智能体暂不在侧边栏中显示。");
+    expect(block.text).toContain("工作流运行及其启动的智能体。关闭后隐藏每个运行的行及其下的所有智能体。");
     expect(block.text).not.toContain("tasks.subagents.");
-    expect(block.workflowDisabled).toBe(true);
+    expect(block.workflowDisabled).toBe(false);
     await snap("subagent-settings-zh-CN.png");
 
     await clearLanguagePref();

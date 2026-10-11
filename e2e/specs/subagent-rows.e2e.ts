@@ -27,6 +27,7 @@ import {
   waitForAgentReady,
   waitForAppShell,
   waitPtyQuiet,
+  waitVisible,
   workBadges,
 } from "../helpers.js";
 
@@ -405,17 +406,49 @@ describe("subagent rows", () => {
     expect(moved.map(row => row.id)).toEqual([parent, child, other]);
   });
 
-  it("keeps a workflow agent in the store but draws no row for it", async function () {
-    this.timeout(30_000);
+  it("draws a workflow agent inside its run node, never as a loose row", async function () {
+    this.timeout(60_000);
     const agentId = "e2ewf1";
+    const runId = "wf_e2erows";
+    const runDir = path.join(subagentsDir, "workflows", runId);
+    const runSelector = `[data-sidebar-task-row="${taskId}"] [data-testid="workflow-run-row"][data-run-id="${runId}"]`;
+
+    await directive(`#subagent-wf-jsonl ${runId} ${agentId} ${USER_LINE}`);
+    await waitForFile(path.join(runDir, `agent-${agentId}.jsonl`), USER_LINE);
+    await directive(`#subagent-wf-meta ${runId} ${agentId} {"agentType":"workflow-subagent"}`);
+    await waitForFile(path.join(runDir, `agent-${agentId}.meta.json`), "workflow-subagent");
     await start(agentId, "workflow-subagent");
 
     await browser.waitUntil(() => storeHasAgent(agentId), {
       timeout: 10_000,
       timeoutMsg: "the workflow agent never reached the store",
     });
-    await waitPtyQuiet(taskId, 500);
+    await waitVisible(runSelector, 10_000);
+    // A run starts folded, so the agent is inside it and not on screen.
     expect((await rows()).some(row => row.id === agentId)).toBe(false);
+
+    await clickPresent(`${runSelector} [data-testid="workflow-run-fold"]`);
+    await browser.waitUntil(async () => (await rows()).some(row => row.id === agentId), {
+      timeout: 5_000,
+      timeoutMsg: "opening the run never drew its agent",
+    });
+    const placement = await browser.execute((run, agent) => {
+      const runRow = document.querySelector<HTMLElement>(run)!;
+      const agentRow = document.querySelector<HTMLElement>(agent)!;
+      const follows = !!(runRow.compareDocumentPosition(agentRow) & Node.DOCUMENT_POSITION_FOLLOWING);
+      return {
+        follows,
+        depth: agentRow.getAttribute("data-depth"),
+        indented: agentRow.getBoundingClientRect().left > runRow.getBoundingClientRect().left,
+      };
+    }, runSelector, rowSelector(agentId));
+    expect(placement).toEqual({ follows: true, depth: "2", indented: true });
+
+    await clickPresent(`${runSelector} [data-testid="workflow-run-fold"]`);
+    await browser.waitUntil(async () => !(await rows()).some(row => row.id === agentId), {
+      timeout: 5_000,
+      timeoutMsg: "folding the run left its agent on screen",
+    });
   });
 
   it("leaves the selection on the tab row, never on a subagent row or the header", async function () {

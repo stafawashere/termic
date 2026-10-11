@@ -144,6 +144,14 @@ set_title "✳ ${name}"
 #               CLAUDE_CONFIG_DIR sits inside TERMIC_DATA_DIR, so a run can
 #               never write into a real claude config. Keep each line short:
 #               it arrives through a canonical-mode read.
+#   #subagent-wf-jsonl RUN ID LINE
+#   #subagent-wf-meta RUN ID JSON
+#   #workflow-state RUN JSON
+#               the files of one workflow run: the agent transcript and
+#               sidecar under subagents/workflows/RUN/, and the run's state
+#               file at <session>/workflows/RUN.json, which names the run and
+#               orders its phases. RUN must look like wf_<id>. The same
+#               refusal as the #subagent-* directives applies.
 #   #session UUID
 #               replay claude's SessionStart after /clear, /resume or a fork:
 #               the hook OSC 777 `session UUID`, and from then on the
@@ -531,6 +539,53 @@ while IFS= read -r line; do
         "#subagent-rm") rm -f "$dir/agent-${agent}.jsonl" "$dir/agent-${agent}.meta.json" ;;
       esac
       echo "FAKE-AGENT ${verb#\#} ${agent}"
+      continue ;;
+    "#subagent-wf-jsonl "*|"#subagent-wf-meta "*)
+      verb="${line%% *}"
+      rest="${line#* }"
+      run="${rest%% *}"
+      rest="${rest#"$run"}"
+      rest="${rest# }"
+      agent="${rest%% *}"
+      body=""
+      [ "$rest" != "$agent" ] && body="${rest#* }"
+      if ! dir="$(subagent_dir)"; then
+        echo "FAKE-AGENT ${verb#\#} refused: no e2e claude config dir or no session"
+        continue
+      fi
+      if ! [[ "$run" =~ ^wf_[A-Za-z0-9_-]{1,64}$ ]]; then
+        echo "FAKE-AGENT ${verb#\#} refused: bad run id"
+        continue
+      fi
+      if ! [[ "$agent" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
+        echo "FAKE-AGENT ${verb#\#} refused: bad agent id"
+        continue
+      fi
+      run_dir="$dir/workflows/$run"
+      mkdir -p "$run_dir"
+      case "$verb" in
+        "#subagent-wf-jsonl") printf '%s\n' "$body" >> "$run_dir/agent-${agent}.jsonl" ;;
+        "#subagent-wf-meta") printf '%s' "$body" > "$run_dir/agent-${agent}.meta.json" ;;
+      esac
+      echo "FAKE-AGENT ${verb#\#} ${run} ${agent}"
+      continue ;;
+    "#workflow-state "*)
+      rest="${line#\#workflow-state }"
+      run="${rest%% *}"
+      body=""
+      [ "$rest" != "$run" ] && body="${rest#* }"
+      if ! dir="$(subagent_dir)"; then
+        echo "FAKE-AGENT workflow-state refused: no e2e claude config dir or no session"
+        continue
+      fi
+      if ! [[ "$run" =~ ^wf_[A-Za-z0-9_-]{1,64}$ ]]; then
+        echo "FAKE-AGENT workflow-state refused: bad run id"
+        continue
+      fi
+      state_dir="${dir%/subagents}/workflows"
+      mkdir -p "$state_dir"
+      printf '%s' "$body" > "$state_dir/${run}.json"
+      echo "FAKE-AGENT workflow-state ${run}"
       continue ;;
     "#session "*)
       next_session="${line#\#session }"
