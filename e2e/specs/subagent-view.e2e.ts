@@ -256,7 +256,7 @@ describe("subagent transcript view", () => {
     expect(await activeTabId()).toBe(tabs[0].id);
     // The row of the agent in view carries the selection.
     const rowClass = await browser.execute((sel) => document.querySelector(sel)?.className ?? "", rowSelector(agentId));
-    expect(rowClass).toContain("bg-[var(--color-sel)]");
+    expect(rowClass).toContain("sidebar-selected");
     await snap("subagent-view-open.png");
   });
 

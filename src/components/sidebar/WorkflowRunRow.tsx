@@ -9,12 +9,11 @@
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { cn } from "@/lib/utils";
 import { useSubagents, type SubagentState } from "@/store/subagents";
 import {
-  createWorkflowRunCountsSelector, selectWorkflowRunName, type SubagentRowRules,
+  createWorkflowRunCountsSelector, selectWorkflowRunName, type SubagentGuideLines, type SubagentRowRules,
 } from "./subagentTree";
-import { FoldChevron, indentClass, RowIcon, StateMark } from "./subagentRowParts";
+import { FoldChevron, RowIcon, StateWord, subagentRowClass, subagentRowStyle, TreeLines } from "./subagentRowParts";
 
 type RunState = Extract<SubagentState, "running" | "failed" | "done">;
 
@@ -47,10 +46,11 @@ function runStateCopy(state: RunState, t: TFunction<"sidebar">): { label: string
   }
 }
 
-export const WorkflowRunRow = memo(function WorkflowRunRow({ tabId, runId, indent, open, selected, rules, onToggle }: {
+export const WorkflowRunRow = memo(function WorkflowRunRow({ tabId, runId, indent, lines, open, selected, rules, onToggle }: {
   tabId: string;
   runId: string;
   indent: number;
+  lines: SubagentGuideLines;
   open: boolean;
   /** True while the run is folded over the agent whose tab is active. */
   selected: boolean;
@@ -77,21 +77,17 @@ export const WorkflowRunRow = memo(function WorkflowRunRow({ tabId, runId, inden
       data-run-state={runState}
       aria-expanded={open}
       onClick={toggle}
-      className={cn(
-        "flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-[3px] text-[12.5px] select-none transition-colors",
-        indentClass(indent),
-        selected
-          ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
-          : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
-      )}
+      className={subagentRowClass(selected, "text-[var(--sidebar-ink)]")}
+      style={subagentRowStyle(indent)}
     >
+      <TreeLines depth={indent} lines={lines} />
       <FoldChevron testId="workflow-run-fold" folded={!open} label={foldLabel} onToggle={toggle} />
-      <RowIcon name="workflow" />
-      <span className="min-w-0 flex-1 truncate" title={name}>{name}</span>
+      <RowIcon name="workflow" selected={selected} />
+      <span className="min-w-0 flex-1 truncate font-medium" title={name}>{name}</span>
       <span
         data-testid="workflow-run-count"
         title={countHint}
-        className="shrink-0 tabular-nums text-[11px] text-[var(--color-fg-faint)]"
+        className="sidebar-badge"
       >
         {counts.running}/{counts.total}
       </span>
@@ -101,9 +97,9 @@ export const WorkflowRunRow = memo(function WorkflowRunRow({ tabId, runId, inden
         role="img"
         aria-label={copy.label}
         title={copy.hint}
-        className="flex h-4 w-4 shrink-0 items-center justify-center"
+        className="flex shrink-0 items-center justify-end"
       >
-        <StateMark state={runState} />
+        <StateWord state={runState} />
       </span>
     </div>
   );

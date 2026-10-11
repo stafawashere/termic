@@ -214,6 +214,14 @@ export default {
   scheduleDocker: "定时执行暂不支持 Docker",
 
   subagents: {
+    stateWord: {
+      running: "运行中",
+      done: "完成",
+      failed: "失败",
+      interrupted: "已中断",
+      unknown: "已停止",
+      expired: "已过期",
+    },
     running: "运行中",
     runningHint: "该子智能体仍在工作。",
     done: "已完成",

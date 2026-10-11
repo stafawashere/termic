@@ -219,6 +219,14 @@ export default {
   // Subagent rows under a claude tab: the state badge (label, then the
   // tooltip that says what it means) and the chevron that folds a subtree.
   subagents: {
+    stateWord: {
+      running: "running",
+      done: "done",
+      failed: "failed",
+      interrupted: "interrupted",
+      unknown: "stopped",
+      expired: "expired",
+    },
     running: "Running",
     runningHint: "This subagent is still working.",
     done: "Done",

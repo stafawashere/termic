@@ -34,9 +34,9 @@ const AGENT_ROW = '[data-testid="subagent-row"]';
 const RUN_ROW = '[data-testid="workflow-run-row"]';
 const PHASE_ROW = '[data-testid="workflow-phase-row"]';
 const PANE = '[data-testid="subagent-pane"]';
-const SELECTED = "bg-[var(--color-sel)]";
-/** The task header and session rows wear the tree's selected look. */
-const ROW_SELECTED = "sidebar-selected";
+/** Every tree row, task header to subagent, wears the one selected look. */
+const SELECTED = "sidebar-selected";
+const ROW_SELECTED = SELECTED;
 
 const RELEASE_RUN = "wf_e2erelease";
 const RELEASE_NAME = "acme-release";
@@ -143,7 +143,8 @@ describe("subagent workflow runs", () => {
           id,
           label: (el.textContent ?? "").trim(),
           depth: el.getAttribute("data-depth") ?? "",
-          left: el.getBoundingClientRect().left,
+          // Content start: the rows span the panel and indent by padding.
+          left: el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft),
           icon: icon?.getAttribute("data-icon") ?? null,
           iconLeft: icon?.getBoundingClientRect().left ?? -1,
           labelLeft: el.querySelector("span.truncate")!.getBoundingClientRect().left,

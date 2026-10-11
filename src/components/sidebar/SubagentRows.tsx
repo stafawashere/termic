@@ -17,7 +17,6 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { create } from "zustand";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/store/app";
 import { usePrefs } from "@/store/prefs";
@@ -27,9 +26,11 @@ import { foldAllSubagents, type GroupFold } from "./subagentFold";
 import { openSubagentPreview } from "@/store/subagentPreview";
 import {
   createRetentionExpirySelector, createSubagentStructureSelector, hasSubagentRow, selectSubagentRecord,
-  subagentGroupStartsCollapsed, subagentRowIndent, subagentRowsOfKey, type SubagentPhaseRow, type SubagentRowRules,
+  subagentGroupStartsCollapsed, subagentGuideLines, subagentRowIndent, subagentRowsOfKey, type SubagentGuideLines,
+  type SubagentPhaseRow, type SubagentRowRules,
 } from "./subagentTree";
-import { FoldChevron, indentClass, RowIcon, StateMark } from "./subagentRowParts";
+import { ChevronSpacer, FoldChevron, RowIcon, StateWord, subagentRowClass, subagentRowStyle, TreeLines } from "./subagentRowParts";
+import { TreeChevron } from "./sidebarIcons";
 import { subagentAgentIconName } from "./subagentRowIcon";
 import { WorkflowRunRow } from "./WorkflowRunRow";
 
@@ -152,11 +153,9 @@ export const SubagentGroupToggle = memo(function SubagentGroupToggle({ tabId }: 
       aria-expanded={!collapsed}
       title={label}
       onClick={(e) => { e.stopPropagation(); setGroupCollapsed(tabId, sessionId, !collapsed); }}
-      className="shrink-0 rounded p-0.5 hover:bg-[var(--color-bg-3)] transition-colors"
+      className="flex h-[20px] w-[14px] shrink-0 items-center justify-center text-[var(--sidebar-chevron)]"
     >
-      {collapsed
-        ? <ChevronRight className="h-3 w-3 text-[var(--color-fg-faint)]" />
-        : <ChevronDown className="h-3 w-3 text-[var(--color-fg-faint)]" />}
+      <TreeChevron open={!collapsed} />
     </button>
   );
 });
@@ -178,11 +177,12 @@ function stateCopy(state: SubagentState, t: TFunction<"sidebar">): { label: stri
   }
 }
 
-const SubagentRow = memo(function SubagentRow({ taskId, tabId, agentId, depth, hasChildren, folded, selected }: {
+const SubagentRow = memo(function SubagentRow({ taskId, tabId, agentId, depth, lines, hasChildren, folded, selected }: {
   taskId: string;
   tabId: string;
   agentId: string;
   depth: number;
+  lines: SubagentGuideLines;
   hasChildren: boolean;
   folded: boolean;
   selected: boolean;
@@ -213,14 +213,10 @@ const SubagentRow = memo(function SubagentRow({ taskId, tabId, agentId, depth, h
       data-subagent-state={record.state}
       data-depth={depth}
       onClick={openTranscript}
-      className={cn(
-        "group/subagent flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-[3px] text-[12.5px] select-none transition-colors",
-        indentClass(depth),
-        selected
-          ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
-          : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
-      )}
+      className={cn("group/subagent", subagentRowClass(selected, "text-[var(--sidebar-ink)]"))}
+      style={subagentRowStyle(depth)}
     >
+      <TreeLines depth={depth} lines={lines} />
       {hasChildren ? (
         <FoldChevron
           testId="subagent-fold"
@@ -229,9 +225,9 @@ const SubagentRow = memo(function SubagentRow({ taskId, tabId, agentId, depth, h
           onToggle={() => toggleFold(tabId, agentId)}
         />
       ) : (
-        <span aria-hidden className="h-4 w-4 shrink-0" />
+        <ChevronSpacer />
       )}
-      <RowIcon name={subagentAgentIconName(record.agentType)} />
+      <RowIcon name={subagentAgentIconName(record.agentType)} selected={selected} />
       <span className="min-w-0 flex-1 truncate" title={rowTitle}>{label}</span>
       <span
         data-testid="subagent-badge"
@@ -239,19 +235,20 @@ const SubagentRow = memo(function SubagentRow({ taskId, tabId, agentId, depth, h
         role="img"
         aria-label={copy.label}
         title={copy.hint}
-        className="flex h-4 w-4 shrink-0 items-center justify-center"
+        className="flex shrink-0 items-center justify-end"
       >
-        <StateMark state={record.state} />
+        <StateWord state={record.state} />
       </span>
     </div>
   );
 });
 
-const PhaseRow = memo(function PhaseRow({ tabId, phaseKey, title, indent, folded, selected, onToggle }: {
+const PhaseRow = memo(function PhaseRow({ tabId, phaseKey, title, indent, lines, folded, selected, onToggle }: {
   tabId: string;
   phaseKey: string;
   title: string;
   indent: number;
+  lines: SubagentGuideLines;
   folded: boolean;
   /** True while the phase is folded over the agent whose tab is active. */
   selected: boolean;
@@ -268,16 +265,12 @@ const PhaseRow = memo(function PhaseRow({ tabId, phaseKey, title, indent, folded
       data-phase-key={phaseKey}
       aria-expanded={!folded}
       onClick={toggle}
-      className={cn(
-        "flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-[3px] text-[12.5px] select-none transition-colors",
-        indentClass(indent),
-        selected
-          ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
-          : "text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
-      )}
+      className={subagentRowClass(selected, "text-[var(--sidebar-meta)]")}
+      style={subagentRowStyle(indent)}
     >
+      <TreeLines depth={indent} lines={lines} />
       <FoldChevron testId="workflow-phase-fold" folded={folded} label={foldLabel} onToggle={toggle} />
-      <RowIcon name="layers" light />
+      <RowIcon name="layers" selected={selected} />
       <span className="min-w-0 flex-1 truncate" title={label}>{label}</span>
     </div>
   );
@@ -320,13 +313,15 @@ export const SubagentRows = memo(function SubagentRows({ taskId, tabId, selected
   const selectedPlace = useSelectedRunPlace(tabId, selectedAgentId);
 
   const rows = useMemo(() => subagentRowsOfKey(structureKey, new Set(foldedIds)), [structureKey, foldedIds]);
+  const guideLines = useMemo(() => subagentGuideLines(rows.map(subagentRowIndent)), [rows]);
 
   if (rows.length === 0 || collapsed) return null;
 
   return (
     <>
-      {rows.map(row => {
+      {rows.map((row, rowIndex) => {
         const indent = subagentRowIndent(row);
+        const lines = guideLines[rowIndex];
 
         if (row.kind === "run") {
           const isOverSelection = !row.open && selectedPlace.runId === row.runId;
@@ -336,6 +331,7 @@ export const SubagentRows = memo(function SubagentRows({ taskId, tabId, selected
               tabId={tabId}
               runId={row.runId}
               indent={indent}
+              lines={lines}
               open={row.open}
               selected={isOverSelection}
               rules={rules}
@@ -353,6 +349,7 @@ export const SubagentRows = memo(function SubagentRows({ taskId, tabId, selected
               phaseKey={row.key}
               title={row.title}
               indent={indent}
+              lines={lines}
               folded={folded}
               selected={isPhaseOverSelection(row, folded, selectedPlace)}
               onToggle={toggleFold}
@@ -367,6 +364,7 @@ export const SubagentRows = memo(function SubagentRows({ taskId, tabId, selected
             tabId={tabId}
             agentId={row.agentId}
             depth={indent}
+            lines={lines}
             hasChildren={row.hasChildren}
             folded={foldedIds.includes(row.agentId)}
             selected={row.agentId === selectedAgentId}

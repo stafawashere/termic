@@ -124,7 +124,9 @@ describe("subagent rows", () => {
           depth: row.getAttribute("data-depth") ?? "",
           icon: icon?.getAttribute("data-icon") ?? null,
           iconHidden: icon?.getAttribute("aria-hidden") ?? null,
-          rowLeft: rowBox.left,
+          // Where the row's content starts: rows span the panel at every
+          // depth and indent by padding.
+          rowLeft: rowBox.left + parseFloat(getComputedStyle(row).paddingLeft),
           height: rowBox.height,
           iconLeft: iconBox?.left ?? -1,
           iconWidth: iconBox?.width ?? -1,
@@ -268,10 +270,11 @@ describe("subagent rows", () => {
     const indent = await browser.execute((task, sel) => {
       const row = document.querySelector<HTMLElement>(sel)!;
       const tabRow = document.querySelector<HTMLElement>(`[data-sidebar-task-row="${task}"] [data-sidebar-tab-id]`)!;
+      const contentLeft = (el: HTMLElement) => el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft);
       return {
         depth: row.getAttribute("data-depth"),
-        rowLeft: row.getBoundingClientRect().left,
-        tabLeft: tabRow.getBoundingClientRect().left,
+        rowLeft: contentLeft(row),
+        tabLeft: contentLeft(tabRow),
       };
     }, taskId, rowSelector(agentId));
     expect(indent.depth).toBe("1");
@@ -534,8 +537,8 @@ describe("subagent rows", () => {
   it("leaves the selection on the tab row, never on a subagent row or the header", async function () {
     this.timeout(30_000);
     const selection = await browser.execute((task) => {
-      const sel = "bg-[var(--color-sel)]";
-      const rowSel = "sidebar-selected";
+      const sel = "sidebar-selected";
+      const rowSel = sel;
       const scope = document.querySelector(`[data-sidebar-task-row="${task}"]`)!;
       const header = scope.querySelector(`[data-sidebar-task-id="${task}"]`)!;
       const tabRow = scope.querySelector("[data-sidebar-tab-id]")!;
