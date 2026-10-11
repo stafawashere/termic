@@ -23,10 +23,12 @@
 //! escapes removed, and nothing here caches or persists it.
 
 use serde::Serialize;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
+use std::sync::{LazyLock, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Entries returned per page of `subagent_transcript_read`.
 pub(crate) const WINDOW: usize = 500;
@@ -696,7 +698,57 @@ pub(crate) fn list_subagents(subagents_dir: &Path, limit: usize) -> Vec<Subagent
     found.into_iter().map(|transcript| summarise(subagents_dir, transcript)).collect()
 }
 
-fn read_workflow_state(session_dir: &Path, run_id: &str) -> Option<serde_json::Value> {
+/// Parsed run state files, keyed by canonical path. A refresh fires on every
+/// subagent hook and a state file can run to hundreds of KB, so an unchanged
+/// file (same mtime and length) is not read again. Oldest entry goes first
+/// once the cache is full.
+pub(crate) struct WorkflowStateCache {
+    capacity: usize,
+    entries: HashMap<PathBuf, CachedRunState>,
+    insertion_order: VecDeque<PathBuf>,
+    parse_count: usize,
+}
+
+struct CachedRunState {
+    modified: Option<SystemTime>,
+    len: u64,
+    name: Option<String>,
+    phases: Option<Vec<String>>,
+}
+
+const WORKFLOW_STATE_CACHE_CAPACITY: usize = 256;
+
+static WORKFLOW_STATE_CACHE: LazyLock<Mutex<WorkflowStateCache>> =
+    LazyLock::new(|| Mutex::new(WorkflowStateCache::new(WORKFLOW_STATE_CACHE_CAPACITY)));
+
+impl WorkflowStateCache {
+    pub(crate) fn new(capacity: usize) -> Self {
+        Self { capacity, entries: HashMap::new(), insertion_order: VecDeque::new(), parse_count: 0 }
+    }
+
+    fn lookup(&self, path: &Path, modified: Option<SystemTime>, len: u64) -> Option<&CachedRunState> {
+        let cached = self.entries.get(path)?;
+        let is_unchanged = cached.modified == modified && cached.len == len;
+        is_unchanged.then_some(cached)
+    }
+
+    fn store(&mut self, path: PathBuf, cached: CachedRunState) {
+        let is_new_path = self.entries.insert(path.clone(), cached).is_none();
+        if !is_new_path {
+            return;
+        }
+
+        self.insertion_order.push_back(path);
+        while self.insertion_order.len() > self.capacity {
+            let Some(oldest) = self.insertion_order.pop_front() else { break };
+            self.entries.remove(&oldest);
+        }
+    }
+}
+
+/// The canonical state file of a run and its metadata, when it sits inside
+/// the session and is small enough to read.
+fn confined_workflow_state_file(session_dir: &Path, run_id: &str) -> Option<(PathBuf, fs::Metadata)> {
     let root = fs::canonicalize(session_dir).ok()?;
     let candidate = session_dir.join("workflows").join(format!("{run_id}.json"));
     let file = fs::canonicalize(candidate).ok()?;
@@ -708,8 +760,36 @@ fn read_workflow_state(session_dir: &Path, run_id: &str) -> Option<serde_json::V
         return None;
     }
 
-    let raw = fs::read_to_string(file).ok()?;
-    serde_json::from_str(&raw).ok()
+    Some((file, metadata))
+}
+
+fn read_workflow_run(cache: &Mutex<WorkflowStateCache>, session_dir: &Path, run_id: &str) -> WorkflowRunInfo {
+    let Some((file, metadata)) = confined_workflow_state_file(session_dir, run_id) else {
+        return parse_workflow_state(run_id, None);
+    };
+    let modified = metadata.modified().ok();
+    let len = metadata.len();
+
+    {
+        let cache = cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(cached) = cache.lookup(&file, modified, len) {
+            return WorkflowRunInfo {
+                run_id: run_id.to_string(),
+                name: cached.name.clone(),
+                phases: cached.phases.clone(),
+            };
+        }
+    }
+
+    let state = fs::read_to_string(&file)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
+    let info = parse_workflow_state(run_id, state.as_ref());
+
+    let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
+    cache.parse_count += 1;
+    cache.store(file, CachedRunState { modified, len, name: info.name.clone(), phases: info.phases.clone() });
+    info
 }
 
 pub(crate) fn parse_workflow_state(run_id: &str, state: Option<&serde_json::Value>) -> WorkflowRunInfo {
@@ -732,14 +812,15 @@ pub(crate) fn parse_workflow_state(run_id: &str, state: Option<&serde_json::Valu
 /// `subagents/`, at `<session>/workflows/wf_<run>.json`, so these reads are
 /// confined to the session dir instead.
 pub(crate) fn list_workflow_runs(subagents_dir: &Path) -> Vec<WorkflowRunInfo> {
+    list_workflow_runs_with(&WORKFLOW_STATE_CACHE, subagents_dir)
+}
+
+fn list_workflow_runs_with(cache: &Mutex<WorkflowStateCache>, subagents_dir: &Path) -> Vec<WorkflowRunInfo> {
     let Some(session_dir) = subagents_dir.parent() else { return Vec::new() };
     let mut run_ids = workflow_run_ids(subagents_dir);
     run_ids.sort();
 
-    run_ids
-        .iter()
-        .map(|run_id| parse_workflow_state(run_id, read_workflow_state(session_dir, run_id).as_ref()))
-        .collect()
+    run_ids.iter().map(|run_id| read_workflow_run(cache, session_dir, run_id)).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -1363,6 +1444,62 @@ mod tests {
             assert_eq!(info.name, None, "{run_id} should have no name");
             assert_eq!(info.phases, None, "{run_id} should have no phases");
         }
+    }
+
+    fn parse_count(cache: &Mutex<WorkflowStateCache>) -> usize {
+        cache.lock().unwrap().parse_count
+    }
+
+    fn state_path(dir: &Path, run_id: &str) -> PathBuf {
+        dir.parent().unwrap().join("workflows").join(format!("{run_id}.json"))
+    }
+
+    #[test]
+    fn workflow_state_cache_skips_an_unchanged_file_and_rereads_a_changed_one() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = session_dir(tmp.path(), SESSION);
+        let cache = Mutex::new(WorkflowStateCache::new(WORKFLOW_STATE_CACHE_CAPACITY));
+        add_run(&dir, "wf_cached");
+        write_state(&dir, "wf_cached", r#"{"workflowName":"acme-one","phases":[{"title":"Plan"}]}"#);
+        set_mtime(&state_path(&dir, "wf_cached"), 1_000);
+
+        let first = list_workflow_runs_with(&cache, &dir);
+        let second = list_workflow_runs_with(&cache, &dir);
+        assert_eq!(parse_count(&cache), 1);
+        assert_eq!(first, second);
+        assert_eq!(second[0].name.as_deref(), Some("acme-one"));
+
+        write_state(&dir, "wf_cached", r#"{"workflowName":"acme-two","phases":[{"title":"Plan"}]}"#);
+        set_mtime(&state_path(&dir, "wf_cached"), 2_000);
+        let same_length = list_workflow_runs_with(&cache, &dir);
+        assert_eq!(parse_count(&cache), 2);
+        assert_eq!(same_length[0].name.as_deref(), Some("acme-two"));
+
+        write_state(&dir, "wf_cached", r#"{"workflowName":"acme-three","phases":[]}"#);
+        set_mtime(&state_path(&dir, "wf_cached"), 2_000);
+        let longer = list_workflow_runs_with(&cache, &dir);
+        assert_eq!(parse_count(&cache), 3);
+        assert_eq!(longer[0].name.as_deref(), Some("acme-three"));
+        assert_eq!(longer[0].phases, Some(vec![]));
+    }
+
+    #[test]
+    fn workflow_state_cache_evicts_the_oldest_entry_past_its_capacity() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = session_dir(tmp.path(), SESSION);
+        let cache = Mutex::new(WorkflowStateCache::new(2));
+        for run_id in ["wf_a", "wf_b", "wf_c"] {
+            add_run(&dir, run_id);
+            write_state(&dir, run_id, r#"{"workflowName":"acme","phases":[]}"#);
+        }
+
+        list_workflow_runs_with(&cache, &dir);
+        assert_eq!(parse_count(&cache), 3);
+
+        let cached_paths: Vec<PathBuf> = cache.lock().unwrap().entries.keys().cloned().collect();
+        assert_eq!(cached_paths.len(), 2);
+        let oldest = fs::canonicalize(state_path(&dir, "wf_a")).unwrap();
+        assert!(!cached_paths.contains(&oldest));
     }
 
     #[cfg(unix)]
