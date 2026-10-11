@@ -49,6 +49,7 @@ import { activeFooterAgent, footerAgentIds, footerAgentKey } from "@/lib/footerA
 import { useAgentUsage } from "@/store/agentUsage";
 import { useSubagents } from "@/store/subagents";
 import { subagentWatchPoke } from "@/lib/subagentWatch";
+import { isClaudeCli, rebuildSubagentsForTab } from "@/lib/subagentRebuild";
 import { useAgentContext } from "@/store/agentContext";
 import { imageFromClipboard, pastePathText } from "@/lib/clipboardImage";
 import { setupImeReplacementBridge } from "@/lib/ime";
@@ -2353,6 +2354,9 @@ const captureArmedRef = useRef(false);
           logWorkState("session-reported",
             `cli=${tab.cli} task=${JSON.stringify(task.name)} id=${reported}`);
           useApp.getState().setTabSessionId(task.id, tab.id, reported);
+          // /clear, /resume and a fork land here: the old session's rows are
+          // gone, and the new session may already have subagents on disk.
+          if (isClaudeCli(tab.cli)) void rebuildSubagentsForTab(task.id, tab.id, reported);
         }
         return false;
       }
@@ -2689,6 +2693,7 @@ const captureArmedRef = useRef(false);
           if (id) {
             dbg("session-capture", `${reason}: captured ${id}`);
             useApp.getState().setTabSessionId(task.id, tab.id, id);
+            if (isClaudeCli(tab.cli)) void rebuildSubagentsForTab(task.id, tab.id, id);
           } else {
             dbg("session-capture", `${reason}: no output (CLI missing from PATH, or no session yet)`);
           }
@@ -2952,6 +2957,8 @@ const captureArmedRef = useRef(false);
           ptyId, lastOutputAt: Date.now(), firstOutputAt: null,
           liveAccount: spawn.account ?? null,
         });
+        const resumedClaudeSession = resumeKnown && !!sessionUuid && isClaudeCli(tab.cli);
+        if (resumedClaudeSession) void rebuildSubagentsForTab(task.id, tab.id, sessionUuid);
         // Per-PTY debug logger — active only when localStorage.ptyDebug === "1".
         // Writes to termic-pty-<task>-<cli>-<ptyId>.log in OS temp dir.
         // Find it: python3 -c 'import tempfile; print(tempfile.gettempdir())'

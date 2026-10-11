@@ -45,7 +45,7 @@ logLine("[termic] boot build=resume-fix-v3-sidebar-bypass").catch(() => {});
 // release bundles: both flags are statically false there.
 if (import.meta.env.DEV || import.meta.env.VITE_E2E) {
   void (async () => {
-    const [app, ui, prefs, race, pr, ipc, core, runTabs, scriptRuns, prompts, agentRace, diffStat, issuePrompt, seedPrompt, signalLog, reviewComments, deepLink, previewBrowser, pendingTasks, archivingTasks, pinnedFolders, cmLanguage, cmAutocomplete, codeIntel, lspStatus, navHistory, pageSession, profiles, agentUsage, usageUnknownDismissed, scratchCli, i18nMod, scheduleRunner, subagents, subagentRows] =
+    const [app, ui, prefs, race, pr, ipc, core, runTabs, scriptRuns, prompts, agentRace, diffStat, issuePrompt, seedPrompt, signalLog, reviewComments, deepLink, previewBrowser, pendingTasks, archivingTasks, pinnedFolders, cmLanguage, cmAutocomplete, codeIntel, lspStatus, navHistory, pageSession, profiles, agentUsage, usageUnknownDismissed, scratchCli, i18nMod, scheduleRunner, subagents, subagentRows, subagentRebuild] =
       await Promise.all([
         import("@/store/app"),
         import("@/store/ui"),
@@ -82,6 +82,7 @@ if (import.meta.env.DEV || import.meta.env.VITE_E2E) {
         import("@/lib/schedules/runner"),
         import("@/store/subagents"),
         import("@/components/sidebar/SubagentRows"),
+        import("@/lib/subagentRebuild"),
       ]);
     (window as unknown as Record<string, unknown>).__termic = {
       useApp: app.useApp,
@@ -113,6 +114,9 @@ if (import.meta.env.DEV || import.meta.env.VITE_E2E) {
       // what the hooks put in the store, and unfold rows in teardown.
       useSubagents: subagents.useSubagents,
       useSubagentFold: subagentRows.useSubagentFold,
+      // The launch rebuild of subagent rows from disk. A spec cannot relaunch
+      // the app, so it runs the same pass the launch schedules.
+      runSubagentLaunchRebuild: subagentRebuild.runLaunchRebuild,
       // The webview half of `termic scratchpad`. Exposed so a spec can land a
       // write in the SAME tick as an editor remount, which a round trip over
       // the control socket can only hit by luck (lib/scratchLive).

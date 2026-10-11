@@ -40,6 +40,7 @@ import { useUpdate } from "@/store/update";
 import { usePrefs } from "@/store/prefs";
 import { focusMainTab } from "@/lib/tabFocus";
 import { recordFirstPaint } from "@/lib/perfMarks";
+import { scheduleLaunchRebuild } from "@/lib/subagentRebuild";
 
 export function App() {
   const { t } = useTranslation("chrome");
@@ -100,6 +101,10 @@ export function App() {
     // different job. That ticker kicks queued messages in open chats; this one
     // creates runs, and its watcher settles them when they end.
     void loaded.then(() => initSchedules());
+    // Subagent rows of restored claude tabs, rebuilt from their transcripts
+    // once the browser is idle. Never awaited: the task list does not wait
+    // on a directory scan.
+    void loaded.then(() => scheduleLaunchRebuild());
     // Linux AppImage only: offer to add a launcher entry, once ever. A no-op
     // on every other platform and on a build that is not an AppImage, and it
     // asks only once whatever the answer, so it cannot become a thing that

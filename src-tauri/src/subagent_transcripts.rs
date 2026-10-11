@@ -602,7 +602,16 @@ fn agent_ids_in(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-fn summarise(subagents_dir: &Path, agent_id: &str, workflow_run_id: Option<&str>) -> Option<SubagentSummary> {
+/// A transcript that passed the id and confinement checks, before anything in
+/// it has been read.
+struct ListedTranscript {
+    agent_id: String,
+    workflow_run_id: Option<String>,
+    file: PathBuf,
+    mtime_ms: u64,
+}
+
+fn listed(subagents_dir: &Path, agent_id: &str, workflow_run_id: Option<&str>) -> Option<ListedTranscript> {
     let file = resolve_agent_file(subagents_dir, agent_id, workflow_run_id).ok()?;
     let mtime_ms = fs::metadata(&file)
         .and_then(|m| m.modified())
@@ -611,20 +620,33 @@ fn summarise(subagents_dir: &Path, agent_id: &str, workflow_run_id: Option<&str>
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
 
-    Some(SubagentSummary {
+    Some(ListedTranscript {
         agent_id: agent_id.to_string(),
-        is_workflow: workflow_run_id.is_some(),
         workflow_run_id: workflow_run_id.map(str::to_string),
-        meta: read_meta(subagents_dir, agent_id, workflow_run_id),
+        file,
         mtime_ms,
-        outcome: outcome_of_file(&file),
     })
 }
 
+fn summarise(subagents_dir: &Path, transcript: ListedTranscript) -> SubagentSummary {
+    let run = transcript.workflow_run_id.as_deref();
+
+    SubagentSummary {
+        meta: read_meta(subagents_dir, &transcript.agent_id, run),
+        outcome: outcome_of_file(&transcript.file),
+        is_workflow: run.is_some(),
+        agent_id: transcript.agent_id,
+        workflow_run_id: transcript.workflow_run_id,
+        mtime_ms: transcript.mtime_ms,
+    }
+}
+
+/// The newest `limit` transcripts of one session, newest first. Only those
+/// are opened: a long session's older agents cost a stat each, not a read.
 pub(crate) fn list_subagents(subagents_dir: &Path, limit: usize) -> Vec<SubagentSummary> {
-    let mut out: Vec<SubagentSummary> = agent_ids_in(subagents_dir)
+    let mut found: Vec<ListedTranscript> = agent_ids_in(subagents_dir)
         .iter()
-        .filter_map(|id| summarise(subagents_dir, id, None))
+        .filter_map(|id| listed(subagents_dir, id, None))
         .collect();
 
     if let Ok(runs) = fs::read_dir(subagents_dir.join("workflows")) {
@@ -635,14 +657,14 @@ pub(crate) fn list_subagents(subagents_dir: &Path, limit: usize) -> Vec<Subagent
             }
 
             for id in agent_ids_in(&run.path()) {
-                out.extend(summarise(subagents_dir, &id, Some(&run_id)));
+                found.extend(listed(subagents_dir, &id, Some(&run_id)));
             }
         }
     }
 
-    out.sort_by(|a, b| b.mtime_ms.cmp(&a.mtime_ms));
-    out.truncate(limit);
-    out
+    found.sort_by(|a, b| b.mtime_ms.cmp(&a.mtime_ms));
+    found.truncate(limit);
+    found.into_iter().map(|transcript| summarise(subagents_dir, transcript)).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -1135,5 +1157,51 @@ mod tests {
         assert_eq!(json["workflowRunId"], "wf_run1");
         assert_eq!(json["agentType"], "workflow-subagent");
         assert_eq!(json["outcome"], "none");
+    }
+
+    fn set_mtime(file: &Path, secs: u64) {
+        let handle = fs::File::options().write(true).open(file).unwrap();
+        handle.set_modified(UNIX_EPOCH + std::time::Duration::from_secs(secs)).unwrap();
+    }
+
+    #[test]
+    fn history_cap_keeps_the_newest_and_drops_the_oldest() {
+        const HISTORY_CAP: usize = 50;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = session_dir(tmp.path(), SESSION);
+        for index in 0..HISTORY_CAP + 5 {
+            let file = dir.join(format!("agent-a{index:03}.jsonl"));
+            fs::write(&file, jsonl(&[assistant_text("a")])).unwrap();
+            set_mtime(&file, 1_000 + index as u64);
+        }
+
+        let listed = list_subagents(&dir, HISTORY_CAP);
+        let ids: Vec<&str> = listed.iter().map(|s| s.agent_id.as_str()).collect();
+        assert_eq!(listed.len(), HISTORY_CAP);
+        assert_eq!(ids.first(), Some(&"a054"));
+        assert_eq!(ids.last(), Some(&"a005"));
+        for dropped in ["a000", "a001", "a002", "a003", "a004"] {
+            assert!(!ids.contains(&dropped), "{dropped} is among the five oldest and should be dropped");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scan_skips_escaping_symlinks_and_ids_with_separators() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = session_dir(&tmp.path().join("projects"), SESSION);
+        let outside = tmp.path().join("outside");
+        fs::create_dir_all(outside.join("wf_run9")).unwrap();
+        fs::write(outside.join("secret.jsonl"), jsonl(&[assistant_text("not yours")])).unwrap();
+        fs::write(outside.join("wf_run9").join("agent-aRun.jsonl"), jsonl(&[assistant_text("nor this")])).unwrap();
+
+        fs::write(dir.join("agent-aKept.jsonl"), jsonl(&[assistant_text("mine")])).unwrap();
+        std::os::unix::fs::symlink(outside.join("secret.jsonl"), dir.join("agent-aLink.jsonl")).unwrap();
+        fs::write(dir.join("agent-a\\b.jsonl"), jsonl(&[assistant_text("separator")])).unwrap();
+        fs::create_dir_all(dir.join("workflows")).unwrap();
+        std::os::unix::fs::symlink(outside.join("wf_run9"), dir.join("workflows").join("wf_run9")).unwrap();
+
+        let ids: Vec<String> = list_subagents(&dir, 50).into_iter().map(|s| s.agent_id).collect();
+        assert_eq!(ids, ["aKept"]);
     }
 }

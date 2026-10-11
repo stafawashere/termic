@@ -94,6 +94,8 @@ export interface TermicApi {
   useSubagents: { getState: () => any; setState: (p: any) => void };
   /** Which subagent rows are folded (src/components/sidebar/SubagentRows.tsx). */
   useSubagentFold: { getState: () => any; setState: (p: any) => void };
+  /** The launch pass that rebuilds subagent rows from disk (src/lib/subagentRebuild.ts). */
+  runSubagentLaunchRebuild: () => Promise<void>;
   /** `termic scratchpad`'s webview handler (src/lib/scratchCli.ts). */
   padHandler: (params: any) => Promise<any>;
   /** The live i18next instance, for `rawI18nKeysOnScreen` (i18n.e2e.ts). */

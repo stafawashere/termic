@@ -144,6 +144,10 @@ set_title "✳ ${name}"
 #               CLAUDE_CONFIG_DIR sits inside TERMIC_DATA_DIR, so a run can
 #               never write into a real claude config. Keep each line short:
 #               it arrives through a canonical-mode read.
+#   #session UUID
+#               replay claude's SessionStart after /clear, /resume or a fork:
+#               the hook OSC 777 `session UUID`, and from then on the
+#               #subagent-* directives write into UUID's directory.
 #   #hookdone   a plain hook turn that ENDS: 133;C then 133;D, nothing
 #               outstanding. What claude writes when its `Stop` payload has an
 #               empty `background_tasks`, and the only one of these that rings.
@@ -527,6 +531,16 @@ while IFS= read -r line; do
         "#subagent-rm") rm -f "$dir/agent-${agent}.jsonl" "$dir/agent-${agent}.meta.json" ;;
       esac
       echo "FAKE-AGENT ${verb#\#} ${agent}"
+      continue ;;
+    "#session "*)
+      next_session="${line#\#session }"
+      if ! [[ "$next_session" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+        echo "FAKE-AGENT session refused: bad session id"
+        continue
+      fi
+      session_arg="$next_session"
+      osc777 "termic;session ${next_session}"
+      echo "FAKE-AGENT session ${next_session}"
       continue ;;
     "#subagent "*)
       echo "FAKE-AGENT subagent: ${line#\#subagent }"

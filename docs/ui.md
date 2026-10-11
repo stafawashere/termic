@@ -386,6 +386,23 @@ badge, and none of them touches the parent tab's work badge or bell.
   type `"subagent"` whose `subagentAgentId` has a row in this task carries the
   selection like a terminal child does, so the header drops its highlight and
   that row draws `--color-sel`.
+- **Rows are rebuilt from disk, never persisted.** `lib/subagentRebuild.ts`
+  scans a tab's `<sessionId>/subagents/` (the newest
+  `SUBAGENT_HISTORY_CAP` = 50 transcripts by mtime) on three triggers: app
+  launch, for every non-archived task's persisted claude tab that names a
+  session, opened or not; a claude tab spawning with `--resume <id>`; and
+  `setTabSessionId` after claude's SessionStart reports a new session (the old
+  session's rows go first). A scanned transcript ending on an answer is
+  `done`, on an error `failed`, and with no end entry `interrupted` when the
+  tab has no `ptyId` or `unknown` when it has one. Only a `SubagentStart` hook
+  makes a row `running`. `mergeScanned` lets a hook-reported record keep its
+  state (the `unknown` a stop leaves is the one thing a final outcome may
+  upgrade), so an agent seen by both sources is one row, and it bails on a
+  scan that changes nothing. A result is dropped if the tab's session moved,
+  the tab closed, or its claude stopped while the scan was in flight. The
+  launch pass waits for `requestIdleCallback` after `loadAll`, runs two scans
+  at a time, and nothing in hydration awaits it (pinned in
+  `subagentRebuild.test.ts`).
 
 ### The subagent transcript view
 
