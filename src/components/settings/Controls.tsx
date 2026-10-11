@@ -141,7 +141,7 @@ export function Toggle({ label, hint, value, onChange, mark, disabled }: {
           )}
           {label}
         </div>
-        {hint && <div className="mt-0.5 text-[12.5px] text-[var(--color-fg-dim)]">{hint}</div>}
+        {hint && <div className="mt-0.5 text-[12.5px] text-[var(--sidebar-muted)]">{hint}</div>}
       </div>
       <button
         role="switch" aria-checked={value} aria-disabled={disabled || undefined}
@@ -152,6 +152,7 @@ export function Toggle({ label, hint, value, onChange, mark, disabled }: {
           width: 36, height: 20, flexShrink: 0,
           borderRadius: 999, padding: 0, border: 0,
           background: value ? "var(--color-accent)" : "var(--color-bg-3)",
+          boxShadow: value ? undefined : "var(--sidebar-well-shadow)",
           transition: "background-color 150ms",
           cursor: disabled ? "default" : "pointer",
           display: "inline-block",
@@ -166,7 +167,7 @@ export function Toggle({ label, hint, value, onChange, mark, disabled }: {
             /* Knob picks up the on-accent ink when the track is filled —
                themes with a light accent (rosepine rose) need a dark knob
                there or knob and track melt together. */
-            background: value ? "var(--color-accent-fg)" : "#fff",
+            background: value ? "var(--color-accent-fg)" : "var(--ui-lift)",
             boxShadow: "0 1px 2px rgba(0,0,0,0.25)",
             /* Color cross-fades with the slide so the knob doesn't snap
                between its on/off inks mid-travel. */
@@ -185,14 +186,14 @@ export function ListField({ label, placeholder, value, onChange }: {
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[12px] font-medium text-[var(--color-fg-dim)]">{label}</span>
+      <span className="text-[12px] font-medium text-[var(--sidebar-muted)]">{label}</span>
       <AutoGrowTextarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={2}
         autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-        className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-[13px] leading-relaxed text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-faint)] focus:border-[var(--color-accent)]"
+        className="ui-sunk-input w-full rounded-[7px] px-3 py-2 font-mono text-[13px] leading-relaxed outline-none"
       />
     </label>
   );
@@ -228,7 +229,7 @@ export function SectionTitle({ title, badge, action }: {
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="flex items-center gap-2.5">
-        <h1 className="text-[20px] font-medium">{title}</h1>
+        <h1 className="text-[20px] font-semibold tracking-[-0.015em] text-[var(--sidebar-ink-strong)]">{title}</h1>
         {badge && (
           <span className="rounded bg-[var(--color-accent)]/15 px-1.5 py-0.5 text-[11px] uppercase tracking-wider text-[var(--color-accent)]">
             {badge}
@@ -249,7 +250,7 @@ export function Block({ first, id, className, children }: {
   return (
     <div
       id={id}
-      className={cn(!first && "border-t border-[var(--color-border-soft)] pt-6", className)}
+      className={cn(!first && "border-t border-[var(--sidebar-divider)] pt-6", className)}
     >
       {children}
     </div>

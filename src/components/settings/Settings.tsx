@@ -64,8 +64,8 @@ export function Settings() {
       {/* Left rail */}
       {/* data-testid: the app's own sidebar is an <aside> too and stays in the
           DOM behind this overlay, so e2e needs an unambiguous handle. */}
-      <aside data-testid="settings-rail" className="flex h-full flex-col overflow-hidden border-r border-[var(--color-border-soft)] bg-[var(--color-bg-1)] px-2 py-3">
-        <div className="mb-2 border-b border-[var(--color-border-soft)] pb-2">
+      <aside data-testid="settings-rail" className="flex h-full flex-col overflow-hidden border-r border-[var(--sidebar-border)] bg-[linear-gradient(180deg,var(--sidebar-bg-top),var(--sidebar-bg-bottom))] px-[8px] py-3">
+        <div className="mb-2 border-b border-[var(--sidebar-divider)] pb-2">
           <Button
             variant="ghost"
             className={cn(
@@ -129,11 +129,11 @@ export function Settings() {
         <RailItem icon={<SquareTerminal className="h-4 w-4" />} label={t("rail.cli")} tabId="cli"
           active={tab === "cli"} onClick={() => openSettings("cli")} />
 
-        <div className="mt-5 px-2 pb-1 text-[11.5px] uppercase tracking-wider text-[var(--color-fg-faint)]">
+        <div className="ui-eyebrow mt-5 block px-[10px] pb-1">
           {t("rail.projects")}
         </div>
         {projects.length === 0 && (
-          <div className="px-3 py-2 text-[12.5px] text-[var(--color-fg-faint)]">{t("rail.noProjects")}</div>
+          <div className="px-[10px] py-2 text-[12.5px] text-[var(--sidebar-faint)]">{t("rail.noProjects")}</div>
         )}
         {projects.map(p => {
           const isMulti = (p.type ?? "single") === "multi";
@@ -177,7 +177,7 @@ export function Settings() {
           {tab === "repositories" && (
             isRepoSelected
               ? <RepositorySection projectId={repoId!} />
-              : <div className="text-[13.5px] text-[var(--color-fg-faint)]">{t("rail.pickProject")}</div>
+              : <div className="text-[13.5px] text-[var(--sidebar-faint)]">{t("rail.pickProject")}</div>
           )}
         </div>
       </section>
@@ -215,12 +215,12 @@ function RailFooterVersion() {
     }
   }
   return (
-    <div className="mt-2 flex shrink-0 items-center gap-1 border-t border-[var(--color-border-soft)] pt-2">
+    <div className="mt-2 flex shrink-0 items-center gap-1 border-t border-[var(--sidebar-divider)] pt-2">
       <button
         data-testid="settings-version"
         onClick={() => useUI.getState().openChangelog()}
         title={t("rail.viewChangelog")}
-        className="min-w-0 flex-1 rounded-md px-2.5 py-1.5 text-left text-[11.5px] tabular-nums text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg-dim)]"
+        className="min-w-0 flex-1 rounded-[6px] px-2.5 py-1.5 text-left text-[11.5px] tabular-nums text-[var(--sidebar-faint)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--sidebar-muted)]"
       >
         Termic {version}
       </button>
@@ -233,7 +233,7 @@ function RailFooterVersion() {
         disabled={checking}
         title={t("rail.checkUpdates")}
         aria-label={t("rail.checkUpdates")}
-        className="shrink-0 rounded-md p-1.5 text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg-dim)] disabled:opacity-60"
+        className="ui-icon-btn disabled:opacity-60"
       >
         <RefreshCw className={cn("h-3.5 w-3.5", checking && "animate-spin")} />
       </button>
@@ -245,7 +245,7 @@ function RailFooterVersion() {
  *  the rail items' text column so it reads as a group break rather than a
  *  second header rule. */
 function RailDivider() {
-  return <div className="mx-2.5 my-2 h-px bg-[var(--color-border-soft)]" />;
+  return <div className="mx-2.5 my-2 h-px bg-[var(--sidebar-divider)]" />;
 }
 
 function RailItem({ icon, label, badge, tabId, active, onClick }: {
@@ -258,16 +258,17 @@ function RailItem({ icon, label, badge, tabId, active, onClick }: {
       // a rendered page. See e2e/specs/settings.e2e.ts.
       data-rail-item={tabId}
       onClick={onClick}
+      data-selected={active}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] font-medium",
-        active ? "bg-[var(--color-sel)] text-[var(--color-fg)]" : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
+        "ui-row h-[32px] w-full gap-[9px] px-[10px] text-[13px] font-medium",
+        !active && "text-[var(--sidebar-muted)] hover:text-[var(--sidebar-ink-strong)]",
       )}
     >
       <FolderGit2 className="hidden" /> {/* keep lucide tree-shake happy when we later add per-section icons */}
       {icon}
       <span className="truncate">{label}</span>
       {badge && (
-        <span className="ml-auto shrink-0 rounded bg-[var(--color-bg-3)] px-1 py-px text-[10px] uppercase tracking-wider text-[var(--color-fg-faint)]">
+        <span className="sidebar-badge ml-auto">
           {badge}
         </span>
       )}
