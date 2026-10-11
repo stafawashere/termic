@@ -194,6 +194,10 @@ export default {
       },
       view: {
         title: "Transcript view",
+        verbose: {
+          label: "Start verbose",
+          hint: "Open each tool call and its output instead of one summary line per run, as ctrl+o does. A view's own bar overrides these defaults for that agent.",
+        },
         thinking: {
           label: "Show thinking",
           hint: "The model's thinking between steps.",

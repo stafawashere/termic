@@ -90,6 +90,8 @@ export function SubagentSettingsBlock() {
   const setTruncateLines = usePrefs(s => s.setSubagentViewTruncateLines);
   const autoScroll = usePrefs(s => s.subagentViewAutoScroll);
   const setAutoScroll = usePrefs(s => s.setSubagentViewAutoScroll);
+  const verbose = usePrefs(s => s.subagentViewVerbose);
+  const setVerbose = usePrefs(s => s.setSubagentViewVerbose);
 
   // Same draft as the board limit above it: clearing the field to retype must
   // not store 0, which here would mean "never cut".
@@ -166,6 +168,14 @@ export function SubagentSettingsBlock() {
 
         <div className="flex flex-col gap-4">
           <div className="text-[13px] font-medium text-[var(--color-fg-dim)]">{t("tasks.subagents.view.title")}</div>
+          <div data-testid="subagent-setting-view-verbose">
+            <Toggle
+              label={t("tasks.subagents.view.verbose.label")}
+              hint={t("tasks.subagents.view.verbose.hint")}
+              value={verbose}
+              onChange={setVerbose}
+            />
+          </div>
           <div data-testid="subagent-setting-view-thinking">
             <Toggle
               label={t("tasks.subagents.view.thinking.label")}

@@ -871,10 +871,11 @@ describe("prefs: claude subagents", () => {
     expect(s.subagentRetention).toBe("session");
     expect(s.subagentAutoCollapse).toBe("never");
     expect(s.subagentViewShowThinking).toBe(true);
-    expect(s.subagentViewShowToolInputs).toBe(true);
-    expect(s.subagentViewShowToolOutputs).toBe(true);
-    expect(s.subagentViewTruncateLines).toBe(40);
+    expect(s.subagentViewShowToolInputs).toBe(false);
+    expect(s.subagentViewShowToolOutputs).toBe(false);
+    expect(s.subagentViewTruncateLines).toBe(100);
     expect(s.subagentViewAutoScroll).toBe(true);
+    expect(s.subagentViewVerbose).toBe(true);
   });
 
   it("reads persisted values back on load", async () => {
@@ -887,6 +888,7 @@ describe("prefs: claude subagents", () => {
     localStorage.setItem("subagentViewShowToolOutputs", "0");
     localStorage.setItem("subagentViewTruncateLines", "0");
     localStorage.setItem("subagentViewAutoScroll", "0");
+    localStorage.setItem("subagentViewVerbose", "0");
     const { usePrefs } = await import("./prefs");
     const s = usePrefs.getState();
 
@@ -899,6 +901,7 @@ describe("prefs: claude subagents", () => {
     expect(s.subagentViewShowToolOutputs).toBe(false);
     expect(s.subagentViewTruncateLines).toBe(0);
     expect(s.subagentViewAutoScroll).toBe(false);
+    expect(s.subagentViewVerbose).toBe(false);
   });
 
   it("falls back to the default for any value it does not recognise", async () => {
@@ -917,7 +920,7 @@ describe("prefs: claude subagents", () => {
     expect(s.subagentRetention).toBe("session");
     expect(s.subagentAutoCollapse).toBe("never");
     expect(s.subagentViewShowThinking).toBe(true);
-    expect(s.subagentViewTruncateLines).toBe(40);
+    expect(s.subagentViewTruncateLines).toBe(100);
     expect(s.subagentViewAutoScroll).toBe(true);
   });
 
@@ -927,7 +930,7 @@ describe("prefs: claude subagents", () => {
     const { usePrefs } = await import("./prefs");
 
     expect(usePrefs.getState().subagentTypeFilter).toEqual({ builtIn: true, custom: true, fork: true, workflow: true });
-    expect(usePrefs.getState().subagentViewTruncateLines).toBe(40);
+    expect(usePrefs.getState().subagentViewTruncateLines).toBe(100);
   });
 
   it("persists every setter and survives a reload", async () => {
@@ -1004,10 +1007,11 @@ describe("prefs: claude subagents", () => {
       s.setSubagentRetention("session");
       s.setSubagentAutoCollapse("never");
       s.setSubagentViewShowThinking(true);
-      s.setSubagentViewShowToolInputs(true);
-      s.setSubagentViewShowToolOutputs(true);
-      s.setSubagentViewTruncateLines(40);
+      s.setSubagentViewShowToolInputs(false);
+      s.setSubagentViewShowToolOutputs(false);
+      s.setSubagentViewTruncateLines(100);
       s.setSubagentViewAutoScroll(true);
+      s.setSubagentViewVerbose(true);
     });
 
     expect(notified).toBe(0);
@@ -1037,7 +1041,7 @@ describe("prefs: claude subagents", () => {
     usePrefs.getState().setSubagentViewTruncateLines(12);
     usePrefs.getState().setSubagentViewTruncateLines(-1);
 
-    expect(usePrefs.getState().subagentViewTruncateLines).toBe(40);
-    expect(localStorage.getItem("subagentViewTruncateLines")).toBe("40");
+    expect(usePrefs.getState().subagentViewTruncateLines).toBe(100);
+    expect(localStorage.getItem("subagentViewTruncateLines")).toBe("100");
   });
 });

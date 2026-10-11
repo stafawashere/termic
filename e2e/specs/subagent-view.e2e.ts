@@ -138,10 +138,25 @@ describe("subagent transcript view", () => {
     return browser.execute((task) => window.__termic!.useApp.getState().activeTab[task], taskId);
   }
 
+  // The cases below were written against folded groups with every input
+  // and output shown, so they pin those view defaults and forget any view
+  // a previous run's bar remembered.
+  async function setViewDefaults(written: boolean): Promise<void> {
+    await browser.execute((pinned) => {
+      const p = window.__termic!.usePrefs.getState();
+      p.setSubagentViewVerbose(!pinned);
+      p.setSubagentViewShowToolInputs(pinned);
+      p.setSubagentViewShowToolOutputs(pinned);
+      p.setSubagentViewTruncateLines(pinned ? 40 : 100);
+      localStorage.removeItem("subagentViewConfigs");
+    }, written);
+  }
+
   before(async function () {
     this.timeout(120_000);
     await waitForAppShell();
     await requireTermicApi();
+    await setViewDefaults(true);
     rmSync(CONFIG_DIR, { recursive: true, force: true });
 
     originalEnv = await browser.execute(async (cli, dir) => {
@@ -188,6 +203,7 @@ describe("subagent transcript view", () => {
   });
 
   after(async () => {
+    await setViewDefaults(false);
     if (originalEnv) {
       await browser.execute(async (cli, env) => {
         const t = window.__termic!;

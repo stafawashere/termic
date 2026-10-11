@@ -126,6 +126,7 @@ const LS_SUBAGENT_VIEW_SHOW_TOOL_INPUTS = "subagentViewShowToolInputs";
 const LS_SUBAGENT_VIEW_SHOW_TOOL_OUTPUTS = "subagentViewShowToolOutputs";
 const LS_SUBAGENT_VIEW_TRUNCATE_LINES = "subagentViewTruncateLines";
 const LS_SUBAGENT_VIEW_AUTO_SCROLL = "subagentViewAutoScroll";
+const LS_SUBAGENT_VIEW_VERBOSE = "subagentViewVerbose";
 const LS_BRANCH_AS_TASK_NAME = "useBranchAsTaskName";
 const LS_DOUBLE_SHIFT_MODE = "doubleShiftMode";
 const LS_CTRL_TAB_MODE = "ctrlTabMode";
@@ -635,6 +636,7 @@ interface PrefsState {
   /** Tool output longer than this many lines is cut; 0 never cuts. */
   subagentViewTruncateLines: number;
   subagentViewAutoScroll: boolean;
+  subagentViewVerbose: boolean;
   /** When the sidebar is collapsed to the 56px icon rail, hovering it slides
    *  the full sidebar in as a floating overlay (Arc-style peek). OFF by
    *  default (issue #312): every row in the rail already carries an instant
@@ -1035,6 +1037,7 @@ interface PrefsState {
   setSubagentViewShowToolOutputs: (v: boolean) => void;
   setSubagentViewTruncateLines: (v: number) => void;
   setSubagentViewAutoScroll: (v: boolean) => void;
+  setSubagentViewVerbose: (v: boolean) => void;
   setSidebarHoverReveal: (v: boolean) => void;
   setProfileSidebarWash: (v: boolean) => void;
   setFindInFilesRegex: (v: boolean) => void;
@@ -1298,10 +1301,11 @@ function readStoredPrefs() {
   const initialSubagentRetention = parseSubagentRetention(lsGet(LS_SUBAGENT_RETENTION, ""));
   const initialSubagentAutoCollapse = parseSubagentAutoCollapse(lsGet(LS_SUBAGENT_AUTO_COLLAPSE, ""));
   const initialSubagentViewShowThinking = parseStoredFlag(lsGetRaw(LS_SUBAGENT_VIEW_SHOW_THINKING), true);
-  const initialSubagentViewShowToolInputs = parseStoredFlag(lsGetRaw(LS_SUBAGENT_VIEW_SHOW_TOOL_INPUTS), true);
-  const initialSubagentViewShowToolOutputs = parseStoredFlag(lsGetRaw(LS_SUBAGENT_VIEW_SHOW_TOOL_OUTPUTS), true);
+  const initialSubagentViewShowToolInputs = parseStoredFlag(lsGetRaw(LS_SUBAGENT_VIEW_SHOW_TOOL_INPUTS), false);
+  const initialSubagentViewShowToolOutputs = parseStoredFlag(lsGetRaw(LS_SUBAGENT_VIEW_SHOW_TOOL_OUTPUTS), false);
   const initialSubagentViewTruncateLines = parseTruncateLines(lsGetRaw(LS_SUBAGENT_VIEW_TRUNCATE_LINES));
   const initialSubagentViewAutoScroll = parseStoredFlag(lsGetRaw(LS_SUBAGENT_VIEW_AUTO_SCROLL), true);
+  const initialSubagentViewVerbose = parseStoredFlag(lsGetRaw(LS_SUBAGENT_VIEW_VERBOSE), true);
   const initialSidebarHoverReveal = lsGetBool(LS_SIDEBAR_HOVER_REVEAL, false);
   const initialProfileSidebarWash = lsGetBool(LS_PROFILE_SIDEBAR_WASH, false);
   const initialFindInFilesRegex = lsGetBool(LS_FIND_IN_FILES_REGEX, false);
@@ -1397,6 +1401,7 @@ function readStoredPrefs() {
     subagentViewShowToolOutputs: initialSubagentViewShowToolOutputs,
     subagentViewTruncateLines: initialSubagentViewTruncateLines,
     subagentViewAutoScroll: initialSubagentViewAutoScroll,
+    subagentViewVerbose: initialSubagentViewVerbose,
     sidebarHoverReveal: initialSidebarHoverReveal,
     profileSidebarWash: initialProfileSidebarWash,
     findInFilesRegex: initialFindInFilesRegex,
@@ -1789,6 +1794,11 @@ export const usePrefs = create<PrefsState>(set => ({
     if (usePrefs.getState().subagentViewAutoScroll === v) return;
     try { localStorage.setItem(LS_SUBAGENT_VIEW_AUTO_SCROLL, v ? "1" : "0"); } catch {}
     set({ subagentViewAutoScroll: v });
+  },
+  setSubagentViewVerbose: (v) => {
+    if (usePrefs.getState().subagentViewVerbose === v) return;
+    try { localStorage.setItem(LS_SUBAGENT_VIEW_VERBOSE, v ? "1" : "0"); } catch {}
+    set({ subagentViewVerbose: v });
   },
   setSidebarHoverReveal: (v) => {
     try { localStorage.setItem(LS_SIDEBAR_HOVER_REVEAL, v ? "1" : "0"); } catch {}

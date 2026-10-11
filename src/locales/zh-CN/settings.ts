@@ -193,6 +193,10 @@ export default {
       },
       view: {
         title: "记录视图",
+        verbose: {
+          label: "默认详细显示",
+          hint: "展开每个工具调用及其输出，而不是每段只显示一行摘要，效果同 ctrl+o。视图自己的设置栏会为该智能体覆盖这些默认值。",
+        },
         thinking: {
           label: "显示思考过程",
           hint: "模型在各步骤之间的思考。",

@@ -1291,7 +1291,7 @@ describe("subagent settings (bear traps 5, 8)", () => {
       case 2: prefs.setSubagentRetention(on ? "session" : "hour"); break;
       case 3: prefs.setSubagentAutoCollapse(on ? "never" : "always"); break;
       case 4: prefs.setSubagentViewShowThinking(on); break;
-      case 5: prefs.setSubagentViewShowToolOutputs(on); break;
+      case 5: prefs.setSubagentViewShowToolOutputs(!on); break;
       case 6: prefs.setSubagentViewTruncateLines(on ? 40 : 3); break;
       case 7: prefs.setSubagentViewAutoScroll(on); break;
     }

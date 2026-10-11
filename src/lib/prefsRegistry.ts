@@ -114,6 +114,8 @@ export const PREF_KEYS: readonly PrefKey[] = [
   { key: "subagentViewShowToolOutputs", scoped: false, class: "sync" },
   { key: "subagentViewTruncateLines", scoped: false, class: "sync" },
   { key: "subagentViewAutoScroll", scoped: false, class: "sync" },
+  { key: "subagentViewVerbose", scoped: false, class: "sync" },
+  { key: "subagentViewConfigs", scoped: false, class: "local", reason: "each subagent view's own toggles, keyed by session and agent ids on this machine" },
   { key: "openWithApp", scoped: false, class: "local", reason: "names an app installed on this machine" },
   { key: "findInFilesRegex", scoped: false, class: "local", reason: "last-used toggle in the find-in-files bar" },
   { key: "findInFilesMatchCase", scoped: false, class: "local", reason: "last-used toggle in the find-in-files bar" },

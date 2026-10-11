@@ -31,7 +31,7 @@ export type SubagentAutoCollapse = "never" | "allFinished" | "always";
 
 export const SUBAGENT_AUTO_COLLAPSES: readonly SubagentAutoCollapse[] = ["never", "allFinished", "always"];
 
-export const DEFAULT_SUBAGENT_VIEW_TRUNCATE_LINES = 40;
+export const DEFAULT_SUBAGENT_VIEW_TRUNCATE_LINES = 100;
 
 /** How long a row that ended stays, or null for as long as the session. */
 export function retentionWindowMs(retention: SubagentRetention): number | null {

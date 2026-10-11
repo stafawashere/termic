@@ -37,6 +37,9 @@ import { useTerminalCell } from "./subagentView/useTerminalCell";
 import { Footer, type FooterState } from "./subagentView/Footer";
 import { Header } from "./subagentView/Header";
 import { BottomBar } from "./subagentView/BottomBar";
+import {
+  readViewOverrides, resolveViewConfig, subagentViewKey, writeViewOverrides, type SubagentViewOverrides,
+} from "@/lib/subagentViewConfig";
 import { GLYPH } from "./subagentView/glyphs";
 
 const ESTIMATED_ROW_PX = 28;
@@ -71,14 +74,48 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   const [layoutVersion, setLayoutVersion] = useState(0);
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
   const [unfoldedGroups, setUnfoldedGroups] = useState<ReadonlySet<number>>(() => new Set());
-  const [verbose, setVerbose] = useState(false);
 
   const subagentsEnabled = usePrefs(s => s.subagentsEnabled);
-  const showThinking = usePrefs(s => s.subagentViewShowThinking);
-  const showToolInputs = usePrefs(s => s.subagentViewShowToolInputs);
-  const showToolOutputs = usePrefs(s => s.subagentViewShowToolOutputs);
-  const maxOutputLines = usePrefs(s => s.subagentViewTruncateLines);
-  const autoScroll = usePrefs(s => s.subagentViewAutoScroll);
+  const defaultVerbose = usePrefs(s => s.subagentViewVerbose);
+  const defaultShowThinking = usePrefs(s => s.subagentViewShowThinking);
+  const defaultShowToolInputs = usePrefs(s => s.subagentViewShowToolInputs);
+  const defaultShowToolOutputs = usePrefs(s => s.subagentViewShowToolOutputs);
+  const defaultTruncateLines = usePrefs(s => s.subagentViewTruncateLines);
+  const defaultAutoScroll = usePrefs(s => s.subagentViewAutoScroll);
+
+  // Settings gives the defaults; what this agent's bar changed is kept per
+  // agent and comes back on the next load.
+  const viewKey = subagentViewKey(tab.sessionId, tab.subagentAgentId);
+  const [stored, setStored] = useState(() => ({ key: viewKey, overrides: readViewOverrides(viewKey) }));
+  const overrides = stored.key === viewKey ? stored.overrides : readViewOverrides(viewKey);
+  const viewConfig = useMemo(
+    () => resolveViewConfig(
+      {
+        verbose: defaultVerbose,
+        showThinking: defaultShowThinking,
+        showToolInputs: defaultShowToolInputs,
+        showToolOutputs: defaultShowToolOutputs,
+        truncateLines: defaultTruncateLines,
+        autoScroll: defaultAutoScroll,
+      },
+      overrides,
+    ),
+    [defaultVerbose, defaultShowThinking, defaultShowToolInputs, defaultShowToolOutputs, defaultTruncateLines, defaultAutoScroll, overrides],
+  );
+  const { verbose, showThinking, showToolInputs, showToolOutputs, autoScroll } = viewConfig;
+  const maxOutputLines = viewConfig.truncateLines;
+
+  useEffect(() => {
+    setStored(current => (current.key === viewKey ? current : { key: viewKey, overrides: readViewOverrides(viewKey) }));
+  }, [viewKey]);
+
+  const changeView = useCallback((patch: SubagentViewOverrides) => {
+    setStored(current => {
+      const base = current.key === viewKey ? current.overrides : readViewOverrides(viewKey);
+      return { key: viewKey, overrides: { ...base, ...patch } };
+    });
+    writeViewOverrides(viewKey, patch);
+  }, [viewKey]);
   const terminalFontId = usePrefs(s => s.terminalFontId);
   const terminalFontSize = usePrefs(s => s.terminalFontSize);
   const terminalLetterSpacing = usePrefs(s => s.terminalLetterSpacing);
@@ -312,9 +349,9 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   // ctrl+o, as in Claude Code: every group unfolds into its calls, or folds
   // back to its summary line.
   const toggleVerbose = useCallback(() => {
-    setVerbose(current => !current);
+    changeView({ verbose: !verbose });
     setUnfoldedGroups(new Set());
-  }, []);
+  }, [changeView, verbose]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!isSubagentVerboseChord(event)) return;
@@ -368,7 +405,7 @@ export function SubagentPane({ task, tab }: { task: Task; tab: SubagentTab }) {
   const endsAfterStart = endedAt !== null && endedAt > startedAt;
   const durationMs = endsAfterStart ? endedAt - startedAt : null;
 
-  const modeLine = <BottomBar verbose={verbose} onToggleVerbose={toggleVerbose} t={t} />;
+  const modeLine = <BottomBar config={viewConfig} onChange={changeView} onToggleVerbose={toggleVerbose} t={t} />;
 
   const goneTitle =
     status === "expired" ? t("subagentView.expired")

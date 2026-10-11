@@ -464,10 +464,14 @@ subagent is something a claude task does. Every control applies live.
   session changes.
 - **Scope.** The four row settings are profile-scoped (`scoped()` keys); the
   view options below are global.
-- **View options.** `subagentViewShowThinking`, `subagentViewShowToolInputs`,
-  `subagentViewShowToolOutputs`, `subagentViewTruncateLines` (0 never cuts)
-  and `subagentViewAutoScroll` redraw an open transcript view from the
-  entries it already holds, never by reading the file again.
+- **View options.** `subagentViewVerbose`, `subagentViewShowThinking`,
+  `subagentViewShowToolInputs`, `subagentViewShowToolOutputs`,
+  `subagentViewTruncateLines` (0 never cuts) and `subagentViewAutoScroll`
+  are the DEFAULTS for every transcript view: verbose on, thinking on,
+  inputs off, outputs off, cut at 100 lines, follow on. A view's bottom
+  bar overrides them for that agent only (see below). Either redraws an
+  open view from the entries it already holds, never by reading the file
+  again.
 
 ### The subagent transcript view
 
@@ -594,11 +598,14 @@ terminal tabs are durable.
   (shift+tab to cycle)"), between the spinner row and the agent list with
   a blank row on each side, one dim line two cells in, never wrapped,
   holds the view's settings as clickable toggles (`subagentView/BottomBar.tsx`):
-  verbose (ctrl+o's state, this pane only), thinking, tool inputs, tool
-  outputs, the output cap (stepping 20, 40, 100, off through
-  `nextTruncateLines`) and follow. Each writes the same pref as Settings,
-  so the two never disagree, and an "on" value is in claude's suggestion
-  colour.
+  verbose (ctrl+o flips it too), thinking, tool inputs, tool outputs, the
+  output cap (stepping 20, 40, 100, off through `nextTruncateLines`) and
+  follow. An "on" value is in claude's suggestion colour. A toggle changes
+  that agent's view only: `src/lib/subagentViewConfig.ts` keeps just the
+  fields the bar changed, per `sessionId/agentId`, in the local
+  `subagentViewConfigs` key (the 200 most recently changed views), and
+  lays them over the Settings defaults, so a default changed later still
+  reaches every toggle a view never touched.
 - **Windowed by hand.** Only rows near the viewport are mounted, measured in
   a layout effect so a corrected height lands before paint. Row keys are
   entry indices in the whole transcript, so a page loaded above keeps every
