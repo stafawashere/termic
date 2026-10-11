@@ -935,3 +935,25 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   border: 1px solid var(--color-border-soft);
 }
 
+/* The subagent view's pending tool call: its dot blinks on and off the way
+   Claude Code's does, in two hard steps rather than a fade. */
+@keyframes termic-cli-blink {
+  50% { opacity: 0; }
+}
+.termic-cli-blink {
+  animation: termic-cli-blink 1s step-end infinite;
+}
+
+/* The subagent view's working glyph: a one-line window over a vertical strip
+   of frames, stepped one line per frame. The strip is ten lines tall, so
+   -100% of it is ten lines and steps(10) lands on each frame once. */
+@keyframes termic-cli-spinner {
+  to { transform: translateY(-100%); }
+}
+.termic-cli-spinner {
+  animation: termic-cli-spinner 1.2s steps(10) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .termic-cli-blink,
+  .termic-cli-spinner { animation: none; }
+}

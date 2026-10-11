@@ -467,8 +467,50 @@ pill pins it like any preview tab. The `SubagentTab` carries the parent tab
 id, session id and agent id, never a path, and is never persisted: only
 terminal tabs are durable.
 
-- **No terminal.** `SubagentPane.tsx` is a lazy React list styled after the
-  Claude TUI. It mounts no xterm and creates no WebGL context.
+- **No terminal, but it reads as one.** `SubagentPane.tsx` is a lazy React
+  list drawn the way Claude Code draws its own transcript, so flipping from
+  the claude tab to a subagent tab looks like the same screen. It mounts no
+  xterm and creates no WebGL context. The font family and size are the
+  terminal's (`currentTerminalStack()`, `terminalFontSize`) at a 1.2 line
+  height, on `--color-bg` like the terminal host, and every colour is a
+  theme token.
+- **Columns in `ch`.** Each entry has a two-cell gutter for its glyph, and a
+  tool result hangs from a hook two cells in with its text from cell five,
+  as in Claude Code. Widths are `ch`, never px, so the columns hold in any
+  monospace font even when a glyph falls back to another font. Glyphs live
+  by code point in `subagentView/glyphs.ts`. The e2e spec measures both
+  offsets and that every part uses one font family.
+- **A tool result draws under its call.** `pairToolCalls`
+  (`lib/subagentTranscript.ts`) matches results to calls by `toolUseId`, so
+  the result is not a row of its own and `data-entry-count` counts calls,
+  not calls plus results. The call's dot blinks dim while pending (a CSS
+  `steps()` animation), then turns `--color-ok` or `--color-err`. A result
+  whose call is on a page not loaded yet still draws alone.
+  `lib/subagentCliView.ts` heads a call the way Claude prints it
+  (`Read(path)`, `Update(path)`, `Search(pattern: "x")`, `Update Todos`,
+  `server - tool (MCP)`, paths inside the worktree relative) and summarises
+  the result: lines read, files found, an Edit's line diff on tinted rows,
+  the TodoWrite checklist, an error in red, or the first three output lines
+  with a dim "+N lines" that unfolds on click. Tool labels stay English in
+  every locale, as Claude Code's do.
+- **Markdown as React text.** Assistant text goes through the subset in
+  `lib/subagentMarkdown.ts` (bold, italic, inline code, headings, lists,
+  quotes, fences) into React elements. There is no HTML path, and a unit
+  test renders `<script>` and raw tags and checks they come out escaped.
+- **Thinking folds.** A thinking entry draws as "Thought for Ns" (from the
+  line's `thinkingDurationMs`) and unfolds on click.
+- **Header and footer.** A rounded box with the star, the record's
+  description (else its agent type) and a dim line of agent type, model,
+  workflow phase and read-only replaces the old toolbar. Under the scroller
+  the footer reads the subagent record by primitive selectors: while
+  running, an orange glyph cycling through a strip of frames on a CSS
+  `steps()` animation plus "Working... (Ns, output tokens)", where only the
+  seconds tick, from a 1 s interval that exists only while the agent runs
+  and the pane is mounted; once stopped, "Done (N tool uses, tokens,
+  duration)", red "Failed", or "Interrupted". Counts and tokens come from
+  the entries the view holds, so before every earlier page is loaded they
+  cover the newest part only; times come from the transcript's own
+  timestamps when entry 0 is held, else from the record.
 - **Windowed by hand.** Only rows near the viewport are mounted, measured in
   a layout effect so a corrected height lands before paint. Row keys are
   entry indices in the whole transcript, so a page loaded above keeps every
@@ -476,8 +518,11 @@ terminal tabs are durable.
 - **Paged and tailed.** The view opens the host tail first and then reads
   the last 500 entries, so the page always reaches at least as far as the
   first live batch, and merges batches by their `start` index. "Load
-  earlier" prepends the page above and holds the entry being read in place;
-  the button goes once entry 0 is loaded.
+  earlier" is a dim line just above the scroller; it prepends the page
+  above and holds the entry being read in place, and goes once entry 0 is
+  loaded. It sits outside the scroller on purpose: inside it, the line
+  vanishing as entry 0 arrives moved the anchored entry by about 7px in
+  the e2e anchor case, and outside it the case holds within 2px.
 - **Follows only at the bottom.** `shouldFollowTail` in
   `lib/subagentTranscript.ts` decides; scrolling up pauses following and
   shows "Jump to latest".

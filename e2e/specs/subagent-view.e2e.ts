@@ -60,6 +60,7 @@ describe("subagent transcript view", () => {
   let parentTabId!: string;
   let sessionId!: string;
   let subagentsDir!: string;
+  let taskPath!: string;
   let archived = false;
   let originalEnv: Record<string, string> | null = null;
 
@@ -178,6 +179,7 @@ describe("subagent transcript view", () => {
     }, taskId);
     parentTabId = facts.tabId;
     sessionId = facts.sessionId;
+    taskPath = facts.taskPath;
     const slug = facts.taskPath.replace(/[^A-Za-z0-9]/g, "-");
     subagentsDir = path.join(CONFIG_DIR, "projects", slug, sessionId, "subagents");
 
@@ -210,12 +212,14 @@ describe("subagent transcript view", () => {
     const facts = (await paneFacts(agentId))!;
     expect(facts.visible).toBe(true);
     expect(facts.hasTerminal).toBe(false);
+    // The result answers the call by id, so it hangs under the call's row
+    // instead of drawing as a row of its own.
     expect(facts.kinds).toEqual([
-      "userText", "thinking", "redactedThinking", "toolUse", "toolResult", "assistantText",
+      "userText", "thinking", "redactedThinking", "toolUse", "assistantText",
     ]);
     expect(facts.texts[3]).toContain("Read");
     expect(facts.texts[3]).toContain("/Users/u/dev/acme/README.md");
-    expect(facts.texts[4]).toContain("hello from acme");
+    expect(facts.texts[3]).toContain("Read 1 line");
     expect(facts.texts[2]).not.toContain("opaque");
 
     const tabs = await subagentTabs();
@@ -237,7 +241,7 @@ describe("subagent transcript view", () => {
       interval: 50,
       timeoutMsg: "the appended line never reached the open view",
     });
-    expect((await paneFacts(agentId))!.count).toBe(7);
+    expect((await paneFacts(agentId))!.count).toBe(6);
     await snap("subagent-view-live-tail.png");
   });
 
@@ -364,6 +368,180 @@ describe("subagent transcript view", () => {
     expect(facts.count).toBe(read);
     expect(facts.mounted).toBeGreaterThan(0);
     await snap("subagent-view-expired.png");
+  });
+
+  it("draws the transcript the way Claude Code's terminal does", async function () {
+    this.timeout(90_000);
+    const agentId = "e2ecli1";
+    const pane = paneSelector(agentId);
+    const startedAt = Date.now() - 42_000;
+    const at = (second: number) => new Date(startedAt + second * 1000).toISOString();
+    const config = `${taskPath}/src/config.ts`;
+
+    const call = (second: number, id: string, name: string, input: unknown) => line({
+      type: "assistant",
+      timestamp: at(second),
+      message: {
+        model: "claude-test-model",
+        usage: { output_tokens: 400 },
+        content: [{ type: "tool_use", id, name, input }],
+        stop_reason: "tool_use",
+      },
+    });
+    const result = (second: number, id: string, content: string, isError = false) => line({
+      type: "user",
+      timestamp: at(second),
+      message: { content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }] },
+    });
+    const said = (second: number, text: string) => line({
+      type: "assistant",
+      timestamp: at(second),
+      message: { model: "claude-test-model", usage: { output_tokens: 300 }, content: [{ type: "text", text }], stop_reason: "end_turn" },
+    });
+    const readOutput = Array.from({ length: 12 }, (_, n) => `${String(n + 1).padStart(6)}\u2192line ${n + 1}`).join("\n");
+    const buildOutput = ["> acme@1.0.0 build", "> vite build", ...Array.from({ length: 38 }, (_, n) => `built chunk ${n}`)].join("\n");
+    const editSnippet = [
+      `The file ${config} has been updated. Here's the result of running \`cat -n\` on a snippet of the edited file:`,
+      "    11\t// acme config",
+      "    12\tconst port = 4000",
+      "    13\tconst host = \"localhost\"",
+    ].join("\n");
+
+    writeTranscript(agentId, [
+      line({ type: "user", timestamp: at(0), message: { role: "user", content: "build the acme bundle" } }),
+      line({
+        type: "assistant",
+        timestamp: at(4),
+        thinkingDurationMs: 4000,
+        message: { content: [{ type: "thinking", thinking: "the port lives in src/config.ts" }] },
+      }),
+      said(5, "I'll start by **reading** the config.\n\n- check `port`\n- run the build"),
+      call(6, "toolu_read", "Read", { file_path: config }),
+      result(7, "toolu_read", readOutput),
+      call(8, "toolu_build", "Bash", { command: "npm run build" }),
+    ]);
+    await startAgent(agentId, "general-purpose");
+    await openFromRow(agentId);
+
+    const toolStates = () => browser.execute((sel) =>
+      [...document.querySelectorAll(`${sel} [data-testid="subagent-tool-state"]`)]
+        .map(el => el.getAttribute("data-tool-state")), pane);
+    expect(await toolStates()).toEqual(["ok", "pending"]);
+
+    const footer = `${pane} [data-testid="subagent-footer"]`;
+    await waitVisible(footer, 5_000);
+    expect(await browser.execute((sel) => document.querySelector(sel)?.getAttribute("data-footer-state"), footer)).toBe("running");
+    const footerText = (await textOf(footer)).replace(/\s+/g, " ");
+    expect(footerText).toMatch(/Working\u2026 \(\d+s \u00B7 \u2193 1\.1k tokens\)/);
+    expect(await textOf(`${pane} [data-testid="subagent-header"]`)).toContain("claude-test-model");
+
+    const thinking = `${pane} [data-testid="subagent-thinking-toggle"]`;
+    expect(await textOf(thinking)).toContain("Thought for 4s");
+
+    // Every column lines up in the terminal's font: the hook sits two cells
+    // in from the dot and its text five, as in Claude Code.
+    const layout = await browser.execute((sel) => {
+      const root = document.querySelector<HTMLElement>(sel)!;
+      const dot = root.querySelector<HTMLElement>('[data-testid="subagent-tool-state"]')!;
+      const gutter = dot.parentElement!;
+      const hookBlock = root.querySelector<HTMLElement>('[data-testid="subagent-tool-result"]')!;
+      const hook = hookBlock.firstElementChild as HTMLElement;
+      const hookText = hookBlock.lastElementChild as HTMLElement;
+      const cell = gutter.getBoundingClientRect().width / 2;
+      const fonts = [root, dot, hookText, root.querySelector<HTMLElement>('[data-testid="subagent-tool-name"]')!]
+        .map(el => getComputedStyle(el).fontFamily);
+      return {
+        cell,
+        hookOffset: hook.getBoundingClientRect().left - gutter.getBoundingClientRect().left,
+        textOffset: hookText.getBoundingClientRect().left - gutter.getBoundingClientRect().left,
+        fonts,
+        blinking: getComputedStyle(root.querySelectorAll<HTMLElement>('[data-testid="subagent-tool-state"]')[1]).animationName,
+      };
+    }, pane);
+    expect(layout.cell).toBeGreaterThan(4);
+    expect(Math.abs(layout.hookOffset - 2 * layout.cell)).toBeLessThanOrEqual(1);
+    expect(Math.abs(layout.textOffset - 5 * layout.cell)).toBeLessThanOrEqual(1);
+    expect(new Set(layout.fonts).size).toBe(1);
+    expect(layout.blinking).toBe("termic-cli-blink");
+    await snap("subagent-cli-running.png");
+
+    await clickWhenVisible(thinking);
+    await browser.waitUntil(async () => (await textOf(`${pane}`)).includes("the port lives in src/config.ts"), {
+      timeout: 5_000,
+      timeoutMsg: "clicking the thinking line never showed the thought",
+    });
+    await snap("subagent-cli-thinking-open.png");
+
+    appendTranscript(agentId, result(20, "toolu_build", buildOutput));
+    await browser.waitUntil(async () => (await toolStates()).join() === "ok,ok", {
+      timeout: 10_000,
+      timeoutMsg: "the build result never reached its call",
+    });
+    const buildRowText = () => browser.execute((sel) =>
+      [...document.querySelectorAll<HTMLElement>(`${sel} [data-testid="subagent-entry"]`)]
+        .map(el => el.innerText)
+        .find(text => text.includes("npm run build")) ?? "", pane);
+    expect(await buildRowText()).toContain("+37 lines");
+    await snap("subagent-cli-bash-done.png");
+
+    appendTranscript(agentId, call(22, "toolu_edit", "Edit", {
+      file_path: config,
+      old_string: "const port = 3000",
+      new_string: "const port = 4000\nconst host = \"localhost\"",
+    }));
+    appendTranscript(agentId, result(23, "toolu_edit", editSnippet));
+    appendTranscript(agentId, call(24, "toolu_todo", "TodoWrite", { todos: [
+      { content: "Read config", status: "completed", activeForm: "Reading config" },
+      { content: "Change the port", status: "in_progress", activeForm: "Changing the port" },
+      { content: "Run the build", status: "pending", activeForm: "Running the build" },
+    ] }));
+    appendTranscript(agentId, result(25, "toolu_todo", "Todos have been modified successfully."));
+    appendTranscript(agentId, call(26, "toolu_test", "Bash", { command: "npm test" }));
+    appendTranscript(agentId, result(30, "toolu_test", "Error: 2 tests failed\n  at acme.test.ts:12", true));
+    appendTranscript(agentId, said(31, "The port is **4000** now; two tests still fail."));
+
+    await browser.waitUntil(async () => (await toolStates()).length === 5, {
+      timeout: 10_000,
+      timeoutMsg: `the edit, todo and test calls never arrived: ${JSON.stringify(await toolStates())}`,
+    });
+    expect(await toolStates()).toEqual(["ok", "ok", "ok", "ok", "error"]);
+
+    const tools = await browser.execute((sel) => {
+      const root = document.querySelector(sel)!;
+      const all = (id: string, attr: string) =>
+        [...root.querySelectorAll(`[data-testid="${id}"]`)].map(el => [el.getAttribute(attr), (el as HTMLElement).innerText]);
+      const names = [...root.querySelectorAll('[data-testid="subagent-tool-name"]')].map(el => (el as HTMLElement).innerText);
+      const args = [...root.querySelectorAll('[data-testid="subagent-tool-input"]')].map(el => (el as HTMLElement).innerText);
+      const removed = root.querySelector('[data-diff="remove"]') as HTMLElement | null;
+      return {
+        names,
+        args,
+        diff: all("subagent-diff-line", "data-diff"),
+        todos: all("subagent-todo", "data-todo-status"),
+        removedTint: removed ? getComputedStyle(removed).backgroundColor : null,
+        doneStrike: getComputedStyle(root.querySelector('[data-todo-status="completed"] span:last-child')!).textDecorationLine,
+      };
+    }, pane);
+    expect(tools.names).toEqual(["Read", "Bash", "Update", "Update Todos", "Bash"]);
+    expect(tools.args).toEqual(["(src/config.ts)", "(npm run build)", "(src/config.ts)", "(npm test)"]);
+    expect(tools.diff.map(([kind]) => kind)).toEqual(["remove", "add", "add"]);
+    expect(tools.diff[0][1]).toContain("12");
+    expect(tools.todos.map(([status]) => status)).toEqual(["completed", "in_progress", "pending"]);
+    expect(tools.removedTint).not.toBe("rgba(0, 0, 0, 0)");
+    expect(tools.doneStrike).toBe("line-through");
+    expect(await textOf(pane)).toContain("Updated src/config.ts with 2 additions and 1 removal");
+    expect(await textOf(pane)).toContain("Error: 2 tests failed");
+    await snap("subagent-cli-tools.png");
+
+    await parentToFront();
+    await submitToAgent(taskId, `#subagent stop ${sessionId} ${agentId} general-purpose`);
+    await openFromRow(agentId);
+    await browser.waitUntil(
+      async () => browser.execute((sel) => document.querySelector(sel)?.getAttribute("data-footer-state"), footer).then(state => state === "done"),
+      { timeout: 15_000, timeoutMsg: "the footer never turned to done after the stop" },
+    );
+    expect(await textOf(footer)).toContain("Done (5 tool uses \u00B7 2.6k tokens \u00B7 31s)");
+    await snap("subagent-cli-done.png");
   });
 
   it("closes every subagent view when the task is archived", async function () {
