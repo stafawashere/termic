@@ -13,7 +13,7 @@ import type {
   ForgeCliStatus, ForgeProvider, PrLookup, MemberPrLookup, PrComment, IssueLookup, IssueScope, AgentHookStatus, HookPlan,
   ProfileView, ProfilesView, ProfileDeletePreview, AgentAccountsView, ExternalAppInfo,
   SyncStatus, SyncConnectInfo, SyncChange, SyncPrefsSnapshot, SyncRunResult,
-  SubagentSummary, TranscriptPage, SubagentTailEvent, SubagentWatchOpened,
+  SubagentSummary, WorkflowRunInfo, TranscriptPage, SubagentTailEvent, SubagentWatchOpened,
 } from "./types";
 import type { CustomThemeFile } from "./customTheme";
 import {
@@ -391,6 +391,10 @@ export const agentContextDevin = (agentId: string, account: string | null, sessi
  *  the host from the task and the tab's session id; none is passed in. */
 export const subagentList = (taskId: string, sessionId: string, limit?: number) =>
   invoke<SubagentSummary[]>("subagent_list", { taskId, sessionId, limit: limit ?? null });
+
+/** Name and ordered phase titles of each workflow run in one claude session. */
+export const subagentWorkflowRuns = (taskId: string, sessionId: string) =>
+  invoke<WorkflowRunInfo[]>("subagent_workflow_runs", { taskId, sessionId });
 
 /** One page (up to 500 entries) of a subagent's transcript. Pass the previous
  *  page's `start` as `before` to load the entries above it. */

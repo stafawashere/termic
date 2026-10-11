@@ -2154,6 +2154,15 @@ export interface SubagentSummary extends SubagentMeta {
   outcome: SubagentOutcome;
 }
 
+/** What a run's `workflows/wf_<run>.json` names. Both are null while the
+ *  file is missing, too large or unreadable. */
+export interface WorkflowRunInfo {
+  runId: string;
+  name: string | null;
+  /** Phase titles in the order the run declares them. */
+  phases: string[] | null;
+}
+
 export type TranscriptEntryKind =
   | "userText" | "assistantText" | "thinking" | "redactedThinking" | "toolUse" | "toolResult" | "error"
   | "compactBoundary";

@@ -15,10 +15,29 @@ import { builtinBaseId } from "@/lib/agents";
 import type { SubagentSummary } from "@/lib/types";
 import { subagentsEnabled } from "@/lib/subagentGate";
 import { useApp } from "@/store/app";
-import { useSubagents } from "@/store/subagents";
+import { refreshWorkflowRuns, useSubagents } from "@/store/subagents";
 
-/** How many of a session's newest transcripts a rebuild reads. */
+/** How many of a session's newest plain transcripts a rebuild reads. */
 export const SUBAGENT_HISTORY_CAP = 50;
+
+/** Workflow agents are capped apart from plain ones: a single run can start
+ *  hundreds, and a rebuild that kept only the newest 50 would show a run with
+ *  most of its agents missing. */
+export const WORKFLOW_HISTORY_CAP = 500;
+
+/** The newest of each kind, from a listing that is already newest first. */
+function withinHistoryCaps(summaries: SubagentSummary[]): SubagentSummary[] {
+  let plainKept = 0;
+  let workflowKept = 0;
+  return summaries.filter(summary => {
+    if (summary.isWorkflow) {
+      workflowKept++;
+      return workflowKept <= WORKFLOW_HISTORY_CAP;
+    }
+    plainKept++;
+    return plainKept <= SUBAGENT_HISTORY_CAP;
+  });
+}
 
 export const LAUNCH_REBUILD_CONCURRENCY = 2;
 
@@ -75,7 +94,8 @@ export async function rebuildSubagentsForTab(
   const parentStopped = before.parentLive && !after.parentLive;
   if (sessionMoved || parentStopped) return false;
 
-  useSubagents.getState().mergeScanned(taskId, tabId, sessionId, summaries, after.parentLive);
+  useSubagents.getState().mergeScanned(taskId, tabId, sessionId, withinHistoryCaps(summaries), after.parentLive);
+  void refreshWorkflowRuns(tabId);
   return true;
 }
 

@@ -9,6 +9,7 @@ vi.mock("@/lib/ipc", () => ({
   taskSetTabs: vi.fn().mockResolvedValue(undefined),
   taskSetTabSessionId: vi.fn().mockResolvedValue(undefined),
   subagentList: vi.fn().mockResolvedValue([]),
+  subagentWorkflowRuns: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("@/lib/tabFocus", () => ({
   focusTerminalTab: vi.fn(),
@@ -20,7 +21,7 @@ import * as ipc from "@/lib/ipc";
 import { useApp } from "@/store/app";
 import { useSubagents, receiveSubagentEvent, selectTabSubagents } from "@/store/subagents";
 import {
-  SUBAGENT_HISTORY_CAP, LAUNCH_REBUILD_CONCURRENCY, rebuildSubagentsForTab, runLaunchRebuild,
+  SUBAGENT_HISTORY_CAP, WORKFLOW_HISTORY_CAP, LAUNCH_REBUILD_CONCURRENCY, rebuildSubagentsForTab, runLaunchRebuild,
 } from "@/lib/subagentRebuild";
 import type { SubagentSummary, Tab, Task, PersistedTab } from "@/lib/types";
 
@@ -92,6 +93,7 @@ beforeEach(() => {
   useSubagents.setState({ byTab: {} });
   useApp.setState({ tabs: {}, tasks: [], agents: [] });
   vi.mocked(ipc.subagentList).mockReset().mockResolvedValue([]);
+  vi.mocked(ipc.subagentWorkflowRuns).mockReset().mockResolvedValue([]);
 });
 
 describe("rebuildSubagentsForTab", () => {
@@ -229,6 +231,65 @@ describe("rebuildSubagentsForTab", () => {
 
     expect(states()).toEqual({ [AGENT_B]: "failed" });
     expect(useSubagents.getState().byTab[TAB].sessionId).toBe(OTHER_SESSION);
+  });
+});
+
+describe("workflow history", () => {
+  function workflowListing(count: number): SubagentSummary[] {
+    return Array.from({ length: count }, (_, index) => summary(`aWf${String(index).padStart(4, "0")}`, {
+      agentType: "workflow-subagent",
+      isWorkflow: true,
+      workflowRunId: "wf_big",
+      workflowPhase: index % 2 === 0 ? "Build" : null,
+      mtimeMs: 100_000 - index,
+      outcome: "done",
+    }));
+  }
+
+  function plainListing(count: number): SubagentSummary[] {
+    return Array.from({ length: count }, (_, index) =>
+      summary(`aPlain${String(index).padStart(3, "0")}`, { mtimeMs: 200_000 - index, outcome: "done" }));
+  }
+
+  it("a 300-agent run survives a rebuild intact beside a full plain history", async () => {
+    setTab();
+    const workflow = workflowListing(300);
+    vi.mocked(ipc.subagentList).mockResolvedValue([...plainListing(SUBAGENT_HISTORY_CAP), ...workflow]);
+
+    expect(await rebuildSubagentsForTab(TASK, TAB, SESSION)).toBe(true);
+    const records = selectTabSubagents(TAB)(useSubagents.getState());
+    const workflowIds = records.filter(record => record.isWorkflow).map(record => record.agentId).sort();
+
+    expect(WORKFLOW_HISTORY_CAP).toBe(500);
+    expect(workflowIds).toEqual(workflow.map(item => item.agentId).sort());
+    expect(records.filter(record => !record.isWorkflow)).toHaveLength(SUBAGENT_HISTORY_CAP);
+    expect(records.every(record => !record.isWorkflow || record.workflowRunId === "wf_big")).toBe(true);
+  });
+
+  it("each kind keeps only its own newest, so neither cap eats into the other", async () => {
+    setTab();
+    vi.mocked(ipc.subagentList).mockResolvedValue([
+      ...plainListing(SUBAGENT_HISTORY_CAP + 5), ...workflowListing(WORKFLOW_HISTORY_CAP + 5),
+    ]);
+
+    await rebuildSubagentsForTab(TASK, TAB, SESSION);
+    const records = selectTabSubagents(TAB)(useSubagents.getState());
+    const kept = new Set(records.map(record => record.agentId));
+
+    expect(records.filter(record => record.isWorkflow)).toHaveLength(WORKFLOW_HISTORY_CAP);
+    expect(records.filter(record => !record.isWorkflow)).toHaveLength(SUBAGENT_HISTORY_CAP);
+    expect(kept.has("aWf0000")).toBe(true);
+    expect(kept.has(`aWf${WORKFLOW_HISTORY_CAP}`)).toBe(false);
+  });
+
+  it("reads the run names once the rebuild brought a workflow agent back", async () => {
+    setTab();
+    vi.mocked(ipc.subagentList).mockResolvedValue(workflowListing(2));
+    vi.mocked(ipc.subagentWorkflowRuns).mockResolvedValue([{ runId: "wf_big", name: "acme-release", phases: ["Build"] }]);
+
+    await rebuildSubagentsForTab(TASK, TAB, SESSION);
+    await vi.waitFor(() =>
+      expect(useSubagents.getState().byTab[TAB].runs.wf_big).toEqual({ name: "acme-release", phases: ["Build"] }));
   });
 });
 

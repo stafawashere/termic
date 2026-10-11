@@ -41,6 +41,15 @@ const OUTCOME_TAIL_BYTES: u64 = 64 * 1024;
 
 const DEFAULT_LIST_LIMIT: usize = 200;
 
+/// Workflow agents are listed apart from the plain-agent limit, since one run
+/// can start hundreds of them and the sidebar groups a whole run under one
+/// node.
+pub(crate) const WORKFLOW_LIST_LIMIT: usize = 1000;
+
+/// A run's state file embeds its script and prompt previews, so it can grow
+/// large; anything past this is not worth parsing for a name and phase list.
+const WORKFLOW_STATE_BYTE_CAP: u64 = 4 * 1024 * 1024;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ResolveError {
     InvalidId(String),
@@ -132,6 +141,16 @@ pub struct TranscriptPage {
     pub skipped_lines: usize,
     pub outcome: Outcome,
     pub meta: SubagentMeta,
+}
+
+/// What a run's `workflows/wf_<run>.json` says about it. Both fields are null
+/// when the file is missing, oversized, outside the session or unreadable.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowRunInfo {
+    pub run_id: String,
+    pub name: Option<String>,
+    pub phases: Option<Vec<String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -641,30 +660,86 @@ fn summarise(subagents_dir: &Path, transcript: ListedTranscript) -> SubagentSumm
     }
 }
 
-/// The newest `limit` transcripts of one session, newest first. Only those
-/// are opened: a long session's older agents cost a stat each, not a read.
+fn workflow_run_ids(subagents_dir: &Path) -> Vec<String> {
+    let Ok(runs) = fs::read_dir(subagents_dir.join("workflows")) else { return Vec::new() };
+    runs.flatten()
+        .filter_map(|run| run.file_name().into_string().ok())
+        .filter(|run_id| validate_workflow_run_id(run_id).is_ok())
+        .collect()
+}
+
+/// The newest `limit` plain transcripts of one session and the newest
+/// `WORKFLOW_LIST_LIMIT` workflow ones, newest first. Only those are opened:
+/// a long session's older agents cost a stat each, not a read.
 pub(crate) fn list_subagents(subagents_dir: &Path, limit: usize) -> Vec<SubagentSummary> {
     let mut found: Vec<ListedTranscript> = agent_ids_in(subagents_dir)
         .iter()
         .filter_map(|id| listed(subagents_dir, id, None))
         .collect();
 
-    if let Ok(runs) = fs::read_dir(subagents_dir.join("workflows")) {
-        for run in runs.flatten() {
-            let Ok(run_id) = run.file_name().into_string() else { continue };
-            if validate_workflow_run_id(&run_id).is_err() {
-                continue;
-            }
-
-            for id in agent_ids_in(&run.path()) {
-                found.extend(listed(subagents_dir, &id, Some(&run_id)));
-            }
+    let mut workflow: Vec<ListedTranscript> = Vec::new();
+    for run_id in workflow_run_ids(subagents_dir) {
+        let run_dir = subagents_dir.join("workflows").join(&run_id);
+        for id in agent_ids_in(&run_dir) {
+            workflow.extend(listed(subagents_dir, &id, Some(&run_id)));
         }
     }
 
-    found.sort_by(|a, b| b.mtime_ms.cmp(&a.mtime_ms));
+    let newest_first = |a: &ListedTranscript, b: &ListedTranscript| b.mtime_ms.cmp(&a.mtime_ms);
+    found.sort_by(newest_first);
     found.truncate(limit);
+    workflow.sort_by(newest_first);
+    workflow.truncate(WORKFLOW_LIST_LIMIT);
+
+    found.extend(workflow);
+    found.sort_by(newest_first);
     found.into_iter().map(|transcript| summarise(subagents_dir, transcript)).collect()
+}
+
+fn read_workflow_state(session_dir: &Path, run_id: &str) -> Option<serde_json::Value> {
+    let root = fs::canonicalize(session_dir).ok()?;
+    let candidate = session_dir.join("workflows").join(format!("{run_id}.json"));
+    let file = fs::canonicalize(candidate).ok()?;
+
+    let is_confined = file.starts_with(&root);
+    let metadata = fs::metadata(&file).ok()?;
+    let is_readable_size = metadata.is_file() && metadata.len() <= WORKFLOW_STATE_BYTE_CAP;
+    if !is_confined || !is_readable_size {
+        return None;
+    }
+
+    let raw = fs::read_to_string(file).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+pub(crate) fn parse_workflow_state(run_id: &str, state: Option<&serde_json::Value>) -> WorkflowRunInfo {
+    let name = state
+        .and_then(|v| v.get("workflowName"))
+        .and_then(|x| x.as_str())
+        .map(str::to_string);
+    let phases = state.and_then(|v| v.get("phases")).and_then(|x| x.as_array()).map(|phases| {
+        phases
+            .iter()
+            .filter_map(|phase| phase.get("title").and_then(|t| t.as_str()).map(str::to_string))
+            .collect()
+    });
+
+    WorkflowRunInfo { run_id: run_id.to_string(), name, phases }
+}
+
+/// The name and ordered phase titles of every workflow run that has an agent
+/// directory under `subagents/workflows/`. The state files sit beside
+/// `subagents/`, at `<session>/workflows/wf_<run>.json`, so these reads are
+/// confined to the session dir instead.
+pub(crate) fn list_workflow_runs(subagents_dir: &Path) -> Vec<WorkflowRunInfo> {
+    let Some(session_dir) = subagents_dir.parent() else { return Vec::new() };
+    let mut run_ids = workflow_run_ids(subagents_dir);
+    run_ids.sort();
+
+    run_ids
+        .iter()
+        .map(|run_id| parse_workflow_state(run_id, read_workflow_state(session_dir, run_id).as_ref()))
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -724,6 +799,17 @@ pub async fn subagent_list(
     })
     .await
     .map_err(|e| format!("subagent list failed: {e}"))?
+}
+
+/// Name and phase list of each workflow run in one session.
+#[tauri::command]
+pub async fn subagent_workflow_runs(task_id: String, session_id: String) -> Result<Vec<WorkflowRunInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = subagents_dir_for(&task_id, &session_id)?;
+        Ok(list_workflow_runs(&dir))
+    })
+    .await
+    .map_err(|e| format!("subagent workflow runs failed: {e}"))?
 }
 
 /// One page of one subagent's transcript. `before` is the `start` of the page
@@ -1148,7 +1234,8 @@ mod tests {
         assert_eq!(all[1].meta.agent_type.as_deref(), Some("Explore"));
         assert_eq!(all[1].outcome, Outcome::Done);
 
-        assert_eq!(list_subagents(&dir, 1).len(), 1);
+        let plain_capped: Vec<String> = list_subagents(&dir, 0).into_iter().map(|s| s.agent_id).collect();
+        assert_eq!(plain_capped, ["aWf"]);
 
         let page = read_transcript(&dir, "agent-aWf", Some("wf_run1"), None).unwrap();
         assert_eq!(page.entries[0].kind, EntryKind::ToolUse);
@@ -1183,6 +1270,117 @@ mod tests {
         for dropped in ["a000", "a001", "a002", "a003", "a004"] {
             assert!(!ids.contains(&dropped), "{dropped} is among the five oldest and should be dropped");
         }
+    }
+
+    #[test]
+    fn plain_limit_never_truncates_a_workflow_run() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = session_dir(tmp.path(), SESSION);
+        let run = dir.join("workflows").join("wf_big");
+        fs::create_dir_all(&run).unwrap();
+
+        for index in 0..300 {
+            let file = run.join(format!("agent-w{index:03}.jsonl"));
+            fs::write(&file, jsonl(&[assistant_text("w")])).unwrap();
+            set_mtime(&file, 1_000 + index as u64);
+        }
+        for index in 0..250 {
+            let file = dir.join(format!("agent-p{index:03}.jsonl"));
+            fs::write(&file, jsonl(&[assistant_text("p")])).unwrap();
+            set_mtime(&file, 5_000 + index as u64);
+        }
+
+        let listed = list_subagents(&dir, DEFAULT_LIST_LIMIT);
+        let plain: Vec<&SubagentSummary> = listed.iter().filter(|s| !s.is_workflow).collect();
+        let workflow = listed.iter().filter(|s| s.is_workflow).count();
+        assert_eq!(plain.len(), 200);
+        assert_eq!(workflow, 300);
+        assert_eq!(plain.last().map(|s| s.agent_id.as_str()), Some("p050"));
+    }
+
+    fn write_state(dir: &Path, run_id: &str, body: &str) {
+        let workflows = dir.parent().unwrap().join("workflows");
+        fs::create_dir_all(&workflows).unwrap();
+        fs::write(workflows.join(format!("{run_id}.json")), body).unwrap();
+    }
+
+    fn add_run(dir: &Path, run_id: &str) {
+        let run = dir.join("workflows").join(run_id);
+        fs::create_dir_all(&run).unwrap();
+        fs::write(run.join("agent-aOne.jsonl"), jsonl(&[assistant_text("a")])).unwrap();
+    }
+
+    fn run_info(runs: &[WorkflowRunInfo], run_id: &str) -> WorkflowRunInfo {
+        runs.iter().find(|r| r.run_id == run_id).cloned().unwrap()
+    }
+
+    #[test]
+    fn workflow_runs_read_name_and_ordered_phases() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = session_dir(tmp.path(), SESSION);
+        add_run(&dir, "wf_good");
+        add_run(&dir, "not_a_run");
+        write_state(
+            &dir,
+            "wf_good",
+            r#"{"workflowName":"acme-release","phases":[{"title":"Plan","detail":"x"},{"title":"Build"},{"detail":"untitled"},{"title":"Verify"}],"script":"..."}"#,
+        );
+
+        let runs = list_workflow_runs(&dir);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(
+            runs[0],
+            WorkflowRunInfo {
+                run_id: "wf_good".into(),
+                name: Some("acme-release".into()),
+                phases: Some(vec!["Plan".into(), "Build".into(), "Verify".into()]),
+            },
+        );
+
+        let json = serde_json::to_value(&runs[0]).unwrap();
+        assert_eq!(json["runId"], "wf_good");
+        assert_eq!(json["name"], "acme-release");
+    }
+
+    #[test]
+    fn workflow_runs_missing_malformed_or_oversized_state_yield_nulls() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = session_dir(tmp.path(), SESSION);
+        add_run(&dir, "wf_missing");
+        add_run(&dir, "wf_malformed");
+        add_run(&dir, "wf_huge");
+        add_run(&dir, "wf_wrongshape");
+        write_state(&dir, "wf_malformed", "{\"workflowName\": \"acme\", ");
+        write_state(&dir, "wf_wrongshape", r#"{"workflowName":7,"phases":"Plan"}"#);
+
+        let padding = " ".repeat(WORKFLOW_STATE_BYTE_CAP as usize);
+        write_state(&dir, "wf_huge", &format!(r#"{{"workflowName":"acme","phases":[]}}{padding}"#));
+
+        let runs = list_workflow_runs(&dir);
+        assert_eq!(runs.len(), 4);
+        for run_id in ["wf_missing", "wf_malformed", "wf_huge", "wf_wrongshape"] {
+            let info = run_info(&runs, run_id);
+            assert_eq!(info.name, None, "{run_id} should have no name");
+            assert_eq!(info.phases, None, "{run_id} should have no phases");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workflow_runs_skip_a_state_file_symlinked_out_of_the_session() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = session_dir(&tmp.path().join("projects"), SESSION);
+        let outside = tmp.path().join("outside.json");
+        fs::write(&outside, r#"{"workflowName":"not yours","phases":[{"title":"Leak"}]}"#).unwrap();
+
+        add_run(&dir, "wf_link");
+        let workflows = dir.parent().unwrap().join("workflows");
+        fs::create_dir_all(&workflows).unwrap();
+        std::os::unix::fs::symlink(&outside, workflows.join("wf_link.json")).unwrap();
+
+        let info = run_info(&list_workflow_runs(&dir), "wf_link");
+        assert_eq!(info.name, None);
+        assert_eq!(info.phases, None);
     }
 
     #[cfg(unix)]

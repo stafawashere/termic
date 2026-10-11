@@ -14,8 +14,9 @@
 
 import { create } from "zustand";
 import * as ipc from "@/lib/ipc";
-import type { SubagentSummary } from "@/lib/types";
+import type { SubagentSummary, WorkflowRunInfo } from "@/lib/types";
 import { subagentsEnabled } from "@/lib/subagentGate";
+import { WORKFLOW_AGENT_TYPE } from "@/lib/subagentKind";
 import {
   normalizeAgentId, sessionMatches, setSubagentEventSink,
   type SubagentEventOrigin, type SubagentHookEvent,
@@ -26,9 +27,6 @@ export type SubagentState = "running" | "done" | "failed" | "interrupted" | "unk
 /** Where a running record can go. `unknown` is what a stop hook leaves, since
  *  SubagentStop carries no outcome; the transcript read upgrades it. */
 export type SubagentEndState = Exclude<SubagentState, "running">;
-
-/** The agent type claude gives every agent a workflow runs. */
-export const WORKFLOW_AGENT_TYPE = "workflow-subagent";
 
 export interface SubagentRecord {
   agentId: string;
@@ -43,6 +41,18 @@ export interface SubagentRecord {
   description?: string | null;
   spawnDepth?: number | null;
   parentAgentId?: string | null;
+  /** The `wf_<run>` directory a workflow agent's transcript sits in. A hook
+   *  cannot say, so a hook-created record learns it on the next listing. */
+  workflowRunId: string | null;
+  /** From the sidecar. Null for a plain agent and for a workflow agent whose
+   *  sidecar names no phase, which the sidebar groups on its own. */
+  workflowPhase: string | null;
+}
+
+/** A workflow run's name and phase order, from its state file. */
+export interface WorkflowRunMeta {
+  name: string | null;
+  phases: readonly string[] | null;
 }
 
 export interface TabSubagents {
@@ -51,6 +61,8 @@ export interface TabSubagents {
   agents: Record<string, SubagentRecord>;
   /** Agent ids in the order they started. */
   order: string[];
+  /** Keyed by run id. Read only while the tab has a workflow agent. */
+  runs: Record<string, WorkflowRunMeta>;
 }
 
 interface SubagentsState {
@@ -73,6 +85,8 @@ interface SubagentsState {
   mergeScanned: (
     taskId: string, tabId: string, sessionId: string, summaries: SubagentSummary[], parentLive: boolean,
   ) => void;
+  /** Fold in what `subagent_workflow_runs` read for this tab's session. */
+  applyWorkflowRuns: (tabId: string, sessionId: string, runs: WorkflowRunInfo[]) => void;
 }
 
 const FINISHED_STATES: ReadonlySet<SubagentState> = new Set(["done", "failed"]);
@@ -87,7 +101,35 @@ function metaChanged(record: SubagentRecord, summary: SubagentSummary): boolean 
   const descriptionMoved = (record.description ?? null) !== summary.description;
   const depthMoved = (record.spawnDepth ?? null) !== summary.spawnDepth;
   const parentMoved = (record.parentAgentId ?? null) !== summary.parentAgentId;
-  return descriptionMoved || depthMoved || parentMoved;
+  const runMoved = record.workflowRunId !== summary.workflowRunId;
+  const phaseMoved = record.workflowPhase !== summary.workflowPhase;
+  return descriptionMoved || depthMoved || parentMoved || runMoved || phaseMoved;
+}
+
+function withScannedMeta(record: SubagentRecord, summary: SubagentSummary): SubagentRecord {
+  return {
+    ...record,
+    description: summary.description,
+    spawnDepth: summary.spawnDepth,
+    parentAgentId: summary.parentAgentId,
+    workflowRunId: summary.workflowRunId,
+    workflowPhase: summary.workflowPhase,
+  };
+}
+
+function samePhases(a: readonly string[] | null, b: readonly string[] | null): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.length !== b.length) return false;
+  return a.every((title, index) => title === b[index]);
+}
+
+function sameRunMeta(a: WorkflowRunMeta | undefined, b: WorkflowRunMeta): boolean {
+  if (!a) return false;
+  return a.name === b.name && samePhases(a.phases, b.phases);
+}
+
+function emptyEntry(taskId: string, sessionId: string): TabSubagents {
+  return { taskId, sessionId, agents: {}, order: [], runs: {} };
 }
 
 function scannedState(summary: SubagentSummary, parentLive: boolean): SubagentState | null {
@@ -117,6 +159,8 @@ function scannedRecord(summary: SubagentSummary, state: SubagentState): Subagent
     description: summary.description,
     spawnDepth: summary.spawnDepth,
     parentAgentId: summary.parentAgentId,
+    workflowRunId: summary.workflowRunId,
+    workflowPhase: summary.workflowPhase,
   };
 }
 
@@ -125,12 +169,7 @@ function scannedRecord(summary: SubagentSummary, state: SubagentState): Subagent
 function rescanned(current: SubagentRecord, summary: SubagentSummary, parentLive: boolean): SubagentRecord {
   let record = current;
   if (metaChanged(record, summary)) {
-    record = {
-      ...record,
-      description: summary.description,
-      spawnDepth: summary.spawnDepth,
-      parentAgentId: summary.parentAgentId,
-    };
+    record = withScannedMeta(record, summary);
   }
 
   const scanned = scannedState(summary, parentLive);
@@ -167,8 +206,10 @@ export const useSubagents = create<SubagentsState>((set, get) => ({
       startedAt: Date.now(),
       endedAt: null,
       source: "hook",
+      workflowRunId: null,
+      workflowPhase: null,
     };
-    const base: TabSubagents = entry ?? { taskId, sessionId, agents: {}, order: [] };
+    const base: TabSubagents = entry ?? emptyEntry(taskId, sessionId);
     const next = { ...withRecord(base, record), order: [...base.order, agentId] };
 
     set(s => ({ byTab: { ...s.byTab, [tabId]: next } }));
@@ -245,12 +286,7 @@ export const useSubagents = create<SubagentsState>((set, get) => ({
 
       let record: SubagentRecord = current;
       if (metaChanged(record, summary)) {
-        record = {
-          ...record,
-          description: summary.description,
-          spawnDepth: summary.spawnDepth,
-          parentAgentId: summary.parentAgentId,
-        };
+        record = withScannedMeta(record, summary);
       }
 
       const outcomeIsFinal = summary.outcome === "done" || summary.outcome === "failed";
@@ -275,7 +311,7 @@ export const useSubagents = create<SubagentsState>((set, get) => ({
 
     const entry: TabSubagents = existing && !isForeignSession
       ? existing
-      : { taskId, sessionId, agents: {}, order: [] };
+      : emptyEntry(taskId, sessionId);
 
     let agents: Record<string, SubagentRecord> | null = null;
     const added: SubagentRecord[] = [];
@@ -306,6 +342,27 @@ export const useSubagents = create<SubagentsState>((set, get) => ({
 
     const next: TabSubagents = { ...entry, agents: merged, order };
     set(s => ({ byTab: { ...s.byTab, [tabId]: next } }));
+  },
+
+  applyWorkflowRuns: (tabId, sessionId, runs) => {
+    const entry = get().byTab[tabId];
+    if (!entry || entry.sessionId !== sessionId) return;
+
+    const next: Record<string, WorkflowRunMeta> = {};
+    let changed = Object.keys(entry.runs).length !== runs.length;
+    for (const info of runs) {
+      const current = entry.runs[info.runId];
+      const incoming: WorkflowRunMeta = { name: info.name, phases: info.phases };
+      if (sameRunMeta(current, incoming)) {
+        next[info.runId] = current;
+        continue;
+      }
+      next[info.runId] = incoming;
+      changed = true;
+    }
+    if (!changed) return;
+
+    set(s => ({ byTab: { ...s.byTab, [tabId]: { ...entry, runs: next } } }));
   },
 }));
 
@@ -353,6 +410,26 @@ export function selectTabSubagentRows(tabId: string) {
   return createTabSelector(tabId, record => !record.isWorkflow);
 }
 
+function hasWorkflowAgent(entry: TabSubagents): boolean {
+  return entry.order.some(id => entry.agents[id].isWorkflow);
+}
+
+/** Read the tab's run names and phase lists, when it has a workflow agent to
+ *  draw them for. The state files embed each run's script, so a tab with no
+ *  workflow never pays for the read. */
+export async function refreshWorkflowRuns(tabId: string): Promise<void> {
+  const entry = useSubagents.getState().byTab[tabId];
+  if (!entry || !hasWorkflowAgent(entry)) return;
+
+  let runs: WorkflowRunInfo[];
+  try {
+    runs = await ipc.subagentWorkflowRuns(entry.taskId, entry.sessionId);
+  } catch {
+    return;
+  }
+  useSubagents.getState().applyWorkflowRuns(tabId, entry.sessionId, runs);
+}
+
 // One `subagent_list` in flight per tab. A workflow starts its agents in a
 // burst, and each start asking the disk again would queue a read per agent
 // for an answer the first read already carries.
@@ -379,6 +456,7 @@ async function refreshFromTranscripts(tabId: string): Promise<void> {
         return;
       }
       useSubagents.getState().applySummaries(tabId, entry.sessionId, summaries);
+      await refreshWorkflowRuns(tabId);
     } while (refreshAgain.has(tabId));
   } finally {
     refreshing.delete(tabId);

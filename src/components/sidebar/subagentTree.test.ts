@@ -23,6 +23,8 @@ function record(agentId: string, extra: Partial<SubagentRecord> = {}): SubagentR
     startedAt: 0,
     endedAt: null,
     source: "hook",
+    workflowRunId: null,
+    workflowPhase: null,
     ...extra,
   };
 }
@@ -33,6 +35,7 @@ function entry(records: SubagentRecord[]): TabSubagents {
     sessionId: "11111111-2222-4333-8444-555555555555",
     agents: Object.fromEntries(records.map(r => [r.agentId, r])),
     order: records.map(r => r.agentId),
+    runs: {},
   };
 }
 

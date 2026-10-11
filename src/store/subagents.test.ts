@@ -13,6 +13,7 @@ vi.mock("@/lib/ipc", () => ({
   taskSetTabs: vi.fn().mockResolvedValue(undefined),
   taskSetTabSessionId: vi.fn().mockResolvedValue(undefined),
   subagentList: vi.fn().mockResolvedValue([]),
+  subagentWorkflowRuns: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("@/lib/tabFocus", () => ({
   focusTerminalTab: vi.fn(),
@@ -24,10 +25,11 @@ import * as ipc from "@/lib/ipc";
 import { useApp } from "@/store/app";
 import {
   useSubagents, selectTabSubagents, selectTabSubagentRows, receiveSubagentEvent,
-  EMPTY_SUBAGENTS, WORKFLOW_AGENT_TYPE,
+  EMPTY_SUBAGENTS,
 } from "@/store/subagents";
+import { WORKFLOW_AGENT_TYPE } from "@/lib/subagentKind";
 import { deliverSubagentEvent, type SubagentHookEvent } from "@/lib/subagentHooks";
-import type { SubagentSummary, Tab } from "@/lib/types";
+import type { SubagentSummary, Tab, WorkflowRunInfo } from "@/lib/types";
 
 const SESSION = "11111111-2222-4333-8444-555555555555";
 const OTHER_SESSION = "99999999-8888-4777-8666-555555555555";
@@ -76,6 +78,7 @@ function hookEvent(phase: "start" | "stop", agentId: string, agentType = "Explor
 beforeEach(() => {
   useSubagents.setState({ byTab: {} });
   vi.mocked(ipc.subagentList).mockReset().mockResolvedValue([]);
+  vi.mocked(ipc.subagentWorkflowRuns).mockReset().mockResolvedValue([]);
 });
 
 describe("subagent lifecycle", () => {
@@ -334,6 +337,95 @@ describe("hook events", () => {
     startA();
     expect(wakes(() =>
       useSubagents.getState().applySummaries(TAB, SESSION, [summary(AGENT_A), summary(AGENT_B)]))).toBe(0);
+  });
+});
+
+describe("workflow runs and phases", () => {
+  const origin = { taskId: TASK, tabId: TAB, tabSessionId: SESSION };
+  const RUN = "wf_run1";
+
+  function workflowSummary(agentId: string, patch: Partial<SubagentSummary> = {}): SubagentSummary {
+    return summary(agentId, {
+      agentType: WORKFLOW_AGENT_TYPE, isWorkflow: true, workflowRunId: RUN, workflowPhase: "Build", ...patch,
+    });
+  }
+
+  function runInfo(patch: Partial<WorkflowRunInfo> = {}): WorkflowRunInfo {
+    return { runId: RUN, name: "acme-release", phases: ["Plan", "Build"], ...patch };
+  }
+
+  it("a hook-created workflow agent learns its run and phase on the next listing", async () => {
+    vi.mocked(ipc.subagentList).mockResolvedValue([workflowSummary(AGENT_A)]);
+    receiveSubagentEvent(origin, hookEvent("start", AGENT_A, WORKFLOW_AGENT_TYPE));
+    expect(useSubagents.getState().byTab[TAB].agents[AGENT_A]).toMatchObject({
+      workflowRunId: null, workflowPhase: null,
+    });
+
+    await vi.waitFor(() =>
+      expect(useSubagents.getState().byTab[TAB].agents[AGENT_A]).toMatchObject({
+        workflowRunId: RUN, workflowPhase: "Build",
+      }));
+  });
+
+  it("a workflow agent with no phase is kept with a null phase", () => {
+    useSubagents.getState().mergeScanned(TASK, TAB, SESSION, [workflowSummary(AGENT_A, { workflowPhase: null })], true);
+    expect(useSubagents.getState().byTab[TAB].agents[AGENT_A]).toMatchObject({
+      isWorkflow: true, workflowRunId: RUN, workflowPhase: null,
+    });
+  });
+
+  it("a rescan moves a workflow agent to the phase its sidecar now names", () => {
+    useSubagents.getState().mergeScanned(TASK, TAB, SESSION, [workflowSummary(AGENT_A, { workflowPhase: null })], true);
+    useSubagents.getState().mergeScanned(TASK, TAB, SESSION, [workflowSummary(AGENT_A)], true);
+    expect(useSubagents.getState().byTab[TAB].agents[AGENT_A].workflowPhase).toBe("Build");
+  });
+
+  it("the run info is read with the listing once the tab has a workflow agent", async () => {
+    vi.mocked(ipc.subagentList).mockResolvedValue([workflowSummary(AGENT_A)]);
+    vi.mocked(ipc.subagentWorkflowRuns).mockResolvedValue([runInfo()]);
+    receiveSubagentEvent(origin, hookEvent("start", AGENT_A, WORKFLOW_AGENT_TYPE));
+
+    await vi.waitFor(() =>
+      expect(useSubagents.getState().byTab[TAB].runs[RUN]).toEqual({ name: "acme-release", phases: ["Plan", "Build"] }));
+    expect(ipc.subagentWorkflowRuns).toHaveBeenCalledWith(TASK, SESSION);
+  });
+
+  it("a tab with no workflow agent never reads run info", async () => {
+    vi.mocked(ipc.subagentList).mockResolvedValue([summary(AGENT_A, { description: "Find the parser" })]);
+    receiveSubagentEvent(origin, hookEvent("start", AGENT_A));
+
+    await vi.waitFor(() =>
+      expect(useSubagents.getState().byTab[TAB].agents[AGENT_A].description).toBe("Find the parser"));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(ipc.subagentWorkflowRuns).not.toHaveBeenCalled();
+  });
+
+  it("run info that changes nothing wakes nobody", () => {
+    startA(AGENT_A, WORKFLOW_AGENT_TYPE);
+    useSubagents.getState().applyWorkflowRuns(TAB, SESSION, [runInfo()]);
+    const runs = useSubagents.getState().byTab[TAB].runs;
+
+    expect(wakes(() => useSubagents.getState().applyWorkflowRuns(TAB, SESSION, [runInfo()]))).toBe(0);
+    expect(useSubagents.getState().byTab[TAB].runs).toBe(runs);
+  });
+
+  it("run info that does change wakes once and keeps the unchanged runs by reference", () => {
+    startA(AGENT_A, WORKFLOW_AGENT_TYPE);
+    const other = runInfo({ runId: "wf_run2", name: null, phases: null });
+    useSubagents.getState().applyWorkflowRuns(TAB, SESSION, [runInfo(), other]);
+    const firstRun = useSubagents.getState().byTab[TAB].runs[RUN];
+
+    const renamed = { ...other, name: "acme-docs", phases: ["Write"] };
+    expect(wakes(() => useSubagents.getState().applyWorkflowRuns(TAB, SESSION, [runInfo(), renamed]))).toBe(1);
+    expect(useSubagents.getState().byTab[TAB].runs[RUN]).toBe(firstRun);
+    expect(useSubagents.getState().byTab[TAB].runs.wf_run2).toEqual({ name: "acme-docs", phases: ["Write"] });
+  });
+
+  it("run info for a session the tab has left is dropped", () => {
+    startA(AGENT_A, WORKFLOW_AGENT_TYPE);
+    const before = useSubagents.getState();
+    useSubagents.getState().applyWorkflowRuns(TAB, OTHER_SESSION, [runInfo()]);
+    expect(useSubagents.getState()).toBe(before);
   });
 });
 

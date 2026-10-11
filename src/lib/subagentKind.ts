@@ -15,7 +15,8 @@ export type SubagentKind = "builtIn" | "custom" | "fork" | "workflow";
 
 export const SUBAGENT_KINDS: readonly SubagentKind[] = ["builtIn", "custom", "fork", "workflow"];
 
-const WORKFLOW_AGENT_TYPE = "workflow-subagent";
+/** The agent type claude gives every agent a workflow runs. */
+export const WORKFLOW_AGENT_TYPE = "workflow-subagent";
 const FORK_AGENT_TYPE = "fork";
 
 const BUILT_IN_AGENT_TYPES: ReadonlySet<string> = new Set([
