@@ -109,6 +109,8 @@ export default {
   creatingWorktree: "正在创建工作树…",
   taskNameTitle: "任务名称：{{name}}",
   restoreFailed: "恢复失败",
+  expandTask: "展开任务",
+  collapseTask: "折叠任务",
   taskMenu: "任务菜单",
   spotlightTip: "Spotlight：更改会与 {{branch}} 同步",
   menuNew: "新建",

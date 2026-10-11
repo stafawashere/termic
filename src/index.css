@@ -1343,3 +1343,7 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   font-variant-numeric: tabular-nums;
   color: var(--sidebar-badge-ink);
 }
+.sidebar-selected {
+  background-image: linear-gradient(90deg, var(--sidebar-sel-from), var(--sidebar-sel-to));
+  box-shadow: inset 2px 0 0 var(--sidebar-sel-bar), inset 0 1px 0 var(--sidebar-sel-highlight);
+}

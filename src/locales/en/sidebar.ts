@@ -109,6 +109,8 @@ export default {
   creatingWorktree: "Creating worktree…",
   taskNameTitle: "Task name: {{name}}",
   restoreFailed: "Restore failed",
+  expandTask: "Expand task",
+  collapseTask: "Collapse task",
   taskMenu: "Task menu",
   spotlightTip: "Spotlight: changes are synced with {{branch}}",
   menuNew: "New",

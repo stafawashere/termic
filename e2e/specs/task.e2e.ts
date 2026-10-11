@@ -3123,8 +3123,10 @@ describe("task groups", () => {
         looseName: box(nameOf(looseId))!.left,
         capLabel: box(document.querySelector(`[data-testid="task-group-label-${orchId}"]`))!.left,
         rail: box(rail)!.left + parseFloat(getComputedStyle(rail).borderLeftWidth) / 2,
-        looseRow: box(rowOf(looseId))!.left,
-        memberRow: box(rowOf(c1))!.left,
+        // Rows span the panel at every depth, so the step is read off the
+        // chevrons, where the indent is drawn.
+        looseRow: centre(rowOf(looseId).querySelector("svg")),
+        memberRow: centre(rowOf(c1).querySelector("svg")),
       };
     }, orch, child1, loose);
     expect(Math.abs(g.capIcon - g.looseChevron)).toBeLessThanOrEqual(1);

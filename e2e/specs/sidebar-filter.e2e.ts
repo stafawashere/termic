@@ -384,7 +384,7 @@ describe("sidebar filter bar", () => {
   });
 
   it("gives the row one trailing slot: state at rest, the menu on hover, and no dead column between them", async () => {
-    // One fixed 18px slot, always rightmost. The menu trigger shares it,
+    // One fixed 20px slot, always rightmost. The menu trigger shares it,
     // hidden at rest and holding no badge of its own. It once had a reserved
     // slot beside the state one, which left every row 22px short on the right.
     const anatomy = await browser.execute(id => {
@@ -407,7 +407,7 @@ describe("sidebar filter bar", () => {
       };
     }, b);
     expect(anatomy).toEqual({
-      slotIsLast: true, sameSlot: true, sameBox: true, slotWidth: 18, gapToEdge: 4,
+      slotIsLast: true, sameSlot: true, sameBox: true, slotWidth: 20, gapToEdge: 8,
       menuOpacity: "0", badgeInMenu: false,
     });
   });

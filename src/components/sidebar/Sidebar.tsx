@@ -56,7 +56,7 @@ import { SubagentGroupToggle, SubagentRows, useSubagentFold, useSubagentHasRow }
 import { childRowCarriesSelection, subagentIdOfTab } from "./subagentTree";
 import { StatusChips } from "./StatusChips";
 import { AgentActivityReadout } from "./AgentActivityReadout";
-import { CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
+import { BranchGlyph, ChecklistGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, DotsVerticalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
 import { STATUS_BUCKETS } from "@/lib/sidebarStatus";
 import { StatusSection, StatusViewCount } from "./StatusSection";
 import { RollupMarks } from "./RollupMarks";
@@ -1649,7 +1649,10 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
               <div
                 key={p.id}
                 className="relative rounded-md"
-                style={compact ? undefined : { "--sb-task-pad": `${treeIndent(depth + 1)}px` } as React.CSSProperties}
+                style={compact ? undefined : {
+                  "--sb-task-pad": `${treeIndent(depth + 1)}px`,
+                  "--sb-member-pad": `${treeIndent(depth + 2)}px`,
+                } as React.CSSProperties}
               >
                 {/* The project's guide, from under its row to its last child. */}
                 {!compact && isOpen && (
@@ -2191,7 +2194,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                 {!collapsed && noMatches && (
                   <div
                     data-testid={`project-filter-empty-${p.id}`}
-                    className="ml-3 mr-1 mb-px flex h-[var(--task-row-h)] items-center justify-center gap-1.5 px-2 text-[13px] text-[var(--color-fg-faint)]"
+                    className="mt-[2px] flex h-[var(--sidebar-task-row-h)] items-center justify-center gap-[6px] pl-[var(--sb-task-pad,42px)] pr-[8px] text-[13px] text-[var(--sidebar-faint)]"
                   >
                     <span className="truncate">{t("taskFilter.noMatches")}</span>
                     <button
@@ -2777,17 +2780,18 @@ function ArchivingTaskRow({ w, compact }: { w: Task; compact: boolean }) {
         data-sidebar-task-id={w.id}
         data-sidebar-task-project-id={w.project_id}
         data-task-archiving="true"
-        className="ml-3 flex h-[var(--task-row-h)] items-center gap-1.5 rounded-md px-1 text-[13px] select-none text-[var(--color-fg-faint)] opacity-70"
+        className="mt-[2px] flex h-[var(--sidebar-task-row-h)] items-center gap-[8px] rounded-[6px] pl-[var(--sb-task-pad,42px)] pr-[8px] text-[13px] select-none text-[var(--sidebar-faint)] opacity-70"
       >
-        <span className="shrink-0 h-3.5 w-3.5 mx-0.5" />
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="w-[10px] shrink-0" />
+        <ChecklistGlyph size={15} className="shrink-0" />
+        <div className="flex min-w-0 flex-1 items-center gap-[6px]">
           <span className="min-w-0 truncate font-medium line-through">{label}</span>
         </div>
         <Tip content={t("archiving")}>
           <span
             data-testid="archiving-badge"
             aria-label={t("archivingAria")}
-            className="relative flex h-[18px] w-[18px] shrink-0 items-center justify-center text-[var(--color-fg-faint)]"
+            className="relative flex h-[20px] w-[20px] shrink-0 items-center justify-center text-[var(--sidebar-faint)]"
           >
             <Spinner size={12} />
           </span>
@@ -2817,18 +2821,19 @@ function PendingTaskRow({ pending }: { pending: import("@/store/pendingTasks").P
         data-pending-task-phase={pending.phase}
         onClick={() => setActive(pending.id)}
         className={cn(
-          "ml-3 flex items-center gap-1.5 rounded-md px-1 py-1 text-[13px] cursor-pointer select-none transition-colors",
+          "mt-[2px] flex h-[var(--sidebar-task-row-h)] items-center gap-[8px] rounded-[6px] pl-[var(--sb-task-pad,42px)] pr-[8px] text-[13px] cursor-pointer select-none transition-[color,background-color] duration-[120ms]",
           isActive
-            ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
-            : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
+            ? "sidebar-selected text-[var(--sidebar-sel-ink)]"
+            : "text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-row-hover)]",
         )}
       >
-        <span className="shrink-0 h-3.5 w-3.5 mx-0.5" />
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="w-[10px] shrink-0" />
+        <ChecklistGlyph size={15} className={cn("shrink-0", isActive ? "text-[var(--sidebar-sel-icon)]" : "text-[var(--sidebar-icon)]")} />
+        <div className="flex min-w-0 flex-1 items-center gap-[6px]">
           <span className="min-w-0 truncate font-medium">{pending.name}</span>
         </div>
         <Tip content={isError ? (pending.err ?? t("creationFailed")) : t("creatingWorktree")}>
-          <span className="relative flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+          <span className="relative flex h-[20px] w-[20px] shrink-0 items-center justify-center">
             {isError ? <TaskWorkBadge reason="attention" /> : <TaskWorkBadge reason="working" />}
           </span>
         </Tip>
@@ -3041,6 +3046,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
     : NO_SUBAGENT_ROWS;
   const activeChildCarriesSelection = childRowCarriesSelection(activeTab, terminalTabIds, subagentRowIds);
   const selectedSubagentId = isActive && activeSubagentHasRow ? activeSubagentId : null;
+  const isSelectedRow = isActive && (collapsed || !activeChildCarriesSelection);
 
   // Task actions menu — controlled so a right-click on the row can
   // open the same menu the kebab button triggers.
@@ -3266,40 +3272,44 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
         // Right-click anywhere on the row opens the same actions menu as
         // the kebab button (which it anchors to).
         onContextMenu={(e) => { e.preventDefault(); setMenuOpen(true); }}
+        data-selected={isSelectedRow || undefined}
         className={cn(
           // Fixed height rather than padding around a line box: the line box
-          // is the system's to decide (see --task-row-h) and the rows have to
-          // stay level with each other and with the empty-project placeholder.
-          "group/wsrow ml-3 flex h-[var(--task-row-h)] items-center gap-1 rounded-md px-1 text-[13px] cursor-pointer select-none transition-colors",
-          // Strong selection on the header when active AND no child row
+          // is the system's to decide, and the rows have to stay level with
+          // each other and with the empty-project placeholder. The indent is
+          // the project's (--sb-task-pad, set per depth on its wrapper).
+          "group/wsrow mt-[2px] flex h-[var(--sidebar-task-row-h)] items-center gap-[8px] rounded-[6px] pl-[var(--sb-task-pad,42px)] pr-[8px] text-[13px] cursor-pointer select-none transition-[color,background-color] duration-[120ms]",
+          // The selected look on the header when active AND no child row
           // carries it: collapsed (children hidden) OR the active tab is an
           // edit/diff view (no row). Expanded with an active terminal tab
           // delegates the highlight to that child row instead.
-          isActive && (collapsed || !activeChildCarriesSelection)
-            ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
-            : isActive
-            ? "text-[var(--color-fg)] hover:bg-[var(--color-hover)]"
-            : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
+          isSelectedRow
+            ? "sidebar-selected text-[var(--sidebar-sel-ink)]"
+            : "text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-row-hover)]",
           !isLoaded && "opacity-60",
           // Lifted look while dragging, mirroring the project header.
-          dragging && "bg-[var(--color-accent)]/15 text-[var(--color-accent)] shadow-lg",
+          dragging && "bg-[var(--sidebar-drag-lift-bg)] shadow-[var(--sidebar-drag-lift-shadow)]",
         )}
       >
         {terminalTabs.length === 0
-          ? <Moon className="shrink-0 h-3.5 w-3.5 mx-0.5 text-[var(--color-fg-faint)] opacity-40" />
+          ? (
+            <span className="flex w-[10px] shrink-0 items-center justify-center">
+              <Moon className={cn("h-3 w-3 opacity-60", isSelectedRow ? "text-[var(--sidebar-sel-chevron)]" : "text-[var(--sidebar-chevron)]")} />
+            </span>
+          )
           : <button
+              type="button"
+              aria-label={collapsed ? t("expandTask") : t("collapseTask")}
               onClick={(e) => { e.stopPropagation(); setTaskCollapsed(w.id, !collapsed); }}
-              className="shrink-0 rounded p-0.5 hover:bg-[var(--color-bg-3)] transition-colors"
+              className="flex h-[20px] w-[10px] shrink-0 items-center justify-center"
               data-no-drag
             >
-              {collapsed
-                ? <ChevronRight className="h-3.5 w-3.5 text-[var(--color-fg-faint)]" />
-                : <ChevronDown  className="h-3.5 w-3.5 text-[var(--color-fg-faint)]" />
-              }
+              <TreeChevron open={!collapsed} className={isSelectedRow ? "text-[var(--sidebar-sel-chevron)]" : "text-[var(--sidebar-chevron)]"} />
             </button>
         }
+        <ChecklistGlyph size={15} className={cn("shrink-0", isSelectedRow ? "text-[var(--sidebar-sel-icon)]" : "text-[var(--sidebar-icon)]")} />
 
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-[6px]">
           {taskRenaming !== null ? (
             <input
               ref={taskRenameInputRef}
@@ -3315,7 +3325,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
               onClick={e => e.stopPropagation()}
               onDoubleClick={e => e.stopPropagation()}
               autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-              className="min-w-0 flex-1 rounded border-0 bg-[var(--color-bg-2)] px-1 py-[3px] text-[13px] text-[var(--color-fg)] outline-none ring-1 ring-inset ring-[var(--color-accent)]"
+              className="sidebar-inline-input min-w-0 flex-1"
             />
           ) : (
             <>
@@ -3333,7 +3343,13 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
               />
               {/* Which locations get a glyph is the taskLocationIcon pref
                   (docs/ui.md "One glyph per meaning"). */}
-              {showLocation && <TaskLocationIcon isMainCheckout={w.is_main_checkout} size="h-3.5 w-3.5" />}
+              {showLocation && (
+                <TaskLocationIcon
+                  isMainCheckout={w.is_main_checkout}
+                  size="h-[13px] w-[13px]"
+                  className={isSelectedRow ? "text-[var(--sidebar-sel-meta)]" : "text-[var(--sidebar-meta)]"}
+                />
+              )}
               {w.spawned_by && <SpawnedFromMark task={w} />}
               {/* The task's tab properties, collected (GH #358): after the
                   name on the LEFT, never in the trailing badge/kebab slot.
@@ -3362,7 +3378,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                vanished on warm-dark surfaces; bump to fg-dim + tabular
                nums so the digit stays legible at small sizes. */
             !taskRenaming && terminalTabs.length > 1 && (
-              <span className="shrink-0 text-[11px] font-medium tabular-nums text-[var(--color-fg-dim)]">
+              <span className={cn("shrink-0 text-[11px] font-medium tabular-nums", isSelectedRow ? "text-[var(--sidebar-sel-meta)]" : "text-[var(--sidebar-meta)]")}>
                 ({terminalTabs.length})
               </span>
             )
@@ -3393,6 +3409,21 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
           <TaskPrBadge task={w} showNumber={prBadgeMode !== "icon"} showIcon={prBadgeMode !== "number"} />
         )}
 
+        {/* The branch, right-aligned in mono, when the git icon is on. Not
+            when the label already is the branch. */}
+        {!taskRenaming && showLocation && !labelIsBranch && w.branch && (
+          <span
+            data-testid="task-branch-chip"
+            className={cn(
+              "flex min-w-0 max-w-[40%] shrink items-center gap-[4px] font-mono text-[11px]",
+              isSelectedRow ? "text-[var(--sidebar-sel-meta)]" : "text-[var(--sidebar-meta)]",
+            )}
+          >
+            <BranchGlyph size={11} className="shrink-0" />
+            <span className="truncate">{w.branch}</span>
+          </span>
+        )}
+
         {/* Two trailing slots (docs/ui.md "One glyph per meaning"): mode
             (sandbox, docker, dangerous YOLO; absent when there is none), then
             ONE fixed slot that is work state at rest (the badge while
@@ -3419,7 +3450,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
             <span data-testid="task-mode-slot" className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">{mark}</span>
           );
         })()}
-        <span className="relative flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+        <span className="relative flex h-[20px] w-[20px] shrink-0 items-center justify-center">
           <DropdownRoot open={menuOpen} onOpenChange={setMenuOpen}>
             <Tip content={t("taskMenu")}>
             <DropdownTrigger asChild>
@@ -3427,15 +3458,20 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                 data-no-drag
                 data-testid="task-menu-trigger"
                 onClick={(e) => e.stopPropagation()}
+                aria-label={t("taskMenu")}
                 className={cn(
-                  "absolute inset-0 flex items-center justify-center rounded hover:bg-[var(--color-bg-3)]",
-                  menuOpen
+                  "absolute inset-0 flex items-center justify-center rounded-[4px] border transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-tray-hover)]",
+                  isSelectedRow
+                    ? "border-[var(--sidebar-sel-menu-border)] text-[var(--sidebar-sel-meta)]"
+                    : "border-[var(--sidebar-tray-border)] text-[var(--sidebar-meta)]",
+                  // The selected row keeps its menu in view, as the design draws it.
+                  menuOpen || isSelectedRow
                     ? "opacity-100"
                     : "opacity-0 group-hover/wsrow:opacity-100 pointer-events-none group-hover/wsrow:pointer-events-auto",
                   taskRenaming !== null && "pointer-events-none",
                 )}
               >
-                <MoreVertical className="h-3.5 w-3.5 text-[var(--color-fg-faint)]" />
+                <DotsVerticalGlyph />
               </button>
             </DropdownTrigger>
             </Tip>
@@ -3808,7 +3844,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
               // trigger in the same box, and an invisible element still takes
               // the click. Without it the three dots could not be pressed.
               "pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity group-hover/wsrow:opacity-0 [transform:translate3d(0,0,0)]",
-              menuOpen && "opacity-0",
+              (menuOpen || isSelectedRow) && "opacity-0",
             )}
           >
           {collapsed && (hasAttention ? <TaskWorkBadge reason="attention" />
