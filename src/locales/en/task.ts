@@ -22,8 +22,13 @@ export default {
 
   tabBar: {
     broadcastTip: "Broadcast a message to all agents from this task ({{combo}})",
+    broadcastAria: "Broadcast to all agents",
     splitRightTip: "Split right ({{combo}})",
-    splitBelowTip: "Split below ({{combo}})",
+    splitRightAria: "Split right",
+    splitBelowTip: "Split down ({{combo}})",
+    splitBelowAria: "Split down",
+    newTip: "New session ({{combo}})",
+    newAria: "New session",
     restartRunTip: "Restart run",
     stopTip: "Stop",
     runTip: "Run",

@@ -1263,14 +1263,12 @@ export async function delegatedLabel(taskId: string): Promise<string | null> {
 }
 
 /** What the tab strip badge's mark actually IS, measured rather than looked
- *  at: the working spinner and the background-work ring are both small round
- *  outlines, and a screenshot cannot tell you which one you are looking at or
- *  how fast it turns.
+ *  at: a screenshot cannot tell you which mark you are looking at or how fast
+ *  it moves.
  *
- *  Both are now SVG rings, so the mark says which it is (`data-mark`)
- *  rather than the spec sniffing CSS for the difference. `duration`
- *  separates the two motions: the spinner turns every second, the ring every
- *  eight. */
+ *  The mark says which it is (`data-mark`) rather than the spec sniffing CSS
+ *  for the difference. `duration` separates the motions: the working trace
+ *  pulses every 1.4s, the background ring turns every eight. */
 export async function workBadgeMark(
   taskId: string,
 ): Promise<{ kind: string; duration: string } | null> {

@@ -3125,20 +3125,18 @@ describe("delegated work", () => {
       timeoutMsg: `the badge never said what it was waiting on (saw ${await delegatedLabel(taskId)})`,
     });
 
-    // Measured, not eyeballed. Both marks are small round outlines and a
-    // screenshot cannot tell them apart, so this asserts which one is drawn
-    // and how fast it turns: the working spinner every second, the
-    // background ring eight times slower. That difference is the whole claim
-    // the badge makes, and an agent waiting two hours on a monitor is the
-    // case it exists for.
+    // Measured, not eyeballed. This asserts which mark is drawn and how fast
+    // it moves: the working trace pulses every 1.4s, the background ring
+    // turns every eight. That difference is the whole claim the badge makes,
+    // and an agent waiting two hours on a monitor is the case it exists for.
     const held = await workBadgeMark(taskId);
-    if (plain?.kind !== "spinner" || plain?.duration !== "1s") {
-      throw new Error(`the control is not the working spinner: ${JSON.stringify(plain)}`);
+    if (plain?.kind !== "trace" || plain?.duration !== "1.4s") {
+      throw new Error(`the control is not the working trace: ${JSON.stringify(plain)}`);
     }
     // Reduced motion stops the ring, so a machine with the setting on
     // reports no animation and is still correct.
     if (held?.kind !== "background" || !["8s", "0s"].includes(held?.duration ?? "")) {
-      throw new Error(`delegated work did not swap the spinner for the ring: ${JSON.stringify(held)}`);
+      throw new Error(`delegated work did not swap the trace for the ring: ${JSON.stringify(held)}`);
     }
 
     // And it STAYS. Agent-owned work is excluded from the detached grace, on

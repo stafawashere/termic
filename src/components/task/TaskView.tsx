@@ -22,7 +22,7 @@ import { DockerBuildPane } from "@/components/task/DockerBuildPane";
 import type { Task, Tab, TerminalTab } from "@/lib/types";
 import { useApp, useTaskTabs, useActiveTabId } from "@/store/app";
 import { usePrefs, currentTerminalTheme } from "@/store/prefs";
-import { TabBar, TabPill } from "./TabBar";
+import { TabBar, TabPill, SESSION_BAR_PX } from "./TabBar";
 import { TabContextMenu } from "./TabContextMenu";
 import { TerminalPane, FooterBar } from "./TerminalPane";
 import { RunPane } from "./RunPane";
@@ -401,16 +401,17 @@ export function TaskView({ task }: { task: Task }) {
 
   // Chrome heights the content must sit below. When there's no split, the
   // TabBar + breadcrumb render ABOVE hRow, so main content fills hRow whole.
-  // With a split they render inside the main wrapper: TabBar h-9 (36px) plus
-  // the breadcrumb h-7 (28px) when it's visible — same condition as
-  // EditorBreadcrumb's own null-return. Pane headers are always h-9.
+  // With a split they render inside the main wrapper: the session bar
+  // (SESSION_BAR_PX) plus the breadcrumb h-7 (28px) when it's visible, same
+  // condition as EditorBreadcrumb's own null-return. Pane headers are the
+  // same session bar.
   const activeMainTab = tabs.find(t => t.id === activeId);
   const bcVisible = !!activeMainTab && (
     activeMainTab.type === "scratch"
     || activeMainTab.type === "external"
     || ((activeMainTab.type === "edit" || activeMainTab.type === "diff") && !!activeMainTab.path)
   );
-  const mainTopPx = splitRoot ? 36 + (bcVisible ? 28 : 0) : 0;
+  const mainTopPx = splitRoot ? SESSION_BAR_PX + (bcVisible ? 28 : 0) : 0;
 
   // One computeLeafBounds over the FULL tree positions everything: the main
   // pane is just another leaf, so it can live anywhere in the tree (e.g.
@@ -429,14 +430,14 @@ export function TaskView({ task }: { task: Task }) {
     }
   }
   // Content rect for a leaf: its tree rect, dropped below its chrome strip
-  // (main: TabBar + optional breadcrumb; panes: the h-9 PaneHeader).
+  // (main: TabBar + optional breadcrumb; panes: the PaneHeader).
   const contentStyle = (leafId: string | null): React.CSSProperties | null => {
     if (!splitRoot || !fullBounds) {
       return leafId === null ? { left: 0, top: 0, width: "100%", height: "100%" } : null;
     }
     const r = fullBounds.get(leafId ?? mainLeafId);
     if (!r) return null;
-    const chromePx = leafId === null ? mainTopPx : 36;
+    const chromePx = leafId === null ? mainTopPx : SESSION_BAR_PX;
     return {
       left:   `${r.x * 100}%`,
       top:    `calc(${r.y * 100}% + ${chromePx}px)`,

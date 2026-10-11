@@ -33,9 +33,7 @@ describe("tab management", () => {
       () => browser.execute(() => {
         if (document.querySelector("[role='menu']")) return true;
         const strip = document.querySelector("[data-main-strip]");
-        const plus = [...(strip?.querySelectorAll("button") ?? [])].find((b) =>
-          b.querySelector("svg.lucide-plus"),
-        );
+        const plus = strip?.querySelector("button[data-testid='tab-strip-new']");
         if (!plus) return false;
         const el = plus as HTMLElement;
         const opts = { bubbles: true, pointerType: "mouse", button: 0 } as any;
@@ -67,9 +65,7 @@ describe("tab management", () => {
       () =>
         browser.execute(() => {
           const strip = document.querySelector("[data-main-strip]");
-          return [...(strip?.querySelectorAll("button") ?? [])].some((b) =>
-            b.querySelector("svg.lucide-plus"),
-          );
+          return !!strip?.querySelector("button[data-testid='tab-strip-new']");
         }),
       { timeout: 10_000, timeoutMsg: "tab '+' button never appeared" },
     );
@@ -313,9 +309,7 @@ describe("sidebar task menu: New submenu", () => {
     // pointerdown, so a bare .click() is not enough.
     await browser.execute(() => {
       const strip = document.querySelector("[data-main-strip]");
-      const plus = [...(strip?.querySelectorAll("button") ?? [])].find((b) =>
-        b.querySelector("svg.lucide-plus"),
-      );
+      const plus = strip?.querySelector("button[data-testid='tab-strip-new']");
       if (!plus) throw new Error("tab '+' button not found");
       const opts = { bubbles: true, pointerType: "mouse", button: 0 } as any;
       plus.dispatchEvent(new PointerEvent("pointerdown", opts));
@@ -443,26 +437,20 @@ describe("split pane", () => {
       return walk(tree);
     }, taskId);
 
-  const clickSplit = async (lucideClass: string, label: string) => {
+  const clickSplit = async (testId: string, label: string) => {
     // Wait for the toggle to render (the tab strip mounts async after the task
     // becomes active, and is slower under full-suite load).
     await browser.waitUntil(
       () =>
         browser.execute(
-          (cls) =>
-            [...document.querySelectorAll("button")].some((b) =>
-              b.querySelector(`svg.${cls}`),
-            ),
-          lucideClass,
+          (id) => !!document.querySelector(`button[data-testid="${id}"]`),
+          testId,
         ),
       { timeout: 10_000, timeoutMsg: `${label} toggle never appeared` },
     );
-    await browser.execute((cls) => {
-      const btn = [...document.querySelectorAll("button")].find((b) =>
-        b.querySelector(`svg.${cls}`),
-      );
-      (btn as HTMLElement).click();
-    }, lucideClass);
+    await browser.execute((id) => {
+      (document.querySelector(`button[data-testid="${id}"]`) as HTMLElement).click();
+    }, testId);
   };
 
   it("starts unsplit", async () => {
@@ -481,7 +469,7 @@ describe("split pane", () => {
   });
 
   it("split right builds a two-leaf tree", async () => {
-    await clickSplit("lucide-square-split-horizontal", "Split right");
+    await clickSplit("tab-strip-split-right", "Split right");
     await browser.waitUntil(async () => (await leafCount()) === 2, {
       timeout: 8_000,
       timeoutMsg: "split right did not produce 2 panes",
@@ -489,7 +477,7 @@ describe("split pane", () => {
   });
 
   it("split below grows the tree to three leaves", async () => {
-    await clickSplit("lucide-square-split-vertical", "Split below");
+    await clickSplit("tab-strip-split-down", "Split down");
     await browser.waitUntil(async () => (await leafCount()) === 3, {
       timeout: 8_000,
       timeoutMsg: "split below did not produce 3 panes",
@@ -1465,10 +1453,10 @@ describe("pinned tabs do not scroll away", () => {
       window.__termic!.useApp.getState().pinTab(id, tab);
     }, taskId, agent);
 
-    // Size the flood to the real strip: a pill shrinks to min-w 140px, so it
-    // takes ceil(width / 140) of them to overflow. A fixed count would silently
+    // Size the flood to the real strip: a pill shrinks to min-w 96px, so it
+    // takes ceil(width / 96) of them to overflow. A fixed count would silently
     // stop overflowing on a wider window and make the case vacuous.
-    const need = Math.ceil((await geometry(agent)).clientWidth / 140) + 3;
+    const need = Math.ceil((await geometry(agent)).clientWidth / 96) + 3;
     await browser.execute((id, n) => {
       const app = window.__termic!.useApp.getState();
       for (let i = 0; i < n; i++) {
@@ -1767,5 +1755,120 @@ describe("compact rail", () => {
     expect(bar.cls).toBe(true);
     expect(bar.gutter).toBe(0);
     await snap("compact-rail.png");
+  });
+});
+
+// The session bar (docs/ui.md "Session bar"): tabs in a recessed well, the
+// close button behind the tab's right end, and the broadcast toggle in the
+// pane-tools well.
+describe("session bar", () => {
+  let taskId!: string;
+  let agentTab!: string;
+  let shellTab!: string;
+  after(async () => {
+    if (taskId) await archiveTask(taskId);
+  });
+
+  const bar = () => `[data-task-id="${taskId}"] .sessionbar`;
+  const pill = (id: string) => `[data-task-id="${taskId}"] [data-tab-id="${id}"]`;
+  const opacity = (sel: string) =>
+    browser.execute((s) => {
+      const el = document.querySelector(s);
+      return el ? getComputedStyle(el).opacity : null;
+    }, sel);
+
+  before(async () => {
+    await waitForAppShell();
+    await requireTermicApi();
+    taskId = await openTask("e2e-sessionbar");
+    await browser.waitUntil(
+      () => browser.execute(
+        (id) => (window.__termic!.useApp.getState().tabs[id] ?? []).length === 1,
+        taskId,
+      ),
+      { timeout: 20_000, timeoutMsg: "agent tab never appeared" },
+    );
+    agentTab = await browser.execute(
+      (id) => window.__termic!.useApp.getState().tabs[id][0].id as string,
+      taskId,
+    );
+    shellTab = "e2e-sessionbar-shell";
+    await browser.execute((id, tab) => {
+      window.__termic!.useApp.getState().addTab(id, { id: tab, type: "terminal", cli: "shell", title: "Terminal" } as any);
+    }, taskId, shellTab);
+    await ensureActiveTask(taskId);
+    await dismissOverlays();
+    await waitVisible(pill(shellTab));
+  });
+
+  it("is as tall as the split layout assumes, with tabs in the well", async () => {
+    // TaskView places split content SESSION_BAR_PX below each pane's top, so
+    // a bar that grows or shrinks leaves a gap or hides the first row.
+    const geometry = await browser.execute((barSel, wellTab) => {
+      const el = document.querySelector(barSel) as HTMLElement;
+      const tab = document.querySelector(wellTab) as HTMLElement;
+      return {
+        bar: el.getBoundingClientRect().height,
+        tab: tab.getBoundingClientRect().height,
+        inWell: !!tab.closest(".sessionbar-well"),
+      };
+    }, bar(), pill(shellTab));
+    expect(geometry).toEqual({ bar: 42, tab: 28, inWell: true });
+  });
+
+  it("underlines only the active tab", async () => {
+    const underlined = () => browser.execute((s) =>
+      [...document.querySelectorAll(`${s} [data-tab-id]`)]
+        .filter(el => el.querySelector(".sessionbar-tab-underline"))
+        .map(el => el.getAttribute("data-tab-id")), bar());
+    expect(await underlined()).toEqual([shellTab]);
+
+    await $(pill(agentTab)).click();
+    await browser.waitUntil(async () => (await underlined())[0] === agentTab, {
+      timeout: 5_000, timeoutMsg: "the underline never followed the click",
+    });
+    expect(await underlined()).toEqual([agentTab]);
+    await snap("session-bar.png");
+  });
+
+  it("shows the close button only while the pointer is on the tab's right end", async () => {
+    const close = `${pill(shellTab)} button[title="Close tab"]`;
+    await $(`${pill(shellTab)} .sessionbar-tab-name`).moveTo();
+    await browser.waitUntil(async () => (await opacity(close)) === "0", {
+      timeout: 3_000, timeoutMsg: `hovering the name revealed the close button (opacity ${await opacity(close)})`,
+    });
+
+    await $(`${pill(shellTab)} .sessionbar-slot`).moveTo();
+    await browser.waitUntil(async () => (await opacity(close)) === "1", {
+      timeout: 3_000, timeoutMsg: `the right end never revealed the close button (opacity ${await opacity(close)})`,
+    });
+    await snap("session-bar-close-hover.png");
+
+    // A real pointer click, so a close layer that stayed pointer-events:none
+    // fails here instead of looking right.
+    await $(close).click();
+    await waitGone(pill(shellTab));
+    expect(await browser.execute(
+      (id, tab) => (window.__termic!.useApp.getState().tabs[id] ?? []).some((t: any) => t.id === tab),
+      taskId, shellTab,
+    )).toBe(false);
+  });
+
+  it("raises the broadcast button while the broadcast dialog is open", async () => {
+    const button = `${bar()} [data-testid="tab-strip-broadcast"]`;
+    const pressed = () => browser.execute((s) => document.querySelector(s)?.getAttribute("aria-pressed"), button);
+    expect(await pressed()).toBe("false");
+
+    await browser.execute((s) => (document.querySelector(s) as HTMLElement).click(), button);
+    await browser.waitUntil(async () => (await pressed()) === "true", {
+      timeout: 5_000, timeoutMsg: "the broadcast button never read as on",
+    });
+    expect(await browser.execute(() => window.__termic!.useUI.getState().broadcastForTaskId)).toBe(taskId);
+
+    await browser.execute(() => window.__termic!.useUI.getState().closeBroadcast());
+    await browser.waitUntil(async () => (await pressed()) === "false", {
+      timeout: 5_000, timeoutMsg: "closing the dialog left the broadcast button on",
+    });
+    await dismissOverlays();
   });
 });

@@ -20,8 +20,13 @@ export default {
 
   tabBar: {
     broadcastTip: "向此任务的所有智能体广播消息（{{combo}}）",
+    broadcastAria: "向所有智能体广播",
     splitRightTip: "向右分屏（{{combo}}）",
+    splitRightAria: "向右分屏",
     splitBelowTip: "向下分屏（{{combo}}）",
+    splitBelowAria: "向下分屏",
+    newTip: "新建会话（{{combo}}）",
+    newAria: "新建会话",
     restartRunTip: "重新运行",
     stopTip: "停止",
     runTip: "运行",

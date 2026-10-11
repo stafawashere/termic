@@ -200,7 +200,8 @@ Priority, high to low, and it is the same chain everywhere:
 `failed > attention > partial > done > working > delegated > dirty`.
 
 - **Tab strip** (`TabBar`) — every state, with `data-work-state` and
-  `data-delegated` for specs.
+  `data-delegated` for specs. Working draws the ECG trace there, done and
+  partial are green (docs/ui.md "Session bar").
 - **Sidebar row** — per tab when the task is expanded; one aggregate badge
   when collapsed (`taskWorkBadge`). The aggregate is what you scan when the
   task is not on screen, so state 6 draws there too.

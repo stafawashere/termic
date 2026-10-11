@@ -1741,6 +1741,55 @@ Deliberately NOT extended to the file context menus (`CopyPathItems`,
 app"; this acts on the task root. `ContextMenuItem` also drops `data-*`
 attributes, so its rows cannot carry a test id.
 
+## Session bar
+
+The "Session bar" design (2026-10): the tab strip above the terminal, in
+the title bar's material (`TabBar`, `.sessionbar` in `index.css`). Every
+split pane's own strip (`PaneHeader`) is the same bar with a close-pane
+button on the end, and the bottom shell strip reuses the same `TabPill`.
+
+- **Shell**: 42px, a two-stop gradient with the title bar's grain baked
+  into a background layer (`--sessionbar-grain`, no pseudo-element and no
+  z-index games). `SESSION_BAR_PX` in `TabBar.tsx` is the same 42: split
+  panes place their content that far below each pane's top, so the two
+  move together.
+- **Order**: the tab well, the + (opens the new-tab menu, as ⌘T does), a
+  spacer, then the pane-tools well: broadcast, split down, split right.
+  Broadcast is a toggle in the sense the UI can honour: it reads as on
+  (raised chip, accent icon, `aria-pressed`) while that task's broadcast
+  dialog is open, and a click while on closes it. The split buttons turn
+  accent once the task has a split.
+- **Tabs** size to their content, 96 to 200px, and shrink toward 96
+  (ellipsising) before the well scrolls. Vertical wheel turns into
+  horizontal scroll (`scrollSideways`); a trackpad swipe is left alone.
+  Pinned tabs keep a fixed width (200, 180 in pane strips) so a live title
+  cannot reflow the strip, and sit before a rule outside the scroller.
+- **Active**: the raised chip, bold ink, the agent glyph at full brand
+  colour with a soft glow. An idle tab's glyph is its brand colour mixed
+  40% into `--sessionbar-glyph-dim`, so every agent keeps its own hue.
+  The accent underline is drawn only on the active tab of the FOCUSED
+  pane, so across a split one tab reads as current.
+- **Trailing slot**: one 24x20 cell holding two stacked layers, the state
+  indicator and the close button. Only the tab's right end (a 40px hit
+  area) swaps them, so hovering the name never hides the state and the
+  name's tooltip stays reachable. Indicators in priority order: failed
+  (warning), attention (bell), partial (green ring), done (green dot),
+  working (the ECG trace, `TabTrace`), delegated (background ring), then
+  the unseen pad ring and the dirty dot. A pinned tab has a neutral unpin
+  button in the close layer, shown at rest when no indicator outranks it.
+- **The trace** animates only while a tab is working: its component
+  mounts only then, the pulse is dropped while the window is hidden
+  (`useDocumentVisible`), and reduced motion leaves a static trace.
+  `data-mark` moves to the pulse while it runs, so the e2e suite reads the
+  mark and its 1.4s duration off the same element.
+
+Window in the background: labels, indicators and icons drop to 55%
+opacity; wells and chips do not. Tokens are `--sessionbar-*` for the bar
+itself (Dark+ values in their own `@theme` block, derived from `--color-*`
+for the other dark themes and custom themes, and for light); wells, chips,
+hover ink and the settled green reuse the sidebar and title bar families.
+`src/lib/sessionBarTokens.test.ts` checks every theme redeclares them.
+
 ## Window chrome / drag
 
 macOS overlay title bar, hidden title, 84px reserved left for traffic lights. Their inset (`traffic_y` in `build_profile_window`) is 27.5, which centres them on the 50px bar: checked by eye on a Darwin 27 Mac, not yet on one before Tahoe (the old 38.5px bar used 21 on Tahoe and 16 before it). `TERMIC_TRAFFIC_Y` overrides it for tuning. Windows and Linux have no native frame at all (`decorations(false)` in `build_profile_window`): the same bar drags the window through `startDragging()`, a double click maximizes (read off the mousedown's click count), and `WindowControls` draws minimize, maximize / restore and close at its right end, in each platform's own look (Windows' caption glyphs and red Close; GNOME's small round buttons on Linux). Linux dropped GTK's title bar because it spent ~58px on the word "Termic" above a bar that already says where you are. The window still resizes from its edges (tao hit-tests the outer 5px of an undecorated window), and `WindowResizeEdges` lays transparent strips over that same 5px purely for the resize CURSOR, which tao sets on the toplevel window and which never shows over the webview. On Linux the window has no shadow, and the title-bar context menu (Move, Always on Top) is gone with the bar; the compositor's own Super+drag still moves it. The Activity window keeps its native title bar everywhere. Three drag mechanisms (each fails differently):
@@ -2671,6 +2720,10 @@ quarter of a ring by making one border transparent reads as a ring with a bite
 out of it, where a track plus a brighter arc reads as one object with a
 highlight going round it. `data-mark` says which mark is drawn, since the two
 are no longer distinguishable by their CSS.
+
+In the session bar the working mark is the ECG trace rather than the spinner,
+and done and partial are green (`--sidebar-settled`) to match the sidebar;
+see "Session bar".
 
 Surfaces: the tab strip (`TabBar`), the expanded sidebar row's per-tab badge,
 and the COLLAPSED sidebar row plus the dashboard through `taskWorkBadge`. The
