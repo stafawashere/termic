@@ -17,8 +17,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { create } from "zustand";
-import { Check, ChevronDown, ChevronRight, CircleDashed, CircleSlash, Clock3, X } from "lucide-react";
-import { Spinner } from "@/components/ui/Spinner";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/store/app";
 import { usePrefs } from "@/store/prefs";
@@ -26,9 +25,11 @@ import { retentionWindowMs } from "@/lib/subagentPrefs";
 import { useSubagents, type SubagentState } from "@/store/subagents";
 import { openSubagentPreview } from "@/store/subagentPreview";
 import {
-  buildSubagentTree, createRetentionExpirySelector, createSubagentStructureSelector, parseSubagentStructureKey,
-  selectSubagentRecord, subagentGroupStartsCollapsed, type SubagentAgentRow, type SubagentRowRules,
+  createRetentionExpirySelector, createSubagentStructureSelector, hasSubagentRow, selectSubagentRecord,
+  subagentGroupStartsCollapsed, subagentRowIndent, subagentRowsOfKey, type SubagentPhaseRow, type SubagentRowRules,
 } from "./subagentTree";
+import { FoldChevron, indentClass, StateMark } from "./subagentRowParts";
+import { WorkflowRunRow } from "./WorkflowRunRow";
 
 const EMPTY_FOLD: readonly string[] = Object.freeze([]);
 
@@ -156,13 +157,6 @@ export const SubagentGroupToggle = memo(function SubagentGroupToggle({ tabId }: 
   );
 });
 
-/** Indent per depth: depth 1 sits one step right of the tab row's ml-8. */
-const DEPTH_INDENT: Record<number, string> = {
-  1: "ml-11",
-  2: "ml-14",
-  3: "ml-17",
-};
-
 function stateCopy(state: SubagentState, t: TFunction<"sidebar">): { label: string; hint: string } {
   switch (state) {
     case "running":
@@ -177,23 +171,6 @@ function stateCopy(state: SubagentState, t: TFunction<"sidebar">): { label: stri
       return { label: t("subagents.unknown"), hint: t("subagents.unknownHint") };
     case "expired":
       return { label: t("subagents.expired"), hint: t("subagents.expiredHint") };
-  }
-}
-
-function StateMark({ state }: { state: SubagentState }) {
-  switch (state) {
-    case "running":
-      return <Spinner size={10} className="text-[var(--color-fg-dim)]" />;
-    case "done":
-      return <Check className="h-3 w-3 text-[var(--color-ok)]" />;
-    case "failed":
-      return <X className="h-3 w-3 text-[var(--color-err)]" />;
-    case "interrupted":
-      return <CircleSlash className="h-3 w-3 text-[var(--color-warn)]" />;
-    case "unknown":
-      return <CircleDashed className="h-3 w-3 text-[var(--color-fg-faint)]" />;
-    case "expired":
-      return <Clock3 className="h-3 w-3 text-[var(--color-fg-faint)]" />;
   }
 }
 
@@ -234,25 +211,19 @@ const SubagentRow = memo(function SubagentRow({ taskId, tabId, agentId, depth, h
       onClick={openTranscript}
       className={cn(
         "group/subagent flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-[3px] text-[12.5px] select-none transition-colors",
-        DEPTH_INDENT[depth] ?? DEPTH_INDENT[3],
+        indentClass(depth),
         selected
           ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
           : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
       )}
     >
       {hasChildren ? (
-        <button
-          data-testid="subagent-fold"
-          aria-label={foldLabel}
-          aria-expanded={!folded}
-          title={foldLabel}
-          onClick={(e) => { e.stopPropagation(); toggleFold(tabId, agentId); }}
-          className="shrink-0 rounded p-0.5 hover:bg-[var(--color-bg-3)] transition-colors"
-        >
-          {folded
-            ? <ChevronRight className="h-3 w-3 text-[var(--color-fg-faint)]" />
-            : <ChevronDown className="h-3 w-3 text-[var(--color-fg-faint)]" />}
-        </button>
+        <FoldChevron
+          testId="subagent-fold"
+          folded={folded}
+          label={foldLabel}
+          onToggle={() => toggleFold(tabId, agentId)}
+        />
       ) : (
         <span aria-hidden className="h-4 w-4 shrink-0" />
       )}
@@ -271,8 +242,64 @@ const SubagentRow = memo(function SubagentRow({ taskId, tabId, agentId, depth, h
   );
 });
 
-/** Every subagent row of one tab, flat and keyed by agent id, so a row that
- *  moves to a new parent is the same DOM node in its new place. */
+const PhaseRow = memo(function PhaseRow({ tabId, phaseKey, title, indent, folded, selected, onToggle }: {
+  tabId: string;
+  phaseKey: string;
+  title: string;
+  indent: number;
+  folded: boolean;
+  /** True while the phase is folded over the agent whose tab is active. */
+  selected: boolean;
+  onToggle: (tabId: string, foldId: string) => void;
+}) {
+  const { t } = useTranslation("sidebar");
+  const label = title || t("subagents.noPhase");
+  const foldLabel = folded ? t("subagents.expandPhase") : t("subagents.collapsePhase");
+  const toggle = () => onToggle(tabId, phaseKey);
+
+  return (
+    <div
+      data-testid="workflow-phase-row"
+      data-phase-key={phaseKey}
+      aria-expanded={!folded}
+      onClick={toggle}
+      className={cn(
+        "flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-[3px] text-[12.5px] select-none transition-colors",
+        indentClass(indent),
+        selected
+          ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
+          : "text-[var(--color-fg-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
+      )}
+    >
+      <FoldChevron testId="workflow-phase-fold" folded={folded} label={foldLabel} onToggle={toggle} />
+      <span className="min-w-0 flex-1 truncate" title={label}>{label}</span>
+    </div>
+  );
+});
+
+/** Where the selected agent sits in a run, as strings so the list moves
+ *  only when the selection itself moves to another run or phase. */
+function useSelectedRunPlace(tabId: string, selectedAgentId: string | null): { runId: string | null; phase: string | null } {
+  const runId = useSubagents(s => {
+    if (selectedAgentId === null) return null;
+    return s.byTab[tabId]?.agents[selectedAgentId]?.workflowRunId ?? null;
+  });
+  const phase = useSubagents(s => {
+    if (selectedAgentId === null) return null;
+    return s.byTab[tabId]?.agents[selectedAgentId]?.workflowPhase ?? null;
+  });
+  return { runId, phase };
+}
+
+function isPhaseOverSelection(row: SubagentPhaseRow, folded: boolean, place: { runId: string | null; phase: string | null }): boolean {
+  const isSelectedRun = place.runId === row.runId;
+  const isSelectedPhase = place.phase === row.title;
+  return folded && isSelectedRun && isSelectedPhase;
+}
+
+/** Every subagent row of one tab, flat and keyed: an agent by its id, a run
+ *  and a phase by their own keys. A row that moves to a new parent is the
+ *  same DOM node in its new place. */
 export const SubagentRows = memo(function SubagentRows({ taskId, tabId, selectedAgentId }: {
   taskId: string;
   tabId: string;
@@ -282,29 +309,77 @@ export const SubagentRows = memo(function SubagentRows({ taskId, tabId, selected
   const { structureKey, rules } = useVisibleSubagentStructure(tabId);
   const { collapsed } = useSubagentGroupFold(tabId, rules);
   const foldedIds = useSubagentFold(s => s.byTab[tabId] ?? EMPTY_FOLD);
+  const toggleFold = useSubagentFold(s => s.toggle);
+  const toggleRun = useSubagentFold(s => s.toggleRun);
+  const selectedPlace = useSelectedRunPlace(tabId, selectedAgentId);
 
-  const rows = useMemo(
-    () => buildSubagentTree(parseSubagentStructureKey(structureKey), new Set(foldedIds))
-      .filter((row): row is SubagentAgentRow => row.kind === "agent"),
-    [structureKey, foldedIds],
-  );
+  const rows = useMemo(() => subagentRowsOfKey(structureKey, new Set(foldedIds)), [structureKey, foldedIds]);
 
   if (rows.length === 0 || collapsed) return null;
 
   return (
     <>
-      {rows.map(row => (
-        <SubagentRow
-          key={row.key}
-          taskId={taskId}
-          tabId={tabId}
-          agentId={row.agentId}
-          depth={row.depth}
-          hasChildren={row.hasChildren}
-          folded={foldedIds.includes(row.agentId)}
-          selected={row.agentId === selectedAgentId}
-        />
-      ))}
+      {rows.map(row => {
+        const indent = subagentRowIndent(row);
+
+        if (row.kind === "run") {
+          const isOverSelection = !row.open && selectedPlace.runId === row.runId;
+          return (
+            <WorkflowRunRow
+              key={row.key}
+              tabId={tabId}
+              runId={row.runId}
+              indent={indent}
+              open={row.open}
+              selected={isOverSelection}
+              rules={rules}
+              onToggle={toggleRun}
+            />
+          );
+        }
+
+        if (row.kind === "phase") {
+          const folded = foldedIds.includes(row.key);
+          return (
+            <PhaseRow
+              key={row.key}
+              tabId={tabId}
+              phaseKey={row.key}
+              title={row.title}
+              indent={indent}
+              folded={folded}
+              selected={isPhaseOverSelection(row, folded, selectedPlace)}
+              onToggle={toggleFold}
+            />
+          );
+        }
+
+        return (
+          <SubagentRow
+            key={row.key}
+            taskId={taskId}
+            tabId={tabId}
+            agentId={row.agentId}
+            depth={indent}
+            hasChildren={row.hasChildren}
+            folded={foldedIds.includes(row.agentId)}
+            selected={row.agentId === selectedAgentId}
+          />
+        );
+      })}
     </>
   );
 });
+
+/** Whether the agent whose tab is active has a row under one of `tabIds`
+ *  under the current type filter and retention, for the task header's
+ *  highlight. A boolean, so a subagent starting or finishing re-renders no
+ *  task row. Retention is measured as of the task row's last render. */
+export function useSubagentHasRow(tabIds: readonly string[], agentId: string | null): boolean {
+  const typeFilter = usePrefs(s => s.subagentTypeFilter);
+  const retention = usePrefs(s => s.subagentRetention);
+  const retentionMs = retentionWindowMs(retention);
+  const now = Date.now();
+
+  return useSubagents(s => hasSubagentRow(s.byTab, tabIds, agentId, { typeFilter, retentionMs, now }));
+}

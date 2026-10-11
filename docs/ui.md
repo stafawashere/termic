@@ -377,15 +377,26 @@ badge, and none of them touches the parent tab's work badge or bell.
   under which parent) and each row selects its own record, so an agent
   finishing re-renders that row alone. Pinned in `selectorFanout.test.ts`
   ("subagent rows").
-- **Workflow agents get no row.** They stay in the store for the workflow
-  run node; a child whose parent is one sits under the tab.
+- **Workflow agents sit under a run row.** A run is one row
+  (`WorkflowRunRow.tsx`) at a plain agent's indent, with its name, a
+  `running/total` count and a running, failed or done badge, all read from
+  one counts string so it never selects an agent record. It starts
+  collapsed; opened it lists a phase row per phase and the agents with no
+  phase, each one step deeper. Clicking a run or phase row folds it and
+  opens nothing. A workflow agent row opens its transcript like any other,
+  with its `workflowRunId` on the tab so the view reads under
+  `subagents/workflows/<run>/`. A child whose parent is a workflow agent
+  sits under the tab.
 - **Folding is in memory only.** A row with children has a chevron that folds
   its subtree (`useSubagentFold`); collapsing the task hides every subagent
   row with it, and nothing about subagents is written to localStorage.
 - **The header predicate is `childRowCarriesSelection`.** An active tab of
   type `"subagent"` whose `subagentAgentId` has a row in this task carries the
   selection like a terminal child does, so the header drops its highlight and
-  that row draws `--color-sel`.
+  that row draws `--color-sel`. The task row asks through
+  `useSubagentHasRow`, which applies the type filter and retention, so a
+  filtered-out agent leaves the highlight on the header. When the agent is
+  folded away inside a run or a phase, that run or phase row draws it.
 - **A row names the agent by its `.meta.json` description**, falling back
   to the agent type, with `type: description` as its tooltip. Clicking it
   calls `setActiveTask` and only then `openSubagentPreview`, because
@@ -427,8 +438,8 @@ subagent is something a claude task does. Every control applies live.
   the same pass a launch runs. Pinned in `store/subagentSettings.test.ts`.
 - **Type filters (`subagentTypeFilter`).** `lib/subagentKind.ts` classes an
   agent type as built-in, custom, fork or workflow. Forks are unmeasured:
-  only an agent type spelled `fork` counts as one. The workflow switch is
-  drawn disabled because workflow agents have no row yet.
+  only an agent type spelled `fork` counts as one. A run whose agents the
+  filter hides draws no run row.
 - **Retention (`subagentRetention`).** How long a `done`, `failed` or
   `interrupted` row stays. `running`, `unknown` and `expired` rows never go.
   `SubagentRows` schedules one timer per tab, only while an ended row is

@@ -181,6 +181,22 @@ export function buildSubagentTree(
   return rows;
 }
 
+/** The rows a tab draws for its structure key: every kind, so a tab whose
+ *  only subagents are workflow agents has its run rows under the group
+ *  chevron rather than a chevron with nothing under it. */
+export function subagentRowsOfKey(structureKey: string, folded: ReadonlySet<string>): readonly SubagentTreeRow[] {
+  return buildSubagentTree(parseSubagentStructureKey(structureKey), folded);
+}
+
+/** How far a row is indented. A run sits where a plain agent does, one
+ *  step under the tab row, so everything inside it is one step deeper
+ *  than its depth in the run. */
+export function subagentRowIndent(row: SubagentTreeRow): number {
+  const isPlainAgent = row.kind === "agent" && row.runId === null;
+  const indent = isPlainAgent ? row.depth : row.depth + 1;
+  return Math.min(indent, MAX_SUBAGENT_INDENT_DEPTH);
+}
+
 /** What the settings decide about which rows show. `retentionMs` is how
  *  long an ended row stays (null for the whole session, 0 for not at all),
  *  measured against `now`. */

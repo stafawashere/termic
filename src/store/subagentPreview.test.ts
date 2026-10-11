@@ -20,6 +20,7 @@ vi.mock("@/lib/tabFocus", () => ({
 import * as ipc from "@/lib/ipc";
 import { useApp } from "@/store/app";
 import { useSubagents } from "@/store/subagents";
+import { WORKFLOW_AGENT_TYPE } from "@/lib/subagentKind";
 import {
   installSubagentPreviewArchiveWatch, openSubagentPreview, openTranscriptSession,
   type TranscriptSnapshot,
@@ -150,6 +151,22 @@ describe("openSubagentPreview", () => {
     const persisted = useApp.getState().tasks.find(t => t.id === TASK)!.persisted_tabs ?? [];
     expect(persisted.map(t => t.id)).not.toContain(view.id);
     expect(persisted.map(t => t.id)).toContain(PARENT);
+  });
+
+  it("opens a workflow agent with its run id, so the view reads under that run", () => {
+    const workflowAgent = "a2123456789abcdef";
+    useSubagents.getState().start(TASK, PARENT, SESSION, workflowAgent, WORKFLOW_AGENT_TYPE);
+    useSubagents.getState().applySummaries(PARENT, SESSION, [{
+      agentId: workflowAgent, isWorkflow: true, workflowRunId: "wf_acme1", mtimeMs: 1, outcome: "none",
+      agentType: WORKFLOW_AGENT_TYPE, description: "Review the diff", model: null, toolUseId: null, spawnDepth: 1,
+      parentAgentId: null, requestShape: null, requestNonInteractive: null, workflowPhase: "Review",
+    }]);
+
+    openSubagentPreview(TASK, PARENT, workflowAgent);
+    expect(subagentTabs()).toEqual([expect.objectContaining({ subagentAgentId: workflowAgent, workflowRunId: "wf_acme1" })]);
+
+    openSubagentPreview(TASK, PARENT, AGENT_A);
+    expect(subagentTabs()).toEqual([expect.objectContaining({ subagentAgentId: AGENT_A, workflowRunId: null })]);
   });
 
   it("does nothing for an agent the store does not hold", () => {

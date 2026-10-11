@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildSubagentTree, childRowCarriesSelection, createSubagentStructureSelector, createWorkflowRunCountsSelector,
   hasSubagentRow, isPastRetention, nextRetentionExpiry, parseSubagentStructureKey, subagentGroupStartsCollapsed,
-  subagentStructureKey, workflowRunName, EMPTY_SUBAGENT_TREE, MAX_SUBAGENT_INDENT_DEPTH,
+  subagentRowIndent, subagentRowsOfKey, subagentStructureKey, workflowRunName, EMPTY_SUBAGENT_TREE, MAX_SUBAGENT_INDENT_DEPTH,
   type SubagentLink, type SubagentRowRules, type SubagentTreeRow,
 } from "./subagentTree";
 import { DEFAULT_SUBAGENT_TYPE_FILTER } from "@/lib/subagentPrefs";
@@ -505,6 +505,37 @@ describe("workflow runs", () => {
     expect(subagentStructureKey(tab, noWorkflow)).toBe("");
     expect(subagentStructureKey(tab, finishedGone)).toBe("");
     expect(subagentStructureKey(tab, { typeFilter: ALL_KINDS, retentionMs: null, now: 10 })).toBe(`run:${RUN};`);
+  });
+
+  it("a tab with only workflow agents draws its run under the group chevron, in every fold state", () => {
+    const tab = entry([wf("w1", "Build"), wf("w2", null)]);
+    const phaseFold = new Set([`phase:${RUN}:0`]);
+    const states: [ReadonlySet<string>, ReadonlySet<string>][] = [
+      [NONE, NONE],
+      [new Set([RUN]), NONE],
+      [new Set([RUN]), phaseFold],
+    ];
+
+    for (const [open, folded] of states) {
+      const key = subagentStructureKey(tab, undefined, open);
+      const rows = subagentRowsOfKey(key, folded);
+
+      expect(key).not.toBe("");
+      expect(rows[0]).toMatchObject({ kind: "run", runId: RUN });
+    }
+  });
+
+  it("indents a run like a plain agent and everything in it one step deeper", () => {
+    const tab = entry([record("a"), wf("w1", "Build"), wf("w2", null)]);
+    const rows = subagentRowsOfKey(subagentStructureKey(tab, undefined, new Set([RUN])), NONE);
+
+    expect(rows.map(row => `${row.key} ${subagentRowIndent(row)}`)).toEqual([
+      "a 1",
+      `run:${RUN} 1`,
+      `phase:${RUN}:0 2`,
+      "w1 3",
+      "w2 2",
+    ]);
   });
 
   it("is named by its run file, or by its id with the wf_ prefix kept", () => {

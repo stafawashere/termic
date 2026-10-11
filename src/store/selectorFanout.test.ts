@@ -1341,4 +1341,12 @@ describe("subagent settings (bear traps 5, 8)", () => {
     expect(sidebar).not.toMatch(/s\.subagent[A-Z]\w*/);
     expect(rows).toMatch(/usePrefs\(s => s\.subagentTypeFilter\)/);
   });
+
+  it("the task header asks the filter-aware hook, not the bare predicate", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const sidebar = readFileSync(resolve(here, "../components/sidebar/Sidebar.tsx"), "utf8");
+
+    expect(sidebar).toMatch(/useSubagentHasRow\(terminalTabIds, activeSubagentId\)/);
+    expect(sidebar).not.toMatch(/hasSubagentRow\(/);
+  });
 });

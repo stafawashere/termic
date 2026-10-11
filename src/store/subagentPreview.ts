@@ -34,7 +34,7 @@ export function openSubagentPreview(taskId: string, parentTabId: string, agentId
     parentTabId,
     sessionId: entry.sessionId,
     subagentAgentId: agentId,
-    workflowRunId: null,
+    workflowRunId: record.workflowRunId,
     permanent,
   });
 }

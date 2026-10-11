@@ -52,9 +52,8 @@ import { ProjectFilterBar, ProjectFilterToggle } from "./ProjectTaskFilter";
 import { filterTasks, isFilterActive } from "@/lib/taskFilter";
 import { collectTaskProps, collectedText } from "@/lib/tabProps";
 import { TaskGroupBlock } from "./TaskGroupBlock";
-import { SubagentGroupToggle, SubagentRows } from "./SubagentRows";
-import { childRowCarriesSelection, hasSubagentRow, subagentIdOfTab } from "./subagentTree";
-import { useSubagents } from "@/store/subagents";
+import { SubagentGroupToggle, SubagentRows, useSubagentHasRow } from "./SubagentRows";
+import { childRowCarriesSelection, subagentIdOfTab } from "./subagentTree";
 import { StatusChips } from "./StatusChips";
 import { StatusSection } from "./StatusSection";
 import { RollupMarks } from "./RollupMarks";
@@ -2917,7 +2916,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
   const activeTab = tabs.find(t => t.id === activeTabId);
   const activeSubagentId = subagentIdOfTab(activeTab);
   // A boolean, so a subagent starting or finishing re-renders no task row.
-  const activeSubagentHasRow = useSubagents(s => hasSubagentRow(s.byTab, terminalTabIds, activeSubagentId));
+  const activeSubagentHasRow = useSubagentHasRow(terminalTabIds, activeSubagentId);
   const subagentRowIds = activeSubagentHasRow && activeSubagentId !== null
     ? new Set([activeSubagentId])
     : NO_SUBAGENT_ROWS;
