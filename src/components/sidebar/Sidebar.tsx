@@ -1,7 +1,6 @@
 // Left sidebar: traffic-light spacer, toggle, primary nav, projects tree, footer.
 // Two layout flavors: full (220px) vs compact (56px, icon-only with tooltips).
 
-import { ThemePicker } from "@/components/ThemePicker";
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type FocusEvent as ReactFocusEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
@@ -55,7 +54,7 @@ import { SubagentGroupToggle, SubagentRows, useSubagentFold, useSubagentHasRow }
 import { childRowCarriesSelection, subagentIdOfTab } from "./subagentTree";
 import { StatusChips } from "./StatusChips";
 import { AgentActivityReadout } from "./AgentActivityReadout";
-import { BugGlyph, ChecklistGlyph, GearGlyph, KeyboardGlyph, MailGlyph, PulseGlyph, CritterGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
+import { ChecklistGlyph, CritterGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
 import { STATUS_BUCKETS } from "@/lib/sidebarStatus";
 import { StatusSection, StatusViewCount } from "./StatusSection";
 import { RollupMarks } from "./RollupMarks";
@@ -68,6 +67,7 @@ import { taskNeedsAttention, taskWorkDone, taskWorking, taskDelegated } from "@/
 import { delegatedTitle } from "@/lib/delegatedWork";
 import { FILE_MANAGER } from "@/lib/openExternal";
 import { kbd } from "@/lib/platform";
+import { SidebarFooter } from "./SidebarFooter";
 
 /** Pick a default name for a freshly-created task (repo-root OR worktree).
  *  Format: "<agent>-N" where N is the next unused index for that CLI among
@@ -302,31 +302,6 @@ export function Sidebar({ compact: compactProp, activityAnimates = true }: {
     if (scroller) scroller.scrollTop = viewScrollTop.current[sidebarView] ?? 0;
   }, [sidebarView]);
 
-  /** Build a mailto: URL with prefilled subject + body and hand it to
-   *  the OS's default mail handler via `open_path` (the same Rust
-   *  command the Open button uses for preview URLs — it shells out to
-   *  macOS `open`, which DTRT for mailto: too).
-   *
-   *  `open` always exits 0 once it hands the URL to *some* app, even
-   *  when that app can't do anything useful with a mailto: link — on
-   *  macOS the mailto: scheme handler in LaunchServices isn't tied to
-   *  the "default email reader" setting, and can end up pointing at a
-   *  browser (e.g. Chrome) instead of Mail/Outlook, which just opens a
-   *  blank tab (#103). There's no reliable way to detect that failure
-   *  from here, so always copy the address too: whatever mailto: does,
-   *  the user still walks away with contact@termic.dev in hand. */
-  const openMailto = (to: string, subject: string, body: string) => {
-    const url = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    openPath(url).catch(() => {});
-    copyToClipboard(to, to);
-  };
-  /** Open a prefilled "New issue" on the public GitHub tracker. Same
-   *  query-string shape as openMailto so both support buttons route through
-   *  one builder. */
-  const openIssue = (title: string, body: string) => {
-    const url = `https://github.com/simion/termic/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
-    openPath(url).catch(() => {});
-  };
   /** True if ANY tab in the task just transitioned to settled/idle
    *  (work-done signal — agent stopped producing output, waiting on
    *  user). Gated on the same `settledHighlight` pref so the check
@@ -2612,80 +2587,7 @@ export function Sidebar({ compact: compactProp, activityAnimates = true }: {
         {/* The profile indicator, above the footer and below the project
             list. Renders nothing until a profile exists. */}
 
-        {/* Footer */}
-        <div className={cn(
-          "sidebar-footer flex shrink-0 gap-[4px] border-t border-[var(--sidebar-divider)]",
-          // --bottom-bar-h (expanded) is the shared height for every bottom
-          // bar. Compact mode stays a vertical icon stack with its own padding.
-          // The gear's glyph ends where the badges do (8px in from the edge, its
-          // 30px box overhanging by 6.5px), and the row keeps its spacing.
-          compact ? "flex-col items-center p-2" : "h-[var(--bottom-bar-h)] items-center pl-[18.5px] pr-[1.5px]",
-        )}>
-          {/* Left cluster (full mode): support — bug + contact. The bug
-              button opens a prefilled GitHub issue (public tracker, better
-              than email for triage + dedupe); Contact stays a mailto: that
-              opens the user's default mail client. Compact mode is
-              flex-col, so left/right ordering collapses into a top/bottom
-              stack. */}
-          {/* Theme, first in the row. It came down from the title bar when the
-              profile chip took that space: it is a set-once preference, not a
-              thing you reach for while driving an agent, and this footer is
-              where the other set-once affordances already live. */}
-          <ThemePicker />
-          <Tip content={t("reportBug")}>
-            <button type="button" aria-label={t("reportBug")} className="sidebar-footer-btn" onClick={() =>
-              openIssue(t("bugIssueTitle"), t("bugIssueBody"))
-            }>
-              <BugGlyph size={footerGlyph(compact)} />
-            </button>
-          </Tip>
-          <Tip content={t("contact")}>
-            <button type="button" aria-label={t("contact")} className="sidebar-footer-btn" onClick={() =>
-              openMailto("contact@termic.dev", t("contactSubject"), "")
-            }>
-              <MailGlyph size={footerGlyph(compact)} />
-            </button>
-          </Tip>
-          <Tip content={t("shortcuts")}>
-            <button type="button" aria-label={t("shortcuts")} className="sidebar-footer-btn" onClick={() => useUI.getState().openShortcutsHelp()}>
-              <KeyboardGlyph size={footerGlyph(compact)} />
-            </button>
-          </Tip>
-          {/* Activity monitor: per-agent CPU / memory. Opens a SEPARATE
-              window (not a dialog) so it keeps updating while you drive the
-              agent it is measuring. Sampling starts with that window and
-              stops when it closes. */}
-          <Tip content={t("activityTip")}>
-            <button
-              type="button"
-              aria-label={t("activityTip")}
-              className="sidebar-footer-btn"
-              data-testid="open-activity"
-              onClick={() => { void procmonOpenWindow().catch(() => {}); }}
-            >
-              <PulseGlyph size={footerGlyph(compact)} />
-            </button>
-          </Tip>
-          {/* Settings, rightmost, at the absolute edge: the gear is exactly
-              where users reflexively reach for it (same position as macOS
-              preferences in most apps). `ml-auto` pushes it there.
-
-              The PROFILE control that used to sit beside it moved to the title
-              bar with the rest of the profile UI (GH #280). "Add project" was
-              removed earlier for a different reason: it duplicated the button
-              in the PROJECTS header, which is where the action belongs, next
-              to the list it acts on. */}
-          <Tip content={t("settingsTip", { combo: kbd("⌘,") })}>
-            <button
-              type="button"
-              aria-label={t("settingsTip", { combo: kbd("⌘,") })}
-              className={cn("sidebar-footer-btn", !compact && "ml-auto")}
-              onClick={() => openSettings()}
-            >
-              <GearGlyph size={footerGlyph(compact)} />
-            </button>
-          </Tip>
-        </div>
+        <SidebarFooter compact={compact} />
       </div>
 
       </aside>
@@ -2725,11 +2627,6 @@ export function Sidebar({ compact: compactProp, activityAnimates = true }: {
 function projectMonogram(name: string): string {
   const cleaned = name.trim();
   return cleaned ? cleaned.slice(0, 2).toUpperCase() : "?";
-}
-
-/** The footer's glyphs: the design's 17px, larger on the icon rail. */
-function footerGlyph(compact: boolean): number {
-  return compact ? 22 : 17;
 }
 
 // Tiny status badge reused on both the task header (aggregated, when

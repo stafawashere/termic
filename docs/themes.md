@@ -174,6 +174,22 @@ themes, and their own block for light, where the grain is off. The
 session strip's running word and trace take `--color-accent`. They are not
 keys in a theme file.
 
+## Footer tokens
+
+The footer strip (docs/ui.md "The footer strip") reuses the `--sidebar-*`
+wells, raised chips, counts, inks and footer gradient, and adds
+`--footer-*` for the rest: the strip's height (`h`, 46px), the task bar's
+gradient and edges (`bg-top`, `bg-bottom`, `border`, `highlight`, and
+`side-highlight` for the sidebar half), the sandbox chip (`chip-border`,
+`chip-hover`, `tag-bg`), the usage well's hover ring (`well-hover-ring`),
+the meter (`meter-track`, `meter-shadow`, `meter-dash` for the unknown
+state) and the light theme's sun glyph (`sun`). Same arrangement again:
+Dark+ literals in `@theme`, derived from `--color-*` for the other dark
+themes and custom themes, their own block for light. The meter fill, the
+unread dot and the active Queue glyph take `--color-accent`; the sandbox
+states take `--color-ok` and `--color-warn`. They are not keys in a theme
+file.
+
 ## The subagent view paints with claude's palette
 
 The subagent transcript view (docs/ui.md "The subagent transcript view")

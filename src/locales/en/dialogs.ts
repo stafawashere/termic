@@ -20,6 +20,9 @@ export default {
     loadError: "Couldn't load the changelog.",
     empty: "No changelog entries yet.",
     installed: "Installed",
+    contact: "Contact",
+    contactTip: "Email {{address}} (the address is also copied)",
+    contactSubject: "Hello from Termic",
   },
   closeDialog: {
     title: "Close Termic?",

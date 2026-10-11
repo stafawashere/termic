@@ -274,10 +274,8 @@ accent is the theme's, never a literal.
 - **Menus** opt in with `.sidebar-menu`, which restyles the shared menu
   primitives (34px items, labelled sections, checked rows) for the sidebar
   only.
-- **The bottom bar** stays `--bottom-bar-h` (36px, shared with every
-  other bottom bar). Its glyphs are the sidebar's own, 17px, in 30px
-  buttons; the row is shifted so the gear's glyph ends where the tree's
-  badges do.
+- **The bottom bar** is the sidebar half of the footer strip (see "The
+  footer strip" below).
 - **The icon rail** stacks the views in the same well, over the activity
   readout in its narrow form. Every row is a 32px tile (`.sidebar-rail-tile`)
   with a corner dot for what its full row would draw. The hover reveal
@@ -289,6 +287,50 @@ accent is the theme's, never a literal.
 - **Accent presets** (group folders, task groups, profiles) paint with
   `--color-swatch-*`, the palette at 57% chroma. The raw `--color-palette-*`
   still drives state marks and links.
+
+## The footer strip
+
+Two footers read as one strip across the bottom of the window: the
+sidebar's (`SidebarFooter`, `sidebar-footer`) and the task's (`FooterBar`
+in `TerminalPane.tsx`, `task-footer`, still on `--bottom-bar-h` until its
+redesign lands). The sidebar's is `--footer-h` (46px) with a
+1px `--footer-border` top hairline and a white top highlight, and the
+sidebar's right border runs through as the divider. `--bottom-bar-h` stays
+36px for the bars that are not part of the strip: the split terminal's tab
+strip and the right panel's footer. Tokens: docs/themes.md "Footer tokens".
+Glyphs are the design's own paths, in `src/components/footer/footerIcons.tsx`.
+
+Both are built from the sidebar's wells (`.footer-well`, `--sidebar-well-*`):
+3px padding, 8px radius, 2px gap.
+
+**The sidebar half.** One well holds theme (`footer-theme`), bug
+(`footer-bug`), mail (`footer-whats-new`), keyboard (`footer-shortcuts`) and
+activity (`open-activity`); settings (`footer-settings`) sits in its own
+well at the far edge. Each is a 32x26 `.footer-icon-btn` with a 16px,
+1.8-stroke glyph in `--sidebar-footer-icon`, hovering to
+`--sidebar-seg-hover`. The theme glyph is a moon, or in light a sun in
+`--footer-sun`. The icon rail keeps a vertical stack of the same buttons
+(`.sidebar-footer-btn`, 22px glyphs).
+
+The bug button opens a prefilled GitHub issue. The mail button opens the
+Changelog (What's New) dialog and marks the running version seen through
+`dismissWhatsNew`. While `isWhatsNewUnread(currentVersion,
+lastSeenVersion)` holds, a 6px `--color-accent` dot with a glow and a ring
+in the well's colour sits at the glyph's top-right
+(`footer-whats-new-dot`). The watermark is the update store's
+`updateLastSeenVersion`, so the dot stays gone across a reload and comes
+back only when a newer version runs. A fresh install adopts its version
+silently and shows no dot. `dismissWhatsNew` writes nothing when the
+version is already seen. The unread flag is a primitive boolean selected
+inside the footer, a memo component, so a version change re-renders the
+bar and not the sidebar. The contact mailto (`src/lib/contact.ts`, which
+also copies the address, #103) lives in the Changelog dialog's title line
+as `changelog-contact`.
+
+**Window in the background:** `initWindowFocus` mirrors `windowFocused`
+onto `data-window-inactive` on the root, and `.footer-ink` (text and
+glyphs) fades to 55% under it; wells and chips do not. An attribute rather
+than a subscription per bar, so a focus change costs no React render.
 
 ## The sidebar's filter bar
 

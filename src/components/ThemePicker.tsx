@@ -14,6 +14,7 @@ import { Tip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { Check, Palette, FolderOpen } from "lucide-react";
 import { openPath, themesDir } from "@/lib/ipc";
+import { FooterMoonGlyph, FooterSunGlyph } from "@/components/footer/footerIcons";
 
 /** Every row in the theme dropdown. Icons sit flush against the padding:
  *  a leading checkmark column (even a transparent one) indents every label
@@ -25,7 +26,12 @@ const THEME_ROW =
  *  icon + label. Two signals, no extra layout. */
 const THEME_ROW_ACTIVE = "font-medium text-[var(--color-accent)]";
 
-export function ThemePicker() {
+interface ThemePickerProps {
+  /** The icon rail's vertical stack: a bigger tile and glyph. */
+  compact?: boolean;
+}
+
+export function ThemePicker({ compact = false }: ThemePickerProps) {
   const { t } = useTranslation("chrome");
   // Self-contained: it reads and writes the one preference it is about.
   // It used to take these as props from the title bar, which is why moving it
@@ -40,8 +46,8 @@ export function ThemePicker() {
   // Resolved to Sun/Moon rather than a generic Monitor: in auto mode the icon
   // shows what the OS actually resolved to, which is the thing you want to
   // know at a glance.
-  const Icon = (themeMode === "light" || (themeMode === "auto" && resolveTheme(themeMode) === "light"))
-    ? Sun : Moon;
+  const isLight = themeMode === "light" || (themeMode === "auto" && resolveTheme(themeMode) === "light");
+  const Icon = isLight ? FooterSunGlyph : FooterMoonGlyph;
   type Item = { id: import("@/store/prefs").ThemeMode; label: string; icon: typeof Sun };
   const items: Item[] = [
     // "System" = follow OS prefers-color-scheme. Stored as `auto` for backward
@@ -96,9 +102,15 @@ export function ThemePicker() {
       }}
       onMouseLeave={scheduleClose}
     >
-      <button type="button" aria-label={t("themePicker.label")} className="sidebar-footer-btn" onClick={() => setOpen(v => !v)}>
-        <span className="relative inline-flex h-[17px] w-[17px] items-center justify-center">
-          <Icon className="h-[17px] w-[17px]" strokeWidth={1.8} />
+      <button
+        type="button"
+        aria-label={t("themePicker.label")}
+        data-testid="footer-theme"
+        className={compact ? "sidebar-footer-btn" : "footer-icon-btn"}
+        onClick={() => setOpen(v => !v)}
+      >
+        <span className={cn("footer-ink relative inline-flex items-center justify-center", isLight && !compact && "text-[var(--footer-sun)]")}>
+          <Icon size={compact ? 22 : 16} />
           {themeMode === "auto" && (
             // Tiny "A" badge in the bottom-right corner to signal that
             // the visible Sun/Moon is the OS-resolved theme, not an

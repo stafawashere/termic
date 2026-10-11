@@ -97,8 +97,8 @@ export default {
   // 因此 zh-CN 有意保留英文原文。
   bugIssueTitle: "Bug: ",
   bugIssueBody: "What happened:\n\n\nSteps to reproduce:\n\n\nTermic version: ",
-  contact: "联系我们",
-  contactSubject: "Hello from Termic",
+  whatsNewTip: "更新内容",
+  whatsNewUnreadTip: "更新内容（未读）",
   shortcuts: "键盘快捷键",
   activityTip: "活动监视（每个智能体的 CPU / 内存）",
   settingsTip: "设置（{{combo}}）",

@@ -35,6 +35,17 @@ export function initWindowFocus(): void {
   window.addEventListener("focus", sync);
   window.addEventListener("blur", sync);
   document.addEventListener("visibilitychange", sync);
+
+  // A root attribute rather than a subscription per bar: the footers fade
+  // their ink in CSS, so a focus change costs no React render at all.
+  const markInactive = (focused: boolean) => {
+    document.documentElement.toggleAttribute("data-window-inactive", !focused);
+  };
+  useUI.subscribe((state, prev) => {
+    const changed = state.windowFocused !== prev.windowFocused;
+    if (changed) markInactive(state.windowFocused);
+  });
+
   // The AUTHORITATIVE source, and the reason the DOM listeners above are not
   // enough on their own. They fire when the WEBVIEW's focus changes, which is
   // not the same event as the OS window gaining focus: cmd-tabbing back to
