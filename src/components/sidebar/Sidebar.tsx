@@ -9,10 +9,9 @@ import { logWorkState } from "@/lib/workStateLog";
 import { useApp, useActiveTabId } from "@/store/app";
 import { useRowTabs, useSidebarTabFacts } from "@/store/sidebarTabs";
 import { usePrefs, scheduledNavVisible, taskLocationIconShown } from "@/store/prefs";
-import { Button } from "@/components/ui/Button";
 import { Tip } from "@/components/ui/Tooltip";
 import { Spinner } from "@/components/ui/Spinner";
-import { LayoutGrid, History, Columns3, CalendarClock, FolderPlus, Settings, Plus, Archive, Layers, Moon, Cog, MoreVertical, GitBranch, GitBranchPlus, FolderGit2, ChevronRight, ChevronDown, Mail, Zap, X, Pencil, Copy, Check, AudioWaveform, Radio, SquareChevronRight, CircleStop, Trash2, Folder, FolderMinus, FolderOpen, Megaphone, Activity, Waypoints, Square, Play, GitPullRequest } from "lucide-react";
+import { History, CalendarClock, FolderPlus, Settings, Plus, Archive, Layers, Moon, Cog, MoreVertical, GitBranch, GitBranchPlus, FolderGit2, ChevronRight, Zap, X, Pencil, Copy, Check, AudioWaveform, Radio, SquareChevronRight, CircleStop, Trash2, Folder, FolderMinus, FolderOpen, Megaphone, Activity, Waypoints, Square, Play, GitPullRequest } from "lucide-react";
 import { DropdownRoot, DropdownTrigger, DropdownMenu, DropdownItem, DropdownSeparator, DropdownLabel, DropdownSub, DropdownSubTrigger, DropdownSubContent } from "@/components/ui/Dropdown";
 import { ContextMenuRoot, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuLabel, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent } from "@/components/ui/ContextMenu";
 import { ProjectActionsMenuItems } from "./ProjectActionsMenuItems";
@@ -113,7 +112,12 @@ export const treeIndent = (depth: number) => 6 + depth * 18;
  *  owns it. */
 export const treeGuideLeft = (depth: number) => treeIndent(depth) + 4;
 
-export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
+export function Sidebar({ compact: compactProp, activityAnimates = true }: {
+  compact?: boolean;
+  /** The hover reveal mounts the rail and the overlay at once; only the one
+   *  on screen runs the readout's animation. */
+  activityAnimates?: boolean;
+} = {}) {
   const { t } = useTranslation("sidebar");
   const compactStore = useApp(s => s.compactSidebar);
   const compact = compactProp ?? compactStore;
@@ -1279,28 +1283,31 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
           column of view buttons. */}
       <div className="flex shrink-0 flex-col">
       {compact ? (
-        <nav className="flex flex-col gap-0.5 p-1.5 pt-2">
-          <NavItem icon={<LayoutGrid className={iconSize(compact)} />} label={t("navDashboard")}
-            active={currentView === "dashboard" && !activeTask} compact={compact}
-            onClick={() => setView("dashboard")}
-          />
-          <NavItem icon={<History className={iconSize(compact)} />} label={t("navHistory")}
-            active={currentView === "history" && !activeTask} compact={compact}
-            onClick={() => setView("history")}
-          />
-          {showBoard && (
-            <NavItem icon={<Columns3 className={iconSize(compact)} />} label={t("navBoard")}
-              active={currentView === "board" && !activeTask} compact={compact}
-              onClick={() => setView("board")} testId="nav-board"
+        <div className="flex flex-col items-center gap-[8px] border-b border-[var(--sidebar-head-rule)] px-[8px] pb-[10px] pt-[10px]">
+          <nav data-testid="sidebar-rail-views" className="flex flex-col gap-[2px] rounded-[8px] bg-[var(--sidebar-well-bg)] p-[3px] shadow-[var(--sidebar-well-shadow)]">
+            <ViewSegment icon={<FolderGlyph />} label={t("navDashboard")} side="right"
+              active={currentView === "dashboard" && !activeTask}
+              onClick={() => setView("dashboard")}
             />
-          )}
-          {showScheduled && (
-            <NavItem icon={<CalendarClock className={iconSize(compact)} />} label={t("navScheduled")}
-              active={currentView === "scheduled" && !activeTask} compact={compact}
-              onClick={() => setView("scheduled")} testId="nav-scheduled"
+            <ViewSegment icon={<HistoryGlyph />} label={t("navHistory")} side="right"
+              active={currentView === "history" && !activeTask}
+              onClick={() => setView("history")}
             />
-          )}
-        </nav>
+            {showBoard && (
+              <ViewSegment icon={<KanbanGlyph />} label={t("navBoard")} side="right"
+                active={currentView === "board" && !activeTask}
+                onClick={() => setView("board")} testId="nav-board"
+              />
+            )}
+            {showScheduled && (
+              <ViewSegment icon={<ScheduleGlyph />} label={t("navScheduled")} side="right"
+                active={currentView === "scheduled" && !activeTask}
+                onClick={() => setView("scheduled")} testId="nav-scheduled"
+              />
+            )}
+          </nav>
+          <AgentActivityReadout compact animate={activityAnimates} />
+        </div>
       ) : (
         <div
           data-testid="sidebar-toolbar"
@@ -1329,7 +1336,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
             )}
           </nav>
           <div className="flex-1" />
-          <AgentActivityReadout />
+          <AgentActivityReadout animate={activityAnimates} />
         </div>
       )}
       {/* The filter and the chips sit between two rules, the toolbar's and
@@ -1574,8 +1581,11 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
           <div data-testid="projects-section-header" className="flex flex-col gap-1.5 py-1">
             {/* The ONE Add project button (GH #280 removed the footer copy):
                 it belongs next to the list it acts on. */}
-            <Tip content={t("addProjectTip")}><Button size="icon" variant="icon" data-testid="sidebar-add-project" onClick={openNewProject}>
-              <FolderPlus className={iconSize(compact)} /></Button></Tip>
+            <Tip content={t("addProjectTip")} side="right">
+              <button type="button" aria-label={t("addProjectTip")} data-testid="sidebar-add-project" className="sidebar-rail-tile" onClick={openNewProject}>
+                <FolderPlusGlyph size={17} />
+              </button>
+            </Tip>
           </div>
         )}
 
@@ -1737,8 +1747,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                       "group flex items-center cursor-pointer",
                       compact
                         ? cn(
-                          "rounded-md px-0 py-0.5 justify-center text-[12px] font-semibold uppercase tracking-[0.06em] transition-colors",
-                          taskList.length === 0 ? "text-[var(--color-fg-faint)]" : "text-[var(--color-fg)]",
+                          "justify-center py-[1px]",
                         )
                         : cn(
                           // An open project keeps the hover fill, so its rows read as hung from it.
@@ -1756,15 +1765,14 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                       // an aggregated activity dot so collapsed projects
                       // still signal work underneath.
                       <div
-                        className={cn(
-                          "relative mx-auto flex h-8 w-8 items-center justify-center rounded-md text-[10.5px] font-semibold leading-none transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
-                          collapsed ? "text-[var(--color-fg-faint)]" : "text-[var(--color-fg-dim)]",
-                        )}
+                        data-folded={collapsed || undefined}
+                        data-empty={taskList.length === 0 || undefined}
+                        className="sidebar-rail-tile sidebar-rail-monogram"
                       >
                         {projectMonogram(p.name)}
                         {(projAttention || projDone) && (
                           <span
-                            className="absolute -right-0.5 -top-0.5 block h-2.5 w-2.5 rounded-full ring-2 ring-[var(--color-bg-1)]"
+                            className="sidebar-rail-dot"
                             style={{ backgroundColor: projAttention ? "var(--color-warn)" : "var(--color-info)" }}
                           />
                         )}
@@ -2331,12 +2339,12 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                       // Inline color deliberately beats the hover class — a
                       // colored folder stays its color under the cursor.
                       style={accent ? { color: accent } : undefined}
-                      className="relative mx-auto flex h-6 w-8 items-center justify-center rounded-md text-[var(--color-fg-faint)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]"
+                      className="sidebar-rail-tile h-[22px] text-[var(--sidebar-chevron)]"
                     >
-                      {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      <TreeChevron open={!collapsed} />
                       {(grpAttention || grpDone) && (
                         <span
-                          className="absolute -right-0.5 -top-0.5 block h-2 w-2 rounded-full ring-2 ring-[var(--color-bg-1)]"
+                          className="sidebar-rail-dot"
                           style={{ backgroundColor: grpAttention ? "var(--color-warn)" : "var(--color-info)" }}
                         />
                       )}
@@ -2514,16 +2522,14 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
                   className={cn(
                     "flex items-center",
                     compact
-                      ? "flex-col gap-1 py-1 text-[12px] text-[var(--color-fg-dim)] transition-colors hover:text-[var(--color-fg)]"
+                      ? "sidebar-rail-tile mt-[4px] h-auto flex-col gap-[2px] border-t border-[var(--sidebar-divider)] py-[4px] text-[11px] text-[var(--sidebar-muted)]"
                       : "mt-[6px] h-[var(--sidebar-row-h)] gap-[8px] rounded-[6px] border-t border-[var(--sidebar-divider)] px-[6px] text-[13px] text-[var(--sidebar-muted)] transition-[color,background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)]",
                   )}
                 >
                   {compact ? (
                     <>
-                      {showInactive
-                        ? <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                        : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
-                      <span className="tabular-nums normal-case">{inactiveCount}</span>
+                      <DashedFolderGlyph size={15} className="shrink-0 text-[var(--sidebar-faint)]" />
+                      <span className="tabular-nums">{inactiveCount}</span>
                     </>
                   ) : (
                     <>
@@ -2582,7 +2588,7 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
           <div
             aria-hidden
             data-testid="sidebar-more-below"
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[var(--color-bg-1)] to-transparent"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[var(--sidebar-bg-bottom)] to-transparent"
           />
         )}
       </div>
@@ -2611,7 +2617,9 @@ export function Sidebar({ compact: compactProp }: { compact?: boolean } = {}) {
           "sidebar-footer flex shrink-0 gap-[4px] border-t border-[var(--sidebar-divider)]",
           // --bottom-bar-h (expanded) is the shared height for every bottom
           // bar. Compact mode stays a vertical icon stack with its own padding.
-          compact ? "flex-col items-center p-2" : "h-[var(--bottom-bar-h)] items-center px-[10px]",
+          // The gear's glyph ends where the badges do (8px in from the edge, its
+          // 30px box overhanging by 6.5px), and the row keeps its spacing.
+          compact ? "flex-col items-center p-2" : "h-[var(--bottom-bar-h)] items-center pl-[18.5px] pr-[1.5px]",
         )}>
           {/* Left cluster (full mode): support — bug + contact. The bug
               button opens a prefilled GitHub issue (public tracker, better
@@ -2724,14 +2732,6 @@ function footerGlyph(compact: boolean): number {
   return compact ? 22 : 17;
 }
 
-function iconSize(compact: boolean) {
-  // Bumped one step in both modes. h-4 (16px) felt undersized next to
-  // 14px body text; h-[18px] reads as deliberate without taking over.
-  // Compact mode jumps to h-6 (24px) — icon-only mode benefits more from
-  // the size since there's no label crutch.
-  return compact ? "h-6 w-6" : "h-[18px] w-[18px]";
-}
-
 // Tiny status badge reused on both the task header (aggregated, when
 // collapsed) and on each tab child row.
 //   done      → solid blue bullet (work finished, untouched until input)
@@ -2774,7 +2774,7 @@ function ArchivingTaskRow({ w, compact }: { w: Task; compact: boolean }) {
         <div
           data-sidebar-task-id={w.id}
           data-task-archiving="true"
-          className="relative mx-auto flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-fg-faint)] opacity-60"
+          className="sidebar-rail-tile text-[var(--sidebar-faint)] opacity-60"
         >
           <Spinner size={14} />
         </div>
@@ -3205,34 +3205,37 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
 
   // Compact mode: render a minimal icon-only row (no tree, no children).
   if (compact) {
+    const railIconId = resolveIconId(w.cli, agents);
+    const railMarkIsCritter = railIconId === "claude";
     return (
       <Tip content={<CompactTaskTip name={labelIsBranch ? `${label} (${w.name})` : w.name} tabs={terminalTabs} />} side="right" align="start" pointer>
         <div
           data-rail-task-id={w.id}
           onClick={() => setActive(w.id)}
+          data-selected={isActive || undefined}
           className={cn(
-            "relative mx-auto flex h-8 w-8 items-center justify-center rounded-md cursor-pointer transition-colors",
-            isActive
-              ? "bg-[var(--color-sel)] text-[var(--color-fg)]"
-              : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
+            "sidebar-rail-tile cursor-pointer",
+            isActive && "sidebar-selected",
             !isLoaded && "opacity-60",
           )}
         >
-          <CliIcon cli={resolveIconId(w.cli, agents)} className="h-4 w-4" />
+          {railMarkIsCritter
+            ? <CritterGlyph size={16} className="text-[var(--color-accent)]" />
+            : <CliIcon cli={railIconId} className={cn("h-4 w-4", CLI_BRAND_COLOR[railIconId])} />}
           {/* Activity dot in the corner — the compact rail has no room
               for the full bell/check badge, so color carries meaning:
               warm = needs you, blue = work done. The ring lifts it off
               the icon regardless of the tile's background. */}
           {(hasAttention || hasDone) ? (
             <span
-              className="absolute -right-0.5 -top-0.5 block h-2.5 w-2.5 rounded-full ring-2 ring-[var(--color-bg-1)]"
+              className="sidebar-rail-dot"
               style={{ backgroundColor: hasAttention ? "var(--color-warn)" : "var(--color-info)" }}
             />
           ) : hasWorking ? (
             // No room for a full spinner on the rail; a faint pulsing dot
             // carries "still working" without competing with the bold
             // attention/done colors.
-            <span className="absolute -right-0.5 -top-0.5 block h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--color-fg-faint)] ring-2 ring-[var(--color-bg-1)]" />
+            <span className="sidebar-rail-dot animate-pulse bg-[var(--color-info)]" />
           ) : null}
         </div>
       </Tip>
@@ -4087,11 +4090,12 @@ function HeaderButton({ testId, label, ownTip = true, children, ...rest }: {
 /** One segment of the toolbar's recessed view switcher. The active one is a
  *  raised chip; the label is the tooltip and stays in the DOM for screen
  *  readers and for specs that find the view by name. */
-function ViewSegment({ icon, label, active, onClick, testId }: {
-  icon: React.ReactNode; label: string; active: boolean; onClick: () => void; testId: string;
+function ViewSegment({ icon, label, active, onClick, testId, side = "bottom" }: {
+  icon: React.ReactNode; label: string; active: boolean; onClick: () => void; testId?: string;
+  side?: "bottom" | "right";
 }) {
   return (
-    <Tip content={label} side="bottom">
+    <Tip content={label} side={side}>
       <button
         type="button"
         onClick={onClick}
@@ -4111,35 +4115,6 @@ function ViewSegment({ icon, label, active, onClick, testId }: {
       </button>
     </Tip>
   );
-}
-
-function NavItem({ icon, label, active, compact, onClick, testId }: {
-  icon: React.ReactNode; label: string; active?: boolean; compact: boolean; onClick: () => void; testId?: string;
-}) {
-  // In compact mode we use a fixed-size square button (h-9 w-9) centered in
-  // the column (mx-auto) so every left-rail icon sits at the exact same x —
-  // otherwise NavItem's `w-full` paints a wider highlight that visually shifts
-  // it left of the project/task icons below it.
-  // font-medium (500) gives the sidebar labels enough weight to read crisp
-  // against the bg without looking shouty.
-  // Icon-only in both modes; the label is the tooltip, and stays in the DOM
-  // for screen readers (and for anything that finds the entry by its name).
-  const btn = (
-    <button
-      onClick={onClick}
-      data-testid={testId}
-      aria-label={label}
-      className={cn(
-        "flex items-center justify-center rounded-md",
-        compact ? "mx-auto h-9 w-9" : "h-[30px] flex-1",
-        active ? "bg-[var(--color-sel)] text-[var(--color-fg)]" : "text-[var(--color-fg-dim)] hover:bg-[var(--color-hover)] hover:text-[var(--color-fg)]",
-      )}
-    >
-      {icon}
-      <span className="sr-only">{label}</span>
-    </button>
-  );
-  return <Tip content={label} side={compact ? "right" : "bottom"}>{btn}</Tip>;
 }
 
 /** Inline name-prompt row rendered above the task list while the

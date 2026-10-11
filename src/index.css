@@ -207,6 +207,19 @@
   --color-palette-purple: #9d6ee8;
   --color-palette-pink:   #d6409f;
 
+  /* The palette as the accent presets draw it (group folders, task groups,
+     profiles): 43% less chroma, mixed toward the dim ink so lightness holds
+     roughly where the theme put it. The raw palette stays for state marks
+     and links. */
+  --color-swatch-red:    color-mix(in oklch, var(--color-palette-red) 57%, var(--color-fg-dim));
+  --color-swatch-orange: color-mix(in oklch, var(--color-palette-orange) 57%, var(--color-fg-dim));
+  --color-swatch-yellow: color-mix(in oklch, var(--color-palette-yellow) 57%, var(--color-fg-dim));
+  --color-swatch-green:  color-mix(in oklch, var(--color-palette-green) 57%, var(--color-fg-dim));
+  --color-swatch-teal:   color-mix(in oklch, var(--color-palette-teal) 57%, var(--color-fg-dim));
+  --color-swatch-blue:   color-mix(in oklch, var(--color-palette-blue) 57%, var(--color-fg-dim));
+  --color-swatch-purple: color-mix(in oklch, var(--color-palette-purple) 57%, var(--color-fg-dim));
+  --color-swatch-pink:   color-mix(in oklch, var(--color-palette-pink) 57%, var(--color-fg-dim));
+
   /* Pull-request state tints. Both were hard-coded hex at the point of use
      in the sidebar's PR glyph, which broke the "no hex outside @theme" rule
      and left light mode with two colours tuned for a dark background.
@@ -1424,4 +1437,45 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 .sidebar-footer-btn:hover {
   background-color: var(--sidebar-row-hover);
   color: var(--sidebar-btn-hover-ink);
+}
+/* The icon rail's tiles: view buttons aside, every row on the rail is one
+   32px tile with a corner dot for the state its row would have drawn. */
+.sidebar-rail-tile {
+  position: relative;
+  display: flex;
+  height: 32px;
+  width: 32px;
+  margin-inline: auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--sidebar-icon);
+  transition: color 120ms, background-color 120ms;
+}
+.sidebar-rail-tile:hover {
+  background-color: var(--sidebar-row-hover);
+  color: var(--sidebar-btn-hover-ink);
+}
+.sidebar-rail-monogram {
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--sidebar-ink);
+}
+.sidebar-rail-monogram[data-folded] {
+  color: var(--sidebar-muted);
+}
+.sidebar-rail-monogram[data-empty] {
+  color: var(--sidebar-faint);
+}
+.sidebar-rail-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  display: block;
+  height: 9px;
+  width: 9px;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 2px var(--sidebar-bg-top);
 }

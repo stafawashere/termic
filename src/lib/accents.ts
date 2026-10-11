@@ -1,23 +1,23 @@
 // The shared accent palette: sidebar group folders and profiles (GH #280).
 //
 // Keys persist (localStorage for groups, profiles.json for profiles) and
-// resolve to the `--color-palette-*` tokens in index.css @theme, so an accent
-// stays correct across themes and a theme author can restyle every accent in
-// the app at once. Storing the KEY rather than a literal hex is also what
+// resolve to the `--color-swatch-*` tokens in index.css @theme (the
+// palette, muted), so an accent stays correct across themes and a theme
+// author can restyle every accent in the app at once. Storing the KEY rather than a literal hex is also what
 // keeps profiles.json readable and keeps hex out of anything but @theme.
 //
 // An unknown stored key (hand-edited storage, a palette entry removed in a
 // future version) resolves to undefined = default styling, never a crash.
 
 export const ACCENTS: { key: string; label: string; css: string }[] = [
-  { key: "red",    label: "Red",    css: "var(--color-palette-red)" },
-  { key: "orange", label: "Orange", css: "var(--color-palette-orange)" },
-  { key: "yellow", label: "Yellow", css: "var(--color-palette-yellow)" },
-  { key: "green",  label: "Green",  css: "var(--color-palette-green)" },
-  { key: "teal",   label: "Teal",   css: "var(--color-palette-teal)" },
-  { key: "blue",   label: "Blue",   css: "var(--color-palette-blue)" },
-  { key: "purple", label: "Purple", css: "var(--color-palette-purple)" },
-  { key: "pink",   label: "Pink",   css: "var(--color-palette-pink)" },
+  { key: "red",    label: "Red",    css: "var(--color-swatch-red)" },
+  { key: "orange", label: "Orange", css: "var(--color-swatch-orange)" },
+  { key: "yellow", label: "Yellow", css: "var(--color-swatch-yellow)" },
+  { key: "green",  label: "Green",  css: "var(--color-swatch-green)" },
+  { key: "teal",   label: "Teal",   css: "var(--color-swatch-teal)" },
+  { key: "blue",   label: "Blue",   css: "var(--color-swatch-blue)" },
+  { key: "purple", label: "Purple", css: "var(--color-swatch-purple)" },
+  { key: "pink",   label: "Pink",   css: "var(--color-swatch-pink)" },
 ];
 
 export const accentCss = (key: string | undefined): string | undefined =>

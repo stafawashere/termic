@@ -89,7 +89,7 @@ describe("profileScope", () => {
 describe("profile accents", () => {
   it("resolves a palette key to its theme token", async () => {
     const { profileAccentCss } = await import("@/lib/accents");
-    expect(profileAccentCss("blue")).toBe("var(--color-palette-blue)");
+    expect(profileAccentCss("blue")).toBe("var(--color-swatch-blue)");
   });
 
   it("passes a user-chosen hex straight through", async () => {

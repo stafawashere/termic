@@ -2765,14 +2765,14 @@ describe("task groups", () => {
       const all: any[] = await window.__termic!.ipc.tasksList();
       return Object.fromEntries(all.map(t => [t.id, t.group ?? null]));
     }) as unknown as Promise<Record<string, { id: string; name?: string; color?: string } | null>>;
-  /** The rail's painted colour against the palette token it should resolve
+  /** The rail's painted colour against the swatch token it should resolve
    *  to, both read as computed rgb so a theme change cannot fake a match. */
   const railMatches = (gid: string, key: string) =>
     browser.execute((sel, k) => {
       const rail = document.querySelector(`${sel} [data-task-group-rail]`) as HTMLElement | null;
       if (!rail) return false;
       const probe = document.createElement("span");
-      probe.style.backgroundColor = `var(--color-palette-${k})`;
+      probe.style.backgroundColor = `var(--color-swatch-${k})`;
       document.body.appendChild(probe);
       const want = getComputedStyle(probe).backgroundColor;
       probe.remove();
@@ -2897,7 +2897,7 @@ describe("task groups", () => {
         const el = document.querySelector(sel) as HTMLElement | null;
         if (!el) return false;
         const probe = document.createElement("span");
-        probe.style.backgroundColor = `var(--color-palette-${k})`;
+        probe.style.backgroundColor = `var(--color-swatch-${k})`;
         document.body.appendChild(probe);
         const want = getComputedStyle(probe).backgroundColor;
         probe.remove();

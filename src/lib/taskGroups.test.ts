@@ -143,7 +143,7 @@ describe("nextGroupColor", () => {
 
 describe("groupColorCss", () => {
   it("resolves an accent key and falls back for none or an unknown one", () => {
-    expect(groupColorCss(G("o", { color: "teal" }))).toBe("var(--color-palette-teal)");
+    expect(groupColorCss(G("o", { color: "teal" }))).toBe("var(--color-swatch-teal)");
     expect(groupColorCss(G("o"))).toBe(GROUP_FALLBACK_COLOR);
     expect(groupColorCss(G("o", { color: "nope" }))).toBe(GROUP_FALLBACK_COLOR);
   });
