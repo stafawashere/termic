@@ -182,7 +182,9 @@ describe("subagent workflow runs", () => {
 
   /** The row's background once its colour transition has finished, so a
    *  screenshot taken next shows the selection rather than a frame of it. */
-  async function settledBackground(selector: string): Promise<string> {
+  /** The selection is a gradient over the row (`.sidebar-selected`), so it
+   *  is read from background-image; background-color stays transparent. */
+  async function settledSelectionPaint(selector: string): Promise<string> {
     await browser.waitUntil(
       () => browser.execute((sel) => {
         const el = document.querySelector(sel);
@@ -190,7 +192,7 @@ describe("subagent workflow runs", () => {
       }, selector),
       { timeout: 5_000, interval: 25, timeoutMsg: `${selector} never finished its transition` },
     );
-    return browser.execute((sel) => getComputedStyle(document.querySelector(sel)!).backgroundColor, selector);
+    return browser.execute((sel) => getComputedStyle(document.querySelector(sel)!).backgroundImage, selector);
   }
 
   async function setWorkflowFilterBySwitch(): Promise<void> {
@@ -376,8 +378,8 @@ describe("subagent workflow runs", () => {
     expect(openTab).toEqual({ type: "subagent", agentId: BUILD_AGENT });
     expect(await browser.execute((sel) => document.querySelector(sel)?.className ?? "", agentRow(BUILD_AGENT)))
       .toContain(SELECTED);
-    const selectedBackground = await settledBackground(agentRow(BUILD_AGENT));
-    expect(selectedBackground).not.toBe("rgba(0, 0, 0, 0)");
+    const selectedBackground = await settledSelectionPaint(agentRow(BUILD_AGENT));
+    expect(selectedBackground).toContain("linear-gradient");
     await snap("workflow-agent-open.png");
 
     await clickPresent(`${runRow(RELEASE_RUN)} [data-testid="workflow-run-fold"]`);
@@ -393,7 +395,7 @@ describe("subagent workflow runs", () => {
       return { header: header.className.includes(rowSel), tabRow: tabRow.className.includes(rowSel), selectedRuns };
     }, taskId, SELECTED, ROW_SELECTED);
     expect(selection).toEqual({ header: false, tabRow: false, selectedRuns: [RELEASE_RUN] });
-    expect(await settledBackground(runRow(RELEASE_RUN))).toBe(selectedBackground);
+    expect(await settledSelectionPaint(runRow(RELEASE_RUN))).toBe(selectedBackground);
     await snap("workflow-run-folded-over-selection.png");
 
     await parentToFront();
