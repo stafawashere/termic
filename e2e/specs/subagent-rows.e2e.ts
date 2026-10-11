@@ -519,10 +519,12 @@ describe("subagent rows", () => {
       const runRow = document.querySelector<HTMLElement>(run)!;
       const agentRow = document.querySelector<HTMLElement>(agent)!;
       const follows = !!(runRow.compareDocumentPosition(agentRow) & Node.DOCUMENT_POSITION_FOLLOWING);
+      // Content start: the rows span the panel and indent by padding.
+      const contentLeft = (el: HTMLElement) => el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft);
       return {
         follows,
         depth: agentRow.getAttribute("data-depth"),
-        indented: agentRow.getBoundingClientRect().left > runRow.getBoundingClientRect().left,
+        indented: contentLeft(agentRow) > contentLeft(runRow),
       };
     }, runSelector, rowSelector(agentId));
     expect(placement).toEqual({ follows: true, depth: "2", indented: true });

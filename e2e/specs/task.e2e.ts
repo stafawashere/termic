@@ -3452,7 +3452,7 @@ describe("spawn links across projects", () => {
    *  deliver pointer events to the list in this WKWebView.) */
   const hover = (id: string | null) =>
     browser.execute((sel) => {
-      const list = document.querySelector("[data-sidebar-task-id]")!.closest(".overflow-y-auto")!;
+      const list = document.querySelector("[data-sidebar-task-id]")!.closest("[data-testid='sidebar-scroll']")!;
       if (!sel) { list.dispatchEvent(new PointerEvent("pointerleave", { bubbles: false })); return; }
       document.querySelector(sel)!.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, buttons: 0 }));
     }, id ? row(id) : null);
@@ -3945,10 +3945,19 @@ describe("branch as the task name (GH #260)", () => {
   let taskId = "";
   let original = false;
 
-  /** Visible text of the task's sidebar row, minus the terminal count. */
+  /** Text of the task's sidebar row without its trailing branch chip. The
+   *  chip names the branch beside a typed name by design, so leaving it in
+   *  would hide which of the two the label itself shows. */
   const rowText = (id: string) =>
     browser.execute(
-      (i) => document.querySelector(`[data-sidebar-task-id="${i}"]`)?.textContent ?? "",
+      (i) => {
+        const row = document.querySelector(`[data-sidebar-task-id="${i}"]`);
+        if (!row) return "";
+
+        const labelOnly = row.cloneNode(true) as HTMLElement;
+        labelOnly.querySelector('[data-testid="task-branch-chip"]')?.remove();
+        return labelOnly.textContent ?? "";
+      },
       id,
     );
 
