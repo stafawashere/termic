@@ -3257,7 +3257,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
               {w.spawned_by && <SpawnedFromMark task={w} />}
               {/* The task's tab properties, collected (GH #358): after the
                   name on the LEFT, never in the trailing badge/kebab slot.
-                  Shrinks before the name does; the title lists every value
+                  Gives up all its width before the name loses any; the title lists every value
                   with the tab it came from. */}
               {collectedProps.length > 0 && (
                 <span
@@ -3266,7 +3266,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
                     .filter((x): x is TerminalTab => x.type === "terminal" && !!x.props?.length)
                     .flatMap(x => x.props!.map(p => `${p.key}: ${p.value} (${x.title || x.cli})`))
                     .join("\n")}
-                  className="min-w-0 shrink-[3] truncate text-[11px] text-[var(--color-fg-dim)]"
+                  className="min-w-0 shrink-[1000] truncate text-[11px] text-[var(--color-fg-dim)]"
                 >{collectedText(collectedProps)}</span>
               )}
             </>
