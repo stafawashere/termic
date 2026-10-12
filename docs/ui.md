@@ -1364,8 +1364,9 @@ go" has an answer on both surfaces.
 
 ## The sidebar's status chips
 
-Under the filter bar, a row of chips counts the tasks in action, working,
-needing you, finished unread, in review, and settled (`sidebar/StatusChips.tsx`).
+Under the filter bar, a row of chips counts the tasks in action and, after
+a thin rule, where each of them is: working, needing you, in review, settled
+(`sidebar/StatusChips.tsx`).
 A chip toggles its status clause in the sidebar's query, so clicking one
 narrows the tree to those tasks and the bar shows the clause it wrote: the
 board's lane-click idea, applied to the sidebar.
@@ -1392,34 +1393,40 @@ the count, and the list is one click away in the tree.
 - **A chip is its glyph and its count,** on one line at any sidebar width.
   Its name is in the tooltip and the accessible label: with the words the
   row wrapped to two lines in a narrow sidebar.
+- **The row holds the chips and nothing else.** The filter's "N of M
+  tasks" count used to sit at its far end. With the chips it has now that did not fit
+  a default-width sidebar: the row scrolled, and the count covered the last
+  chip, which was the one just clicked. The count is at the foot of the
+  tree (`sidebar-filter-count`), above the note about hidden projects.
 - **In review is the PR glyph in the text colour,** not green. The column
   means "has an open or draft PR, agent idle", and green on a row's PR
   badge is a PR state, so a green chip read as "checks passed". An eye was
   tried and dropped: the PR glyph is what the board's review column uses.
-- **Six chips across the full active lifecycle:** Tasks in action (`action`),
-  Working (`working`), Needs you (`attention`), Done (`done`), In review (`review`),
-  and Settled (`settled`). Not started (backlog) remains available via the query
-  language and filter menu.
-- **Tasks in action is the umbrella chip:** it counts all non-backlog tasks and
-  toggles `-status:backlog` into the query. Clicking it clears granular status
-  clauses so all tasks in action (working, attention, review, settled) appear in the
-  tree at once. Clicking a granular chip while Tasks in action is on replaces
-  `-status:backlog` with that specific status filter.
-- **Settled completes the lifecycle:** it writes `status:settled` and wears a check
-  mark in the settled colour (`STATUS_MARK_COLOR.settled`, `var(--color-info)`).
-- **Done is the one chip that is not a column.** It counts the rows showing
-  the blue dot: a turn finished and nobody has looked. The board files those
-  under Settled with everything that finished last week (or under In review
-  when the task has a PR), so the second most actionable state had no count
-  anywhere. It writes `status:done`, an overlay the matcher answers from the
-  `done` fact (`BoardMatchCtx.done`, `BoardTaskFacts.done`), not from the
-  column, so a task can count under Done and In review at once and the
-  chips no longer sum to a partition. Attention wins over it, as on the
-  row's badge: a tab that asks for you is also written `done`, and a blocked
-  task must not count under both the bell and the dot. Session state, like the dot: opening
-  the task clears it, a relaunch clears all of them, and `settledHighlight`
-  off empties it. The board's filter menu does not list it (its status
-  chips are the columns); typing `status:done` works there too.
+- **A total and its parts.** Tasks in action (`action`) comes first, then a
+  1px rule (`status-chips-rule`), then the four board columns a started task
+  can be in: Working (`working`), Needs you (`attention`), In review
+  (`review`) and Settled (`settled`). A task is in exactly one column, so
+  the four always add up to the first, and the spec asserts that sum. Not
+  started (backlog) is the rest of the list; it stays in the query language
+  and the filter menu.
+- **Tasks in action is the total:** it counts all non-backlog tasks and
+  toggles `-status:backlog` into the query. Clicking it clears granular
+  status clauses, so every started task shows at once. Clicking a column
+  chip while it is on replaces `-status:backlog` with that status.
+- **Settled wears a check mark** in the settled colour
+  (`STATUS_MARK_COLOR.settled`, `var(--color-info)`) and writes
+  `status:settled`.
+- **There is no Done chip, on purpose.** Done (the blue dot: a turn finished
+  and nobody has looked) is not a column, it cuts across them: such a task
+  is in Settled, or In review with a PR. The row had one through 1.14.4,
+  when it had no Settled and no total, and the overlap did not show. With
+  all three, one finished task read 1 on Tasks in action, 1 on Done and 1 on
+  Settled. Taking Settled out instead left 1, 0, 0, 0, 0, a total with no
+  part saying where the task was. The row keeps the set that partitions.
+  `status:done` is still an overlay the matcher answers from the `done` fact
+  (`BoardMatchCtx.done`, `BoardTaskFacts.done`), typed or from the bar's
+  menu, and the title bar's waiting pill (`lib/waitingAgents.ts`) is where
+  unread work is counted. The board's filter menu does not list it either.
 - **Every chip is always drawn.** An empty one is disabled
   (`aria-disabled`, faint, glyph uncoloured, spinner held still, click does
   nothing) rather than hidden. Hidden, the row appeared with the first
@@ -1634,16 +1641,16 @@ twice is noise. Azure's reviewer filter wants an identity id rather than
 Picking a PR from any list is the same pick: fetch the head, then check
 it out. Firing a review at it is the prompt library's Review entry, by hand.
 
-The issue column has the matching half as chips over the list: **All**,
-**Assigned to you** (`--assignee @me`) and **Mentions you** (`--search
-mentions:@me`, a search qualifier because `gh issue list` has no mention
-flag). Chips, not extra lists: the repo's list is long, so a list appended
-under it would sit below the fold, and a chip only changes the list when
-you click it. Each click refetches with a sequence number so a slow answer
-for a scope you already left cannot overwrite the one you picked. The
-column starts back on All every time it is entered. GitHub only. GitLab's
-issues API can say "assigned to me" but has no mention filter, so wiring it
-means a per-forge chip set rather than the same three chips.
+The issue column has the matching half as chips over the list: **All**
+and **Assigned to you** across GitHub, GitLab (`scope=assigned_to_me`),
+and Azure DevOps (`[System.AssignedTo] = @me`), plus **Mentions you** on
+GitHub (`--search mentions:@me`, a search qualifier because `gh issue
+list` has no mention flag). Chips, not extra lists: the repo's list is
+long, so a list appended under it would sit below the fold, and a chip
+only changes the list when you click it. Each click refetches with a
+sequence number so a slow answer for a scope you already left cannot
+overwrite the one you picked. The column starts back on All every time it
+is entered.
 
 ### The new-task dialog has TWO columns and TWO widths
 
@@ -1751,8 +1758,8 @@ window's centre until the switch.
 
 - **Left**, after the traffic lights (84px, unless full-screen): the
   sidebar toggle and the profiles button as 28px icon buttons
-  (`.titlebar-icon-btn`), then the session strip, the waiting-agents pill
-  and the build badge (DEV / E2E / BETA, or the update button). The design
+  (`.titlebar-icon-btn`), then the waiting-agents pill and the build
+  badge (DEV / E2E / BETA, or the update button). The design
   labels its second button "Agents" but draws the profiles glyph; termic
   has no Agents view, so it is the profiles button, the dot and name once
   profiles exist.
@@ -1761,7 +1768,8 @@ window's centre until the switch.
   the task finder, the same dialog as its shortcut, rather than a second
   switcher, and the finder sits 6px under the bar. A label that IS the
   branch drops the branch segment, so the branch shows once.
-- **Right**: two recessed wells (`.titlebar-action-well`). Do holds the Run
+- **Right**: the session strip, then two recessed wells
+  (`.titlebar-action-well`). Do holds the Run
   split (one raised chip, two buttons: run or stop, and the run menu) and
   Prompts; Manage holds the terminal panel toggle (raised while the bottom
   terminal is open), Send to main, sandbox (raised while any sandbox is on),
@@ -1771,7 +1779,7 @@ window's centre until the switch.
 
 **The session strip** (`SessionStrip`, `lib/sessionStrip.ts`) speaks for the
 open task only: the newest running agent tab, else the newest one blocked on
-you. With neither it is not rendered at all, and the left cluster closes up.
+you. With neither it is not rendered at all, and the right cluster closes up.
 It draws a trace, tab name, state word, elapsed clock
 and a stop button past a groove (it kills that tab's PTY after a confirm). A
 `+N` chip switches to another running agent. Its data is what the tab
@@ -2219,6 +2227,60 @@ external tab from a ⌘-click) gets the same source / split / preview shell.
 anything else as another external tab. Relative images are not loaded, see
 docs/sandbox.md "Known gap".
 
+**Every block knows its source lines.** markdown-it's `src_lines` core rule
+stamps `data-src-line` / `data-src-end` (1-based, inclusive, trailing blank
+lines trimmed) on each rendered block; a fence carries them on its `<pre>`.
+Raw HTML in a document passes through with whatever `data-src-*` it wrote,
+and those values decide which lines a comment quotes to the agent, so ours
+carry a per-load nonce and `claimDocument()` unwraps ours and drops the
+rest. It runs on everything that enters the preview, the render and each
+mermaid SVG (mermaid sanitizes its labels itself and keeps `data-*`). Two
+features read them:
+
+- **Split-view scroll sync** (`useScrollSync` in `components/task/markdownScrollSync.ts`).
+  Either pane drives the other: the blocks give (line, y) anchors and
+  positions between them are interpolated, so a tall image or long paragraph
+  scrolls smoothly. Anchors are cached until a re-render or a ResizeObserver
+  hit (late images, mermaid). The echo of a programmatic `scrollTop` write is
+  recognised by the value it lands on, not a time window (a busy frame
+  delivers it late), which is what stops the two panes feeding each other. A
+  pane with no box never drives. The pane that was already on screen leads
+  when split opens, and the first sync waits for the ResizeObserver's initial
+  delivery so the editor's `attachHiddenScrollRestore` cannot undo it. A
+  rebuild re-aligns to the editor.
+- **Comments on rendered text** (`usePreviewComments` in
+  `previewComments.ts`). Selecting in the preview raises a "＋ Comment" pill;
+  the comment lands in the same `reviewComments` store as an editor comment.
+  The quote is ALWAYS the selection: it is what the user pointed at, and
+  quoting the whole block (the old fallback whenever the selection was not
+  verbatim source) turned "this phrase" into "this paragraph". The line range
+  starts as the innermost stamped block at each end of the selection and is
+  narrowed by `narrowSelection()` to the lines the selection spans in the
+  source, matched with every whitespace run elastic (most markdown is
+  hard-wrapped, and the rendering joins those lines with a space). When the
+  selection is not in the source as typed (inline markdown, an entity), the
+  locator stays the block's lines. In the preview the quoted text itself is
+  wrapped in `<mark class="tc-md-quote">` (a `<mark>`, not the CSS Custom
+  Highlight API, see docs/gotchas.md), the open composer's included; only
+  when that text cannot be found in the rendering (an editor comment quoting
+  `**markdown**`) are the blocks marked instead. Because it is the same comment, it
+  shows beside its source in the editor too, and the editor's anchors keep it
+  on its code through edits. The composer and card are the editor's own
+  (`commentBoxes.ts`, framework-free DOM, styled by `.tc-comment-*` in
+  index.css), placed in slot divs that `placeSlots()` keeps after the
+  top-level block holding the innermost blocks the range touches (those are
+  what the quote is searched in, and the fallback marks, so a comment on one
+  list item marks that item, and
+  markdown inside an unstamped `<div align="center">` still counts). It moves
+  only slots that are out of place: moving a node detaches it, and a detached
+  composer textarea loses focus (the innerHTML rebuild detaches them all, so
+  `rebuild()` puts the caret back). Slots and commented blocks are marked
+  with `data-tc-slot` (`SLOT_ATTR`) / `data-tc-commented`, which the
+  sanitizer and `claimDocument()` strip from documents (with any `tc-*`
+  class, so a README cannot draw a fake card either); find, ⌘C
+  and `unmarkFind`'s normalize all leave the cards out. Task files only
+  (`commentFile`); whole-file comments have no block and stay in the editor.
+
 **Word wrap** (`prefs.editorWordWrap`, off by default) lives in Settings >
 Appearance and the palette's "Toggle word wrap". No toolbar control, by
 choice. It is its own compartment in `EditorPane`, reconfigured in place.
@@ -2418,6 +2480,10 @@ It votes on the DIFFERENCE between consecutive indented lines rather than the sm
 Not done: `.editorconfig`, which is the explicit signal and should win over the guess when a project has one.
 
 ## Inline review comments (two surfaces)
+
+(A third, the rendered markdown preview, shares the store and the
+composer/card in `commentBoxes.ts`, but not this extension: see "Markdown
+preview" above.)
 
 `reviewCommentsExtension(taskId, file, surface)` is one component with two loudness settings, because the same gesture means different things in the two places it runs.
 

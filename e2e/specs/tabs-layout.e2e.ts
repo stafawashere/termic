@@ -1,4 +1,4 @@
-import { archiveTask, clickByText, clickMenuItem, clickMenuItemUntilReady, dismissOverlays, ensureActiveTask, mouseDrag, openTask, pointerDrag, requireTermicApi, sidebarBadge, snap, waitForAppShell, waitGone, waitVisible } from "../helpers";
+import { archiveTask, clickMenuItem, clickWhenVisible, clickMenuItemUntilReady, dismissOverlays, ensureActiveTask, mouseDrag, openTask, pointerDrag, requireTermicApi, sidebarBadge, snap, waitForAppShell, waitGone, waitVisible } from "../helpers";
 
 // Tabs are how a task holds multiple terminals/agents/editors. Guards adding a
 // tab through the "+" menu and switching the active tab by clicking it.
@@ -778,17 +778,19 @@ describe("theme switching", () => {
     }
   });
 
-  const openPicker = () =>
-    browser.execute(() => {
-      // The picker trigger is the Sun/Moon button in the top bar; it opens on
-      // hover, so dispatch the enter/over events React's onMouseEnter watches.
-      const btn = [...document.querySelectorAll("button")].find((b) =>
-        b.querySelector("svg.lucide-sun, svg.lucide-moon"),
-      );
-      if (!btn) throw new Error("theme picker trigger not found");
-      btn.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-      btn.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+  /** The sidebar icon opens the theme list; pick a row from it. The list
+   *  is filtered to the current theme's scheme, so widen it to All first. */
+  const pick = async (mode: string) => {
+    await clickWhenVisible('[data-testid="footer-theme"]');
+    await waitVisible('[data-testid="theme-filter-all"]');
+    // the filter acts on mousedown, which a scripted click never fires
+    await browser.execute(() => {
+      document.querySelector('[data-testid="theme-filter-all"]')!
+        .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
     });
+    await clickWhenVisible(`[data-cmd-id="theme:${mode}"]`);
+    await browser.waitUntil(() => browser.execute(() => !window.__termic!.useUI.getState().commandPaletteOpen));
+  };
 
   it("switches theme via the picker and applies it to <html>", async () => {
     await waitForAppShell();
@@ -797,8 +799,7 @@ describe("theme switching", () => {
       () => window.__termic!.usePrefs.getState().themeMode,
     );
 
-    await openPicker();
-    await clickByText("Light");
+    await pick("light");
     await browser.waitUntil(
       () =>
         browser.execute(
@@ -809,8 +810,7 @@ describe("theme switching", () => {
       { timeout: 8_000, timeoutMsg: "Light theme was not applied to <html>" },
     );
 
-    await openPicker();
-    await clickByText("Dark+");
+    await pick("dark");
     await browser.waitUntil(
       () =>
         browser.execute(
@@ -857,6 +857,7 @@ describe("layout", () => {
   // The toolbar holds only the view switcher since the activity readout
   // moved to the title bar's session strip, so the switcher sits centred.
   it("centres the view switcher in the toolbar, with no activity readout", async () => {
+    await openTask("e2e-toolbar-rule");
     for (const px of [260, 338, 480]) {
       await browser.execute((w) => window.__termic!.useApp.getState().setSidebarWidth(w), px);
       await browser.waitUntil(async () => (await width()) === px, { timeout: 5_000 });
@@ -869,11 +870,15 @@ describe("layout", () => {
           offset: switcherBox.left + switcherBox.width / 2 - (toolbarBox.left + toolbarBox.width / 2),
           readout: !!toolbar.querySelector('[data-testid="sidebar-agent-activity"]'),
           children: toolbar.children.length,
+          ruleBottom: toolbarBox.bottom,
+          sessionBarBottom: document.querySelector(".sessionbar")?.getBoundingClientRect().bottom ?? null,
         };
       });
       expect(Math.abs(row.offset)).toBeLessThanOrEqual(0.5);
       expect(row.readout).toBe(false);
       expect(row.children).toBe(1);
+      expect(row.sessionBarBottom).not.toBeNull();
+      expect(Math.abs(row.ruleBottom - row.sessionBarBottom!)).toBeLessThanOrEqual(0.5);
     }
     await snap("sidebar-toolbar-centred.png");
   });

@@ -1337,3 +1337,24 @@ that waits for the in-flight open and closes only if it succeeded, and the
 listener goes up before the open so no batch emitted between the two is
 lost. Archiving a task and destroying a window release everything they held
 on the Rust side, because neither runs the views' cleanup.
+
+## A focused CodeMirror takes the window selection back
+
+A focused editor owns the DOM selection. Whenever its viewport redraws (a
+scroll is enough) CodeMirror writes its own caret back into the document, and
+a selection made anywhere else in the window collapses. Nothing is wrong in
+the app: a real drag starts with a mousedown, which takes focus out of the
+editor first, so the editor no longer claims the selection.
+
+A spec has no mousedown. `editor.e2e.ts`'s markdown preview comment cases
+selected text in the preview with a `Range` while the split's editor still had
+focus and its viewport was settling from the scroll-sync cases before them.
+The Comment pill came up and was gone before the next command, six cases
+failed in a full run, and the file passed alone. A retry loop that re-selected
+every 500ms was there already and only narrowed the window.
+
+Measured both ways in one session: editor focused, select in the preview,
+move the editor's viewport, and the selection is empty 600ms later, every
+time; blur first and it survives, every time. So a spec that builds a
+selection outside the editor blurs the active element first
+(`selectInParagraph`), which is the part of the gesture it was skipping.

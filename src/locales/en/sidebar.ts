@@ -35,7 +35,6 @@ export default {
   statusChips: {
     action: "Tasks in action",
     attention: "Needs you",
-    done: "Done, unread",
     working: "Working",
     review: "In review",
     settled: "Settled",

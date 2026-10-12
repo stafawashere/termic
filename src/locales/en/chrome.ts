@@ -181,13 +181,8 @@ export default {
     worktree: "worktree",
   },
   themePicker: {
-    label: "Theme",
-    system: "System",
-    light: "Light",
     autoBadge: "auto",
-    customThemes: "Custom themes",
-    openThemesFolder: "Open the themes folder",
-    agentThemeTip: "Tip: run <code>/theme</code> inside claude / codex once to match.",
+    changeTheme: "Change theme",
   },
   dashboard: {
     tagline: "Home for your CLI coding agents",

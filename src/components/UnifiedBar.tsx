@@ -167,10 +167,9 @@ export function UnifiedBar() {
             dot and name, in the accent wash this bar already carries. */}
         <ProfileChip />
         <div className="titlebar-status">
-        {task && <SessionStrip taskId={task.id} />}
         {/* Waiting-agents pill (issue #56): appears only when an agent needs
-            you, jumps to the next on click, across every task. The strip
-            beside it only speaks for the open one. */}
+            you, jumps to the next on click, across every task. The session
+            strip on the right only speaks for the open one. */}
         <WaitingAgentsPill />
         {/* Build badge (DEV / E2E / BETA) or the update button. */}
         <UpdaterBanner />
@@ -191,6 +190,7 @@ export function UnifiedBar() {
         className="flex items-center gap-[8px]"
         style={appRegionStyle("no-drag")}
       >
+        {task && <SessionStrip taskId={task.id} />}
         {task && proj && (
           <>
             {/* Do: run and prompts. */}
