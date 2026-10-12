@@ -183,6 +183,7 @@ export default {
         session: "Until the session changes",
         hour: "1 hour",
         tenMinutes: "10 minutes",
+        tenSeconds: "10 seconds after last viewed",
         finished: "Hide when finished",
       },
       autoCollapse: {

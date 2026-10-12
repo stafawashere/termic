@@ -23,9 +23,9 @@ export function serializeSubagentTypeFilter(filter: SubagentTypeFilter): string 
   return JSON.stringify({ v: SUBAGENT_TYPE_FILTER_VERSION, ...filter });
 }
 
-export type SubagentRetention = "session" | "hour" | "tenMinutes" | "finished";
+export type SubagentRetention = "session" | "hour" | "tenMinutes" | "tenSeconds" | "finished";
 
-export const SUBAGENT_RETENTIONS: readonly SubagentRetention[] = ["session", "hour", "tenMinutes", "finished"];
+export const SUBAGENT_RETENTIONS: readonly SubagentRetention[] = ["session", "hour", "tenMinutes", "tenSeconds", "finished"];
 
 export type SubagentAutoCollapse = "never" | "allFinished" | "always";
 
@@ -42,6 +42,8 @@ export function retentionWindowMs(retention: SubagentRetention): number | null {
       return 60 * 60 * 1000;
     case "tenMinutes":
       return 10 * 60 * 1000;
+    case "tenSeconds":
+      return 10 * 1000;
     case "finished":
       return 0;
   }

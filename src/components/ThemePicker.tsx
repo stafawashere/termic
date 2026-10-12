@@ -28,7 +28,7 @@ export function ThemePicker({ compact = false }: ThemePickerProps) {
   // Resolved to Sun/Moon rather than a generic Monitor: in auto mode the icon
   // shows what the OS actually resolved to, which is the thing you want to
   // know at a glance.
-  const isLight = resolveTheme(themeMode) === "light";
+  const isLight = themeMode === "light" || (themeMode === "auto" && resolveTheme(themeMode) === "light");
   const Icon = isLight ? FooterSunGlyph : FooterMoonGlyph;
   const binding = usePrefs(s => s.shortcuts["change-theme"]);
   const label = `${t("themePicker.changeTheme")}${binding ? ` (${bindingText(binding)})` : ""}`;

@@ -1279,12 +1279,12 @@ export function Sidebar({ compact: compactProp }: {
           </nav>
         </div>
       ) : (
-        // 44px like .sessionbar, so the two bottom rules meet across the divider.
+        // Same band as .sessionbar (height, fill, rule), so the two read as one strip.
         <div
           data-testid="sidebar-toolbar"
-          className="box-border flex h-[44px] shrink-0 items-center justify-center border-b border-[var(--sidebar-head-rule)] bg-[linear-gradient(180deg,var(--sidebar-sheen),transparent)] px-[10px]"
+          className="sidebar-toolbar-band flex shrink-0 items-center justify-center px-[10px]"
         >
-          <nav data-testid="sidebar-view-switcher" className="flex gap-[2px] rounded-[8px] bg-[var(--sidebar-well-bg)] p-[3px] shadow-[var(--sidebar-well-shadow)]">
+          <nav data-testid="sidebar-view-switcher" className="flex gap-[2px] rounded-[8px] bg-[var(--sidebar-well-bg)] p-[3px] shadow-[var(--titlebar-well-shadow)]">
             <ViewSegment icon={<FolderGlyph />} label={t("navDashboard")}
               active={currentView === "dashboard" && !activeTask}
               onClick={() => setView("dashboard")} testId="nav-dashboard"

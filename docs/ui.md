@@ -601,7 +601,11 @@ subagent is something a claude task does. Every control applies live.
 - **Retention (`subagentRetention`).** How long a `done`, `failed` or
   `interrupted` row stays. `running`, `unknown` and `expired` rows never go.
   `SubagentRows` schedules one timer per tab, only while an ended row is
-  waiting to expire (`nextRetentionExpiry`).
+  waiting to expire (`nextRetentionExpiry`). The window starts at the later
+  of the row's end and the last time its transcript tab was on screen
+  (`src/store/subagentSeen.ts`), and the row whose transcript is on screen
+  never goes, so "10 seconds after last viewed" removes a finished agent
+  ten seconds after the user stops looking at it.
 - **Auto-collapse (`subagentAutoCollapse`).** Sets whether a claude tab's
   subagent group starts folded; the chevron on the tab row
   (`SubagentGroupToggle`) folds it by hand, and that wins until the tab's
@@ -1778,8 +1782,14 @@ window's centre until the switch.
   tooltip and its `aria-label`.
 
 **The session strip** (`SessionStrip`, `lib/sessionStrip.ts`) speaks for the
-open task only: the newest running agent tab, else the newest one blocked on
-you. With neither it is not rendered at all, and the right cluster closes up.
+open task only: the newest running agent tab. With no agent running it is
+not rendered at all, even if one is blocked on you, and the right cluster
+closes up.
+It has two modes (`data-mode`): `minimal`, a pill holding only the trace,
+and `expanded`, everything below. The pointer entering a hit zone 6px/10px
+past the well, or focus landing inside it, expands it; leaving collapses it
+after 220ms. Each hidden group is a grid track eased from 0fr to 1fr, so the
+width animates without measuring content.
 It draws a trace, tab name, state word, elapsed clock
 and a stop button past a groove (it kills that tab's PTY after a confirm). A
 `+N` chip switches to another running agent. Its data is what the tab

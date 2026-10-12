@@ -204,6 +204,10 @@ export interface SubagentRowRules {
   typeFilter: SubagentTypeFilter;
   retentionMs: number | null;
   now: number;
+  /** The agent whose transcript is on screen, which retention never takes. */
+  visibleAgentId?: string | null;
+  /** When each agent's transcript was last on screen. */
+  lastSeenAt?: Readonly<Record<string, number>>;
 }
 
 /** The states retention counts as ended. `unknown` is not one: it is what a
@@ -217,22 +221,35 @@ function endedAt(record: SubagentRecord): number {
   return record.endedAt ?? record.startedAt;
 }
 
+/** Where an ended row's retention window starts: its end, or the last time
+ *  its transcript was on screen when that is later. */
+function retentionStart(record: SubagentRecord, lastSeenAt?: Readonly<Record<string, number>>): number {
+  const seenAt = lastSeenAt?.[record.agentId] ?? 0;
+  return Math.max(endedAt(record), seenAt);
+}
+
 /** Whether retention has taken an ended row away. A running row never goes,
  *  and neither does an expired one (its transcript was deleted, which the
  *  row says itself) or one whose end is not known yet. */
-export function isPastRetention(record: SubagentRecord, retentionMs: number | null, now: number): boolean {
+export function isPastRetention(
+  record: SubagentRecord,
+  retentionMs: number | null,
+  now: number,
+  seen?: Pick<SubagentRowRules, "visibleAgentId" | "lastSeenAt">,
+): boolean {
   const hasEnded = ENDED_STATES.has(record.state);
-  if (retentionMs === null || !hasEnded) return false;
+  const isOnScreen = seen?.visibleAgentId === record.agentId;
+  if (retentionMs === null || !hasEnded || isOnScreen) return false;
   if (retentionMs === 0) return true;
 
-  return now >= endedAt(record) + retentionMs;
+  return now >= retentionStart(record, seen?.lastSeenAt) + retentionMs;
 }
 
 export function isSubagentRowShown(record: SubagentRecord, rules: SubagentRowRules): boolean {
   const kind = subagentKind(record.agentType, { isWorkflow: record.isWorkflow });
   if (!rules.typeFilter[kind]) return false;
 
-  return !isPastRetention(record, rules.retentionMs, rules.now);
+  return !isPastRetention(record, rules.retentionMs, rules.now, rules);
 }
 
 /** The next moment retention takes a shown row away, or null when no row is
@@ -245,9 +262,10 @@ export function nextRetentionExpiry(entry: TabSubagents | undefined, rules: Suba
   for (const agentId of entry.order) {
     const record = entry.agents[agentId];
     const isWaiting = !!record && ENDED_STATES.has(record.state) && isDrawn(record, rules);
-    if (!isWaiting) continue;
+    const isOnScreen = rules.visibleAgentId === agentId;
+    if (!isWaiting || isOnScreen) continue;
 
-    const expiry = endedAt(record) + (rules.retentionMs as number);
+    const expiry = retentionStart(record, rules.lastSeenAt) + (rules.retentionMs as number);
     if (next === null || expiry < next) next = expiry;
   }
   return next;

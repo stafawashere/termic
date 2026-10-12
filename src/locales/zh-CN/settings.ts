@@ -182,6 +182,7 @@ export default {
         session: "直到会话变化",
         hour: "1 小时",
         tenMinutes: "10 分钟",
+        tenSeconds: "最后查看 10 秒后",
         finished: "结束后隐藏",
       },
       autoCollapse: {

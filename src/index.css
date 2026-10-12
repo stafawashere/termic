@@ -972,6 +972,13 @@
   white-space: nowrap;
   user-select: none;
 }
+.sidebar-toolbar-band {
+  box-sizing: border-box;
+  height: 44px;
+  border-bottom: 1px solid var(--sessionbar-border);
+  background-image: var(--sessionbar-grain), linear-gradient(180deg, var(--sessionbar-bg-top), var(--sessionbar-bg-bottom));
+  box-shadow: var(--sessionbar-shadow);
+}
 /* Window in the background: text and glyphs fade, wells and chips do not. */
 .sessionbar[data-inactive] :is(.sessionbar-tab-label, .sessionbar-ind, .sessionbar-new > svg, .sessionbar-seg > svg) {
   opacity: 0.55;
@@ -4085,25 +4092,84 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   box-shadow: var(--titlebar-well-shadow);
 }
 .titlebar-session {
-  height: 30px;
+  height: 32px;
   min-width: 0;
   flex-shrink: 1;
+  padding: 3px;
+}
+/* Minimal is a pill holding only the trace; the pointer entering the hit
+   zone (the strip plus a margin around it) opens it to expanded. Each reveal
+   is a one-column grid whose track animates from 0fr to 1fr, so the width
+   eases to the content's own size without measuring it. */
+.titlebar-session-hit {
+  display: flex;
+  min-width: 0;
+  flex-shrink: 1;
+  margin: -6px -10px;
+  padding: 6px 10px;
+}
+.titlebar-session-reveal {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 1fr;
+  opacity: 1;
+  transition: grid-template-columns 220ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 160ms 60ms;
+}
+.titlebar-session[data-mode="minimal"] .titlebar-session-reveal {
+  grid-template-columns: 0fr;
+  opacity: 0;
+  pointer-events: none;
+  transition: grid-template-columns 220ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 100ms;
+}
+.titlebar-session-reveal-inner {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.titlebar-session-details {
+  gap: 8px;
+  padding-left: 8px;
+}
+.titlebar-session-actions {
+  gap: 2px;
+  padding-left: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .titlebar-session-reveal,
+  .titlebar-session[data-mode="minimal"] .titlebar-session-reveal { transition: none; }
+}
+/* The state washes the well's edge, so the strip reads as status beside the
+   action wells rather than as a third one of them. */
+.titlebar-session[data-state="running"] {
+  box-shadow: var(--titlebar-well-shadow), inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 24%, transparent);
+}
+.titlebar-session[data-state="waiting"] {
+  box-shadow: var(--titlebar-well-shadow), inset 0 0 0 1px color-mix(in srgb, var(--sidebar-running) 24%, transparent);
 }
 .titlebar-session-main {
   display: flex;
-  height: 100%;
+  height: 26px;
   min-width: 0;
   align-items: center;
-  gap: 9px;
-  padding: 0 10px 0 12px;
-  border-radius: 8px;
+  padding: 0 9px 0 7px;
+  border-radius: 6px;
+  transition: background-color 120ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 120ms cubic-bezier(0.2, 0.7, 0.2, 1), padding 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.titlebar-session[data-has-stop] .titlebar-session-main {
-  border-radius: 8px 0 0 8px;
+.titlebar-session[data-mode="minimal"] .titlebar-session-main {
+  padding: 0 7px;
+}
+.titlebar-session-main:hover {
+  background-color: var(--sidebar-seg-hover);
+}
+.titlebar-session-main:active {
+  background-color: var(--titlebar-pressed-bg);
+  box-shadow: var(--titlebar-pressed-shadow);
 }
 .titlebar-session-name {
   min-width: 32px;
-  max-width: 200px;
+  max-width: 160px;
   font-size: 12px;
   font-weight: 600;
   color: var(--sidebar-ink-strong);
@@ -4141,7 +4207,7 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
   background-color: var(--titlebar-divider);
 }
 .titlebar-groove {
-  height: 18px;
+  height: 14px;
   width: 1px;
   flex-shrink: 0;
   background-color: var(--titlebar-groove);
@@ -4149,21 +4215,24 @@ html.termic-mod-held .xterm .xterm-cursor-pointer { cursor: pointer; }
 }
 .titlebar-session-stop {
   display: flex;
-  height: 100%;
-  width: 30px;
+  height: 26px;
+  width: 26px;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  border-radius: 0 8px 8px 0;
+  border-radius: 6px;
   color: var(--sidebar-icon);
   transition: background-color 120ms, color 120ms;
 }
 .titlebar-session-stop:hover {
-  background-color: var(--sidebar-seg-hover);
+  background-color: color-mix(in srgb, var(--color-err) 14%, transparent);
   color: var(--color-err);
 }
+.titlebar-session-stop:active {
+  background-color: color-mix(in srgb, var(--color-err) 22%, transparent);
+}
 .titlebar-session-more {
-  margin-right: 6px;
+  margin: 0 2px;
   flex-shrink: 0;
   border-radius: 5px;
   background-color: var(--sidebar-card-bg);

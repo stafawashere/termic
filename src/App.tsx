@@ -5,7 +5,8 @@
 //   │ sidebr │ main (tabs + content)    │ right panel        │
 //   └────────┴──────────────────────────┴────────────────────┘
 
-import { useEffect, useRef, useState } from "react";
+import { trackOnScreenSubagent } from "@/store/subagentSeen";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "@/store/app";
@@ -28,8 +29,6 @@ import { WindowResizeEdges } from "@/components/WindowResizeEdges";
 import { MainArea } from "@/components/task/MainArea";
 import { RightPanel } from "@/components/task/RightPanel";
 import { RaceBoard } from "@/components/task/RaceBoard";
-import { Settings } from "@/components/settings/Settings";
-import { Dialogs } from "@/components/dialogs/Dialogs";
 import { Toaster } from "@/components/ui/Toaster";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useShortcuts } from "@/hooks/useShortcuts";
@@ -40,6 +39,9 @@ import { useUpdate } from "@/store/update";
 import { usePrefs } from "@/store/prefs";
 import { focusMainTab } from "@/lib/tabFocus";
 import { recordFirstPaint } from "@/lib/perfMarks";
+
+const Settings = lazy(() => import("@/components/settings/Settings").then(m => ({ default: m.Settings })));
+const Dialogs = lazy(() => import("@/components/dialogs/Dialogs").then(m => ({ default: m.Dialogs })));
 import { scheduleLaunchRebuild } from "@/lib/subagentRebuild";
 
 export function App() {
@@ -72,6 +74,8 @@ export function App() {
   useShortcuts();
   useAttentionNotifier();
   useSeenWhenWatched();
+
+  useEffect(() => trackOnScreenSubagent(), []);
 
   useEffect(() => {
     // Before loadAll(): this marks when the shell is on screen, which is what
@@ -283,11 +287,11 @@ export function App() {
           onMouseDown={e => { if (e.target === e.currentTarget) useApp.getState().closeSettings(); }}
         >
           <div className="relative w-full overflow-hidden rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-bg)] shadow-2xl">
-            <ErrorBoundary label="Settings"><Settings /></ErrorBoundary>
+            <ErrorBoundary label="Settings"><Suspense fallback={null}><Settings /></Suspense></ErrorBoundary>
           </div>
         </div>
       )}
-      <Dialogs />
+      <Suspense fallback={null}><Dialogs /></Suspense>
       <Toaster />
     </>
   );

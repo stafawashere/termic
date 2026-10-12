@@ -1,14 +1,14 @@
 // The title bar's session strip: what the open task's agent is doing right
 // now, in a recessed well (docs/ui.md "Title bar"). The well opens the agent,
 // the stop button past the groove ends it. With no agent running or waiting
-// it renders nothing, so the left cluster closes up.
+// it renders nothing, so the right cluster closes up.
 //
 // One store subscription for the pick, packed into a string by
 // sessionStripKey, so output and live-title writes re-render nothing. The
 // elapsed clock is its own component and ticks only while it is mounted and
 // the window is visible, in local state, never through a store.
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useApp } from "@/store/app";
 import { usePrefs } from "@/store/prefs";
@@ -77,6 +77,10 @@ function nextRunningTab(taskId: string, shownTabId: string): string | null {
   return running[0]?.id ?? null;
 }
 
+type StripMode = "minimal" | "expanded";
+
+const COLLAPSE_DELAY_MS = 220;
+
 export const SessionStrip = memo(function SessionStrip({ taskId }: { taskId: string }) {
   const { t } = useTranslation("chrome");
   const workingIndicator = usePrefs(s => s.workingIndicator);
@@ -90,8 +94,31 @@ export const SessionStrip = memo(function SessionStrip({ taskId }: { taskId: str
     return formatTerminalTitle(tabLabel(tab), resolveIconId(tab.cli, s.agents), workingIndicator);
   });
   const visible = useDocumentVisible();
+  const [mode, setMode] = useState<StripMode>("minimal");
+  const collapseTimer = useRef<number | null>(null);
 
-  if (!pick) return null;
+  useEffect(() => () => {
+    if (collapseTimer.current !== null) window.clearTimeout(collapseTimer.current);
+  }, []);
+
+  const hasRunningAgent = pick?.state === "running";
+  if (!pick || !hasRunningAgent) return null;
+
+  const expand = () => {
+    if (collapseTimer.current !== null) window.clearTimeout(collapseTimer.current);
+    collapseTimer.current = null;
+    setMode("expanded");
+  };
+
+  const scheduleCollapse = () => {
+    if (collapseTimer.current !== null) window.clearTimeout(collapseTimer.current);
+    collapseTimer.current = window.setTimeout(() => {
+      collapseTimer.current = null;
+      setMode("minimal");
+    }, COLLAPSE_DELAY_MS);
+  };
+
+  const isExpanded = mode === "expanded";
 
   const isRunning = pick.state === "running";
   const showsClock = pick.since !== null;
@@ -112,68 +139,89 @@ export const SessionStrip = memo(function SessionStrip({ taskId }: { taskId: str
   };
 
   return (
-    <div data-testid="session-strip" data-state={pick.state} data-has-stop="" className="titlebar-well titlebar-session">
-      <Tip content={t("sessionStrip.openAgent")} side="bottom">
-        <button
-          type="button"
-          data-no-drag
-          data-testid="session-strip-open"
-          aria-label={t("sessionStrip.openAgent")}
-          className="titlebar-session-main"
-          onClick={() => focusSession(taskId, pick.tabId)}
-        >
-          <SessionTrace running={isRunning && visible} />
-          <span className="titlebar-session-name titlebar-trunc titlebar-ink">{name}</span>
-          <span data-testid="session-strip-state" data-state={pick.state} className="titlebar-session-state titlebar-ink">
-            {t(`sessionStrip.${pick.state}`)}
-          </span>
-          {showsClock && (
-            <>
-              <span className="titlebar-rule" />
-              {visible && <ElapsedClock since={pick.since!} />}
-            </>
-          )}
-          {pick.tool && (
-            <>
-              <span className="titlebar-rule" />
-              <span key={pick.tool} data-testid="session-strip-tool" className="titlebar-session-tool titlebar-session-meta titlebar-ink">
-                <WrenchGlyph size={12} className="shrink-0" />
-                <span>{t("sessionStrip.allow")}</span>
-                <span className="titlebar-session-target titlebar-trunc titlebar-mono">{pick.tool}</span>
-              </span>
-            </>
-          )}
-        </button>
-      </Tip>
-      {hasMore && (
-        <Tip content={t("sessionStrip.moreRunning", { count: pick.otherRunning })} side="bottom">
+    <div
+      data-testid="session-strip-hit"
+      className="titlebar-session-hit"
+      onPointerEnter={expand}
+      onPointerLeave={scheduleCollapse}
+      onFocus={expand}
+      onBlur={event => {
+        const focusStaysInside = event.currentTarget.contains(event.relatedTarget as Node | null);
+        if (!focusStaysInside) scheduleCollapse();
+      }}
+    >
+      <div data-testid="session-strip" data-state={pick.state} data-mode={mode} data-has-stop="" className="titlebar-well titlebar-session">
+        <Tip content={t("sessionStrip.openAgent")} side="bottom">
           <button
             type="button"
             data-no-drag
-            data-testid="session-strip-more"
-            className="titlebar-session-more"
-            onClick={() => {
-              const nextTabId = nextRunningTab(taskId, pick.tabId);
-              if (nextTabId) focusSession(taskId, nextTabId);
-            }}
+            data-testid="session-strip-open"
+            aria-label={t("sessionStrip.openAgent")}
+            className="titlebar-session-main"
+            onClick={() => focusSession(taskId, pick.tabId)}
           >
-            +{pick.otherRunning}
+            <SessionTrace running={isRunning && visible} />
+            <span className="titlebar-session-reveal" aria-hidden={!isExpanded || undefined}>
+              <span className="titlebar-session-reveal-inner titlebar-session-details">
+                <span className="titlebar-session-name titlebar-trunc titlebar-ink">{name}</span>
+                <span data-testid="session-strip-state" data-state={pick.state} className="titlebar-session-state titlebar-ink">
+                  {t(`sessionStrip.${pick.state}`)}
+                </span>
+                {showsClock && (
+                  <>
+                    <span className="titlebar-rule" />
+                    {visible && <ElapsedClock since={pick.since!} />}
+                  </>
+                )}
+                {pick.tool && (
+                  <>
+                    <span className="titlebar-rule" />
+                    <span key={pick.tool} data-testid="session-strip-tool" className="titlebar-session-tool titlebar-session-meta titlebar-ink">
+                      <WrenchGlyph size={12} className="shrink-0" />
+                      <span>{t("sessionStrip.allow")}</span>
+                      <span className="titlebar-session-target titlebar-trunc titlebar-mono">{pick.tool}</span>
+                    </span>
+                  </>
+                )}
+              </span>
+            </span>
           </button>
         </Tip>
-      )}
-      <span className="titlebar-groove" />
-      <Tip content={t("sessionStrip.stopAria", { name })} side="bottom">
-        <button
-          type="button"
-          data-no-drag
-          data-testid="session-strip-stop"
-          aria-label={t("sessionStrip.stopAria", { name })}
-          className="titlebar-session-stop"
-          onClick={() => { void stop(); }}
-        >
-          <StopGlyph size={14} className="titlebar-ink" />
-        </button>
-      </Tip>
+        <div className="titlebar-session-reveal" aria-hidden={!isExpanded || undefined}>
+          <div className="titlebar-session-reveal-inner titlebar-session-actions">
+            {hasMore && (
+              <Tip content={t("sessionStrip.moreRunning", { count: pick.otherRunning })} side="bottom">
+                <button
+                  type="button"
+                  data-no-drag
+                  data-testid="session-strip-more"
+                  className="titlebar-session-more"
+                  onClick={() => {
+                    const nextTabId = nextRunningTab(taskId, pick.tabId);
+                    if (nextTabId) focusSession(taskId, nextTabId);
+                  }}
+                >
+                  +{pick.otherRunning}
+                </button>
+              </Tip>
+            )}
+            <span className="titlebar-groove" />
+            <Tip content={t("sessionStrip.stopAria", { name })} side="bottom">
+              <button
+                type="button"
+                data-no-drag
+                data-testid="session-strip-stop"
+                aria-label={t("sessionStrip.stopAria", { name })}
+                className="titlebar-session-stop"
+                tabIndex={isExpanded ? undefined : -1}
+                onClick={() => { void stop(); }}
+              >
+                <StopGlyph size={14} className="titlebar-ink" />
+              </button>
+            </Tip>
+          </div>
+        </div>
+      </div>
     </div>
   );
 });

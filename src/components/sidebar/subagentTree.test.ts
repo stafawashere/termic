@@ -294,6 +294,29 @@ describe("rows under the Settings rules", () => {
     expect(isPastRetention(done, 0, 9 * HOUR)).toBe(true);
   });
 
+  it("never takes the row whose transcript is on screen", () => {
+    const done = record("a", { state: "done", endedAt: 0 });
+    const seen = { visibleAgentId: "a", lastSeenAt: { a: 0 } };
+
+    expect(isPastRetention(done, 0, 10 * HOUR, seen)).toBe(false);
+    expect(isPastRetention(done, 10_000, 10 * HOUR, seen)).toBe(false);
+  });
+
+  it("counts the window from the last time the transcript was on screen", () => {
+    const done = record("a", { state: "done", endedAt: 0 });
+    const seen = { visibleAgentId: null, lastSeenAt: { a: 60_000 } };
+
+    expect(isPastRetention(done, 10_000, 69_999, seen)).toBe(false);
+    expect(isPastRetention(done, 10_000, 70_000, seen)).toBe(true);
+  });
+
+  it("schedules the expiry from the last view, and none for the row on screen", () => {
+    const tab = entry([record("a", { state: "done", endedAt: 0 })]);
+
+    expect(nextRetentionExpiry(tab, rules({ retentionMs: 10_000, now: 65_000, lastSeenAt: { a: 60_000 } }))).toBe(70_000);
+    expect(nextRetentionExpiry(tab, rules({ retentionMs: 10_000, now: 65_000, visibleAgentId: "a" }))).toBeNull();
+  });
+
   it("treats failed and interrupted rows as ended", () => {
     for (const state of ["failed", "interrupted"] as const) {
       expect(isPastRetention(record("a", { state, endedAt: 0 }), 0, 0)).toBe(true);

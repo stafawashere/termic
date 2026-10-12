@@ -22,6 +22,7 @@ import { useApp } from "@/store/app";
 import { usePrefs } from "@/store/prefs";
 import { retentionWindowMs } from "@/lib/subagentPrefs";
 import { useSubagents, type SubagentState } from "@/store/subagents";
+import { useSubagentSeen } from "@/store/subagentSeen";
 import { foldAllSubagents, type GroupFold } from "./subagentFold";
 import { openSubagentPreview } from "@/store/subagentPreview";
 import {
@@ -92,11 +93,13 @@ function useVisibleSubagentStructure(tabId: string): { structureKey: string; rul
   const typeFilter = usePrefs(s => s.subagentTypeFilter);
   const retention = usePrefs(s => s.subagentRetention);
   const openRunIds = useSubagentFold(s => s.openRunsByTab[tabId] ?? EMPTY_FOLD);
+  const visibleAgentId = useSubagentSeen(s => s.visibleAgentId);
+  const lastSeenAt = useSubagentSeen(s => s.lastSeenAt);
   const [now, setNow] = useState(() => Date.now());
 
   const rules = useMemo<SubagentRowRules>(
-    () => ({ typeFilter, retentionMs: retentionWindowMs(retention), now }),
-    [typeFilter, retention, now],
+    () => ({ typeFilter, retentionMs: retentionWindowMs(retention), now, visibleAgentId, lastSeenAt }),
+    [typeFilter, retention, now, visibleAgentId, lastSeenAt],
   );
   const selectStructure = useMemo(
     () => createSubagentStructureSelector(tabId, rules, new Set(openRunIds)),
@@ -383,7 +386,10 @@ export function useSubagentHasRow(tabIds: readonly string[], agentId: string | n
   const typeFilter = usePrefs(s => s.subagentTypeFilter);
   const retention = usePrefs(s => s.subagentRetention);
   const retentionMs = retentionWindowMs(retention);
+  const visibleAgentId = useSubagentSeen(s => s.visibleAgentId);
+  const lastSeenAt = useSubagentSeen(s => s.lastSeenAt);
   const now = Date.now();
+  const rules = { typeFilter, retentionMs, now, visibleAgentId, lastSeenAt };
 
-  return useSubagents(s => hasSubagentRow(s.byTab, tabIds, agentId, { typeFilter, retentionMs, now }));
+  return useSubagents(s => hasSubagentRow(s.byTab, tabIds, agentId, rules));
 }
