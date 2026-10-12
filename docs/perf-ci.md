@@ -445,7 +445,8 @@ surface flakiness so we can harden it before gating merges on it". That
 job is the delivery vehicle for all of Tier 1, so the stale line hides
 what is already available.
 
-README item 12 also credits Orca with CI-wired gates in a way this
+The README roadmap entry for performance benchmarks in CI (since
+shipped and pruned) also credited Orca with CI-wired gates in a way this
 research does not support. Worth a rewrite, since the true story is a
 better argument for the tiered approach than the current framing.
 
