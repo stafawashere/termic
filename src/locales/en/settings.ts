@@ -229,6 +229,10 @@ export default {
       label: "Confirm before archiving a task",
       hint: "Ask before archiving a task. With this off (or after unticking \"Show this every time\" in the dialog), archiving happens straight away and a toast points at History.",
     },
+    keepAgentsRunning: {
+      label: "Keep agents running when Termic quits",
+      hint: "Agents run in a background process that outlives the app. Quitting, updating or a crash no longer stops them, and the next launch picks each one up where it is, output included. Applies to agents started after you turn it on.",
+    },
     confirmRestart: {
       label: "Confirm before restarting an agent to switch account",
       hint: "Switching a task to another credential set needs the agent to restart, which resumes the conversation. With this off the restart happens straight away.",

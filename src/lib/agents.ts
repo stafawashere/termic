@@ -1085,6 +1085,7 @@ export function decideResume(opts: {
    *  resuming a different session, seemingly at random. */
   siblingSameCli?: boolean;
 }): ResumeDecision {
+
   if (!opts.isAgent) return { kind: "fresh" };
 
   const override = opts.isPrimary && opts.runsTaskAgent
@@ -1122,6 +1123,28 @@ export function decideResume(opts: {
     return { kind: "cwd-resume" };
   }
   return { kind: "fresh" };
+}
+
+/** What a terminal tab does on mount: attach to the agent the PTY daemon kept
+ *  running across an app restart, or spawn one.
+ *
+ *  Asked before the resume decision is acted on, because attaching makes it
+ *  moot: the agent never stopped, so there is nothing to resume. Only the
+ *  FIRST mount of a tab may attach. A respawn (restart, retry after an exit)
+ *  asked for a new process, and the old one can still be listed while it dies.
+ *  Agent tabs only: shells, run scripts and custom terminals never go to the
+ *  daemon. */
+export type PtyMountPlan = { kind: "attach"; id: string } | { kind: "spawn" };
+
+export function decideSpawnOrAttach(opts: {
+  isAgent: boolean;
+  /** This tab already had a PTY in this app session. */
+  respawn: boolean;
+  /** The daemon PTY still running this tab's agent, from `pty_daemon_find`. */
+  live: { id: string } | null;
+}): PtyMountPlan {
+  const canAttach = opts.isAgent && !opts.respawn && opts.live !== null;
+  return canAttach ? { kind: "attach", id: opts.live!.id } : { kind: "spawn" };
 }
 
 /** What a spawn actually DID about resuming, which is not the same question

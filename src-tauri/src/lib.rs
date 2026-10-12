@@ -16,7 +16,7 @@
 //   BE → FE: emits "pty-exit://<id>" with payload = exit code (i32 or null)
 
 use anyhow::{anyhow, Context, Result};
-use parking_lot::{Condvar, Mutex};
+use parking_lot::Mutex;
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 extern crate libc;
 use serde::{Deserialize, Serialize};
@@ -31,6 +31,8 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
+pub(crate) use pty_core::{PtyFeed, PtyPump, PtySink, PtyTapMsg};
+
 pub mod agent_hooks;
 pub mod agent_usage;
 pub mod subagent_transcripts;
@@ -38,6 +40,9 @@ pub mod subagent_watch;
 pub mod codex_trust;
 mod sandbox;
 mod proxy;
+mod pty_core;
+mod ptyd;
+mod ptyd_host;
 mod proc_ctl;
 mod fs_link;
 #[cfg(windows)]
@@ -3069,7 +3074,8 @@ struct PtySlot {
     /// TUI) blocks write_all, and holding the map lock through that
     /// would stall every other PTY op on the IPC thread (docs/ipc.md).
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    master: Box<dyn portable_pty::MasterPty + Send>,
+    /// `None` for a PTY the daemon owns: the master lives in the daemon.
+    master: Option<Box<dyn portable_pty::MasterPty + Send>>,
     // Raw OS pid so we can SIGKILL without contending with the waiter thread
     // (which holds the Child for the duration of wait()). Holding a shared
     // Mutex<Child> here would deadlock pty_kill against the waiter.
@@ -3115,41 +3121,13 @@ struct PtySlot {
     /// in the map next to its replacement (the waiter reaps it); role
     /// resolution breaks the tie toward the NEWEST slot.
     seq: u64,
-    /// Set by `pty_attached` once the webview has registered its
-    /// `pty://<id>` listener. The flusher holds its FIRST emit until then
-    /// (see `wait_for_attach`).
-    attached: Arc<AtomicBool>,
-    /// The reader -> flusher buffer + condvar, kept here so `pty_attached`
-    /// can flip the flag and wake the flusher under the SAME mutex the
-    /// `done` handshake uses. A store outside that mutex can land between
-    /// the flusher's check and its wait, and the wakeup is lost.
-    out_buf: Arc<(Mutex<Vec<u8>>, Condvar)>,
-}
-
-/// How long the flusher holds a PTY's first output waiting for the webview
-/// to say it is listening. Sized for "the ack is late", not "the ack never
-/// comes": the normal ack lands within milliseconds of the spawn resolving,
-/// and after the grace expires output flows anyway, so a caller that never
-/// acks costs a one-time delay rather than a wedged terminal.
-const PTY_ATTACH_GRACE: Duration = Duration::from_secs(3);
-
-/// Block until the webview acks its listener, the process dies, or the grace
-/// expires. Split out of the flusher so the three exits are unit-testable
-/// without a real PTY (`wait_for_attach_*` tests).
-fn wait_for_attach(
-    buf: &(Mutex<Vec<u8>>, Condvar),
-    attached: &AtomicBool,
-    done: &AtomicBool,
-    grace: Duration,
-) {
-    let mut b = buf.0.lock();
-    let deadline = Instant::now() + grace;
-    loop {
-        if attached.load(Ordering::Acquire) || done.load(Ordering::Acquire) { return; }
-        let now = Instant::now();
-        if now >= deadline { return; }
-        buf.1.wait_for(&mut b, deadline - now);
-    }
+    /// The reader -> flusher handshake, kept here so `pty_attached` can
+    /// release the flusher's first emit once the webview has registered its
+    /// `pty://<id>` listener (see `PtyPump::mark_attached`).
+    pump: PtyPump,
+    /// The daemon connection, for a PTY the daemon owns (ptyd_host.rs). Such
+    /// a PTY survives the app quitting, so quit-time cleanup leaves it alone.
+    daemon: Option<Arc<ptyd::PtydClient>>,
 }
 
 fn next_pty_seq() -> u64 {
@@ -3206,131 +3184,6 @@ pub struct PtyOwner {
     /// What the PTY is running: "agent" | "shell" | "aux" | "run" |
     /// "setup" | "custom". Drives the row's icon and its fallback label.
     pub kind: String,
-}
-
-/// What an attach tap receives. `Data` is raw PTY output; `Detach` is a
-/// server-initiated end (task archived) the client must surface with
-/// its reason. PTY exit needs no message: the slot (and with it every
-/// tap sender) drops when the waiter cleans up, so receivers see a
-/// disconnect.
-pub(crate) enum PtyTapMsg {
-    Data(Vec<u8>),
-    Detach(String),
-}
-
-/// Retained output ring + live attach taps for one role-tagged PTY.
-/// ONE mutex over both: the reader thread appends to the ring and fans
-/// out to taps as one atomic step, so an attach that registers its tap
-/// while snapshotting the backlog can neither miss a chunk nor receive
-/// it twice.
-pub(crate) struct PtyFeed {
-    inner: Mutex<PtyFeedInner>,
-}
-
-struct PtyFeedInner {
-    ring: PtyRing,
-    taps: Vec<std::sync::mpsc::SyncSender<PtyTapMsg>>,
-}
-
-impl PtyFeed {
-    /// Bounded tap depth. The attach forwarder normally drains
-    /// immediately; its socket write times out after 10s, so this only
-    /// fills when the client stalls under a firehose PTY. Overflow
-    /// force-detaches that tap (its receiver sees a disconnect) instead
-    /// of buffering the agent's output stream without bound. Worst
-    /// in-flight memory per tap: 256 chunks x 64 KiB reads = 16 MiB.
-    const TAP_DEPTH: usize = 256;
-
-    fn new() -> Self {
-        PtyFeed {
-            inner: Mutex::new(PtyFeedInner { ring: PtyRing::new(), taps: Vec::new() }),
-        }
-    }
-    /// Reader-thread path: retain the chunk and forward it to every
-    /// live tap, dropping taps whose receiver hung up or stalled past
-    /// the bound. Never blocks (this is the PTY reader thread).
-    fn push(&self, data: &[u8]) {
-        let mut inner = self.inner.lock();
-        inner.ring.push(data);
-        inner
-            .taps
-            .retain(|tx| tx.try_send(PtyTapMsg::Data(data.to_vec())).is_ok());
-    }
-    fn send_detach(&self, reason: &str) {
-        let mut inner = self.inner.lock();
-        inner
-            .taps
-            .retain(|tx| tx.try_send(PtyTapMsg::Detach(reason.to_string())).is_ok());
-    }
-    /// The reader thread's LAST act at PTY EOF: a blocking detach
-    /// notice to every tap, so the forwarder learns "exited" in-band
-    /// (channel disconnect alone is not enough: the attach input
-    /// thread holds a sender clone, see `PtyAttachment.tx`). Blocking
-    /// is bounded: a stalled forwarder dies on its 10s socket write
-    /// timeout, dropping the receiver and erroring the send.
-    fn send_detach_final(&self, reason: &str) {
-        let taps = std::mem::take(&mut self.inner.lock().taps);
-        for tx in taps {
-            let _ = tx.send(PtyTapMsg::Detach(reason.to_string()));
-        }
-    }
-    /// Register a live tap and snapshot the backlog atomically. The
-    /// returned sender clone lets the session's OWN input thread post
-    /// an in-band detach, so the forwarder can block on recv() with no
-    /// polling and no stop flag.
-    fn subscribe(
-        &self,
-    ) -> (Vec<u8>, bool, std::sync::mpsc::Receiver<PtyTapMsg>, std::sync::mpsc::SyncSender<PtyTapMsg>)
-    {
-        let (tx, rx) = std::sync::mpsc::sync_channel(Self::TAP_DEPTH);
-        let mut inner = self.inner.lock();
-        inner.taps.push(tx.clone());
-        let (backlog, truncated) = inner.ring.tail(usize::MAX);
-        (backlog, truncated, rx, tx)
-    }
-    fn tail(&self, max: usize) -> (Vec<u8>, bool) {
-        self.inner.lock().ring.tail(max)
-    }
-}
-
-/// Byte ring holding the last `CAP` of a PTY's output, so `termic logs`
-/// and attach-with-backlog can show what the GUI terminal shows without
-/// retaining unbounded scrollback server-side. 256 KiB comfortably
-/// covers a full TUI redraw plus recent turns.
-pub(crate) struct PtyRing {
-    buf: std::collections::VecDeque<u8>,
-    dropped: bool,
-}
-
-impl PtyRing {
-    const CAP: usize = 256 * 1024;
-
-    fn new() -> Self {
-        PtyRing { buf: std::collections::VecDeque::new(), dropped: false }
-    }
-
-    fn push(&mut self, data: &[u8]) {
-        // A single chunk larger than the cap keeps only its tail.
-        let start = data.len().saturating_sub(Self::CAP);
-        if start > 0 {
-            self.dropped = true;
-        }
-        self.buf.extend(&data[start..]);
-        if self.buf.len() > Self::CAP {
-            self.buf.drain(..self.buf.len() - Self::CAP);
-            self.dropped = true;
-        }
-    }
-
-    /// Last `max` bytes plus whether anything older was ever dropped
-    /// (by the cap or by `max`).
-    fn tail(&self, max: usize) -> (Vec<u8>, bool) {
-        let skip = self.buf.len().saturating_sub(max);
-        (
-            self.buf.iter().skip(skip).copied().collect(),
-            self.dropped || skip > 0,
-        )
-    }
 }
 
 /// A live attach session's server end, handed to the CLI socket thread.
@@ -3499,13 +3352,20 @@ pub(crate) fn pty_resize_inner(
     rows: u16,
     cols: u16,
 ) -> Result<(), String> {
-    let map = manager.inner.lock();
-    if let Some(slot) = map.get(pty_id) {
-        slot.master
-            .resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
-            .map_err(|e| e.to_string())?;
+    let daemon = {
+        let map = manager.inner.lock();
+        let Some(slot) = map.get(pty_id) else { return Ok(()) };
+        if let Some(master) = &slot.master {
+            return master
+                .resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
+                .map_err(|e| e.to_string());
+        }
+        slot.daemon.clone()
+    };
+    match daemon {
+        Some(client) => ptyd_host::resize(&client, pty_id, rows, cols),
+        None => Ok(()),
     }
-    Ok(())
 }
 
 #[derive(Default, Clone)]
@@ -3518,6 +3378,28 @@ struct PtyChunk { data: Vec<u8> }
 
 #[derive(Clone, Serialize)]
 struct PtyExit { code: Option<i32> }
+
+/// Where an app-owned PTY's output goes: the `pty://<id>` and
+/// `pty-exit://<id>` events of the window that owns its task. The label is
+/// resolved ONCE, at spawn. The topics carry the PTY's own id, not the
+/// task's, so a per-event lookup could never find it and every flush would
+/// re-read every task file (see TASK_WINDOW). `None` (a PTY with no task)
+/// broadcasts.
+struct WindowSink {
+    app: AppHandle,
+    window: Option<String>,
+    id: String,
+}
+
+impl PtySink for WindowSink {
+    fn output(&self, data: Vec<u8>) {
+        emit_to_window(&self.app, self.window.as_deref(), &format!("pty://{}", self.id), PtyChunk { data });
+    }
+
+    fn exit(&self, code: Option<i32>) {
+        emit_to_window(&self.app, self.window.as_deref(), &format!("pty-exit://{}", self.id), PtyExit { code });
+    }
+}
 
 /// Truth about how the agent actually got spawned - not just whether
 /// the task WANTED to be sandboxed but whether the cage actually
@@ -3820,12 +3702,7 @@ fn pty_alive(state: State<'_, PtyManager>, id: String) -> bool {
 fn pty_attached(state: State<'_, PtyManager>, id: String) {
     let map = state.inner.lock();
     let Some(slot) = map.get(&id) else { return };
-    // Under the buffer mutex, exactly like the reader's `done` store: a store
-    // outside it can land between the flusher's check and its wait, and that
-    // wakeup is lost (the terminal then waits out the whole grace).
-    let _b = slot.out_buf.0.lock();
-    slot.attached.store(true, Ordering::Release);
-    slot.out_buf.1.notify_all();
+    slot.pump.mark_attached();
 }
 
 
@@ -3854,7 +3731,7 @@ pub(crate) fn pty_slave_path(master: &Box<dyn portable_pty::MasterPty + Send>) -
 }
 
 #[cfg(not(unix))]
-fn pty_slave_path(_master: &Box<dyn portable_pty::MasterPty + Send>) -> Option<String> {
+pub(crate) fn pty_slave_path(_master: &Box<dyn portable_pty::MasterPty + Send>) -> Option<String> {
     None
 }
 
@@ -3871,16 +3748,6 @@ fn pty_spawn(
     state: State<'_, PtyManager>,
     args: SpawnArgs,
 ) -> Result<SpawnResult, String> {
-    let pty = NativePtySystem::default();
-    let pair = pty
-        .openpty(PtySize {
-            rows: args.rows,
-            cols: args.cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| e.to_string())?;
-
     // ── Docker sandbox branch ──────────────────────────────────────
     // If the task is in Docker mode (and the global master switch is on),
     // the container is the isolation boundary: rewrite the spawn to
@@ -4230,6 +4097,55 @@ fn pty_spawn(
     // feature-gate checks in agents that look for "iTerm2 ≥ 3.x".
     configure_terminal_env(&mut cmd);
 
+    // Stop grok scanning ~/.claude/settings.json for hooks.
+    //
+    // grok reads claude's config on purpose (its own docs list it as a
+    // compatibility source), so with hooks installed for BOTH agents every
+    // event fires TWICE. Measured: one run recorded the claude-file hook and
+    // grok's own hook for a single UserPromptSubmit, and setting this to false
+    // left only grok's.
+    //
+    // Its own docs give the resolution order as "env var > config.toml >
+    // default (on)", so this wins without touching the user's config.toml, and
+    // it is scoped to grok spawned BY termic: a grok the user runs in another
+    // terminal keeps whatever they configured. The generated claude script also
+    // bails when GROK_HOOK_EVENT is set, which covers that case.
+    if args.agent_id.as_deref() == Some("grok") {
+        cmd.env("GROK_CLAUDE_HOOKS_ENABLED", "false");
+    }
+
+    // Agent PTYs go to the PTY daemon when it is on, so they outlive the app
+    // (ptyd_host.rs). Everything above is the same for both: the daemon gets
+    // the finished command and decides nothing about the agent.
+    let daemon_enabled = load_settings_in(&spawn_profile).pty_daemon_enabled;
+    let is_agent_role = args.role.as_ref().is_some_and(|r| r.kind == "agent");
+    let daemon_can_host = sandbox_bundle.is_none() && !is_docker;
+    let route_to_daemon = ptyd_host::wants_daemon(daemon_enabled, is_agent_role) && daemon_can_host;
+    if route_to_daemon {
+        let meta = ptyd_host::PtyMeta::of(
+            args.task_id.as_ref(),
+            args.role.as_ref(),
+            args.owner.as_ref(),
+            spawn_account.as_ref(),
+            docker_container.as_ref(),
+        );
+        let sudo_watch = cfg!(target_os = "macos");
+        let spawned = ptyd_host::spawn(&app, &cmd, &id, args.rows, args.cols, sudo_watch, &meta, pty_window.clone())?;
+        if spawned.is_some() {
+            let status = SandboxStatus { active: false, proxy_active: false, warning: String::new() };
+            return Ok(SpawnResult { id, sandbox: status, account: spawn_account });
+        }
+        dlog("[pty_spawn] pty daemon not connected yet, spawning in the app");
+    }
+
+    let pair = NativePtySystem::default()
+        .openpty(PtySize {
+            rows: args.rows,
+            cols: args.cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| e.to_string())?;
     // The slave path of THIS pty, so an agent hook can report state by writing
     // an OSC to the terminal it is already running in.
     //
@@ -4257,22 +4173,6 @@ fn pty_spawn(
         cmd.env("TERMIC_PTY_PIPE", "1");
     }
 
-    // Stop grok scanning ~/.claude/settings.json for hooks.
-    //
-    // grok reads claude's config on purpose (its own docs list it as a
-    // compatibility source), so with hooks installed for BOTH agents every
-    // event fires TWICE. Measured: one run recorded the claude-file hook and
-    // grok's own hook for a single UserPromptSubmit, and setting this to false
-    // left only grok's.
-    //
-    // Its own docs give the resolution order as "env var > config.toml >
-    // default (on)", so this wins without touching the user's config.toml, and
-    // it is scoped to grok spawned BY termic: a grok the user runs in another
-    // terminal keeps whatever they configured. The generated claude script also
-    // bails when GROK_HOOK_EVENT is set, which covers that case.
-    if args.agent_id.as_deref() == Some("grok") {
-        cmd.env("GROK_CLAUDE_HOOKS_ENABLED", "false");
-    }
 
     let mut child = pair.slave.spawn_command(cmd).map_err(|e| {
         let s = e.to_string();
@@ -4294,10 +4194,10 @@ fn pty_spawn(
     }
 
     let master = pair.master;
-    let mut reader = master.try_clone_reader().map_err(|e| e.to_string())?;
+    let reader = master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = master.take_writer().map_err(|e| e.to_string())?;
 
-    // Reader → shared buffer → flusher → Tauri event.
+    // Reader → shared buffer → flusher → Tauri event (pty_core.rs).
     //
     // Emitting one event per 4 KB read is the naive path but catastrophic for
     // bulk output (e.g. `cat large.txt`): 6 MB produces ~1 500 events, each
@@ -4305,23 +4205,21 @@ fn pty_spawn(
     // The flusher coalesces those into ~8-16 events at 60 fps, cutting IPC
     // load by ~100× for large writes while adding ≤8 ms latency to interactive
     // responses (imperceptible in practice).
-    // The buffer is paired with a Condvar so the flusher (and the waiter
-    // below) BLOCK when there is nothing to do. The previous flusher looped
-    // `sleep(8ms)` unconditionally — 125 timer wakeups/s per PTY around the
-    // clock, even for a completely quiet terminal — which kept the CPU from
-    // ever reaching deep sleep. Now a quiet PTY costs zero wakeups.
-    let pty_buf: Arc<(Mutex<Vec<u8>>, Condvar)> =
-        Arc::new((Mutex::new(Vec::new()), Condvar::new()));
-    let reader_done: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
-    // Flipped by `pty_attached`. Tauri events are fire-and-forget, so every
-    // byte the flusher emits before the webview's `listen()` resolves reaches
-    // nobody and is gone: the child starts writing the moment it is forked,
-    // while the listener costs a spawn round trip plus the renderer's own
-    // async work to register. A CLI that paints a banner and one OSC title at
-    // startup and then waits on stdin (every agent we ship) can lose BOTH and
-    // sit there blank forever, which is what the Activity spec kept hitting on
-    // a loaded CI runner.
-    let attached: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+    //
+    // The pump's `attached` flag is flipped by `pty_attached`. Tauri events
+    // are fire-and-forget, so every byte the flusher emits before the
+    // webview's `listen()` resolves reaches nobody and is gone: the child
+    // starts writing the moment it is forked, while the listener costs a
+    // spawn round trip plus the renderer's own async work to register. A CLI
+    // that paints a banner and one OSC title at startup and then waits on
+    // stdin (every agent we ship) can lose BOTH and sit there blank forever,
+    // which is what the Activity spec kept hitting on a loaded CI runner.
+    let pump = PtyPump::new();
+    let sink: Arc<dyn PtySink> = Arc::new(WindowSink {
+        app: app.clone(),
+        window: pty_window.clone(),
+        id: id.clone(),
+    });
 
     // CLI feed (ring buffer + attach taps) only for PTYs the CLI can
     // address; everything else keeps the zero-overhead path.
@@ -4333,16 +4231,13 @@ fn pty_spawn(
     // the user has no other way to see.
     let out_bytes = Arc::new(AtomicU64::new(0));
 
-    // Reader thread: drain PTY bytes into the shared buffer and wake the
-    // flusher only when there is actually something to flush.
-    let buf_r = pty_buf.clone();
-    let done_r = reader_done.clone();
+    let pump_r = pump.clone();
+    let sink_r = sink.clone();
     let app_final = app.clone();
     let id_final = id.clone();
-    let id_r = id.clone();
     let feed_r = feed.clone();
+    let feed_eof = feed.clone();
     let out_bytes_r = out_bytes.clone();
-    let attached_r = attached.clone();
     let window_r = pty_window.clone();
     // Touch ID for sudo offer (sudo_touchid.rs). Host PTYs only: a
     // sandboxed agent cannot run the setuid sudo, and a Docker PTY's
@@ -4359,13 +4254,12 @@ fn pty_spawn(
     #[cfg(windows)]
     let hook_pipe_path = hook_pipe.map(|pipe| {
         let path = pipe.env_path();
-        let buf_h = pty_buf.clone();
+        let pump_h = pump.clone();
         let feed_h = feed.clone();
         pipe.serve(
-            reader_done.clone(),
+            pump.done.clone(),
             Arc::new(move |bytes: &[u8]| {
-                buf_h.0.lock().extend_from_slice(bytes);
-                buf_h.1.notify_all();
+                pump_h.push(bytes);
                 if let Some(feed) = &feed_h {
                     feed.push(bytes);
                 }
@@ -4374,59 +4268,31 @@ fn pty_spawn(
         path
     });
     thread::spawn(move || {
-        let mut buf = [0u8; 65536];
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => {
-                    out_bytes_r.fetch_add(n as u64, Ordering::Relaxed);
-                    buf_r.0.lock().extend_from_slice(&buf[..n]);
-                    buf_r.1.notify_all();
-                    if let Some(feed) = &feed_r {
-                        feed.push(&buf[..n]);
-                    }
-                    if let Some(show) = sudo_watch.as_mut().and_then(|w| w.on_read(n)) {
-                        emit_to_window(
-                            &app_final,
-                            window_r.as_deref(),
-                            &format!("pty-sudo-touchid://{}", id_final),
-                            sudo_touchid::SudoOffer { show },
-                        );
-                    }
+        pump_r.run_reader(
+            reader,
+            sink_r.as_ref(),
+            |chunk| {
+                out_bytes_r.fetch_add(chunk.len() as u64, Ordering::Relaxed);
+                if let Some(feed) = &feed_r {
+                    feed.push(chunk);
                 }
-            }
-        }
-        // Attach sessions learn the PTY died in-band (their input
-        // thread's sender clone keeps the channel from disconnecting).
-        if let Some(feed) = &feed_r {
-            feed.send_detach_final("exited");
-        }
-        // Emit any bytes the flusher hasn't picked up yet, then signal done
-        // so the waiter can fire pty-exit after all output is on the wire.
-        let remaining = std::mem::take(&mut *buf_r.0.lock());
-        if !remaining.is_empty() {
-            // Same gate as the flusher, for the same reason: a process that
-            // prints and exits faster than the webview can register its
-            // listener (a one-shot command in a terminal tab) would otherwise
-            // have its ENTIRE output emitted to nobody. `done` is still false
-            // here, so this waits on the ack, not on itself.
-            wait_for_attach(&buf_r, &attached_r, &done_r, PTY_ATTACH_GRACE);
-            emit_to_window(&app_final, window_r.as_deref(), &format!("pty://{}", id_final), PtyChunk { data: remaining });
-        }
-        // Set `done` and notify UNDER the buffer mutex. The flusher and the
-        // waiter both check `done` while holding it, then park; a store
-        // without the lock can land exactly between a consumer's check and
-        // its wait(), so the notify hits nobody and the consumer parks
-        // forever (lost wakeup: pty-exit never fires, the slot never leaves
-        // the map). Taking the mutex forces the store to happen either
-        // before the consumer's check (it sees `done`, never parks) or after
-        // it parked (the notify reaches it). The final-data emit above must
-        // stay BEFORE this block so pty-exit can't overtake the last bytes.
-        {
-            let _b = buf_r.0.lock();
-            done_r.store(true, Ordering::Release);
-            buf_r.1.notify_all();
-        }
+                if let Some(show) = sudo_watch.as_mut().and_then(|w| w.on_read(chunk.len())) {
+                    emit_to_window(
+                        &app_final,
+                        window_r.as_deref(),
+                        &format!("pty-sudo-touchid://{}", id_final),
+                        sudo_touchid::SudoOffer { show },
+                    );
+                }
+            },
+            // Attach sessions learn the PTY died in-band (their input
+            // thread's sender clone keeps the channel from disconnecting).
+            || {
+                if let Some(feed) = &feed_eof {
+                    feed.send_detach_final("exited");
+                }
+            },
+        );
         // The hook pipe's accept loop waits for a client; one last empty
         // connection lets it see `done` and exit with the PTY.
         #[cfg(windows)]
@@ -4435,53 +4301,17 @@ fn pty_spawn(
         }
     });
 
-    // Flusher thread: block until the reader signals fresh output, then
-    // sleep ONE 8 ms coalescing window (so bulk output still batches into
-    // few events), drain, emit. While the PTY is quiet this thread is
-    // parked on the condvar — no timer, no wakeups.
-    let buf_f = pty_buf.clone();
-    let done_f = reader_done.clone();
-    let app_f = app.clone();
-    let attached_f = attached.clone();
-    let window_f = pty_window.clone();
-    thread::spawn(move || {
-        let interval = Duration::from_millis(8);
-        // Nothing goes on the wire until someone is listening. The reader
-        // keeps filling the buffer meanwhile, so this delays the first paint
-        // by however long the ack takes and loses nothing.
-        wait_for_attach(&buf_f, &attached_f, &done_f, PTY_ATTACH_GRACE);
-        loop {
-            {
-                let mut b = buf_f.0.lock();
-                while b.is_empty() && !done_f.load(Ordering::Acquire) {
-                    buf_f.1.wait(&mut b);
-                }
-                if b.is_empty() {
-                    break; // reader done and its final flush already emitted
-                }
-            }
-            thread::sleep(interval);
-            let data = std::mem::take(&mut *buf_f.0.lock());
-            if !data.is_empty() {
-                emit_to_window(&app_f, window_f.as_deref(), &format!("pty://{}", id_r), PtyChunk { data });
-            }
-            if done_f.load(Ordering::Acquire) {
-                break;
-            }
-        }
-    });
+    pump.spawn_flusher(sink.clone(), pty_core::PTY_COALESCE);
 
     // Waiter thread owns the Child outright. wait() blocks until the process
     // exits; if pty_kill SIGKILLs it, wait() returns naturally — no mutex
     // contention with the kill path.
-    let app_w = app.clone();
     let id_w = id.clone();
     let state_w = state.inner.clone();
     let ws_for_waiter = args.task_id.clone();
     let pid_for_waiter = child_pid;
-    let done_w = reader_done.clone();
-    let buf_w = pty_buf.clone();
-    let window_w = pty_window;
+    let pump_w = pump.clone();
+    let sink_w = sink;
     thread::spawn(move || {
         let status = child.wait().ok();
         let code = status.and_then(|s| i32::try_from(s.exit_code()).ok());
@@ -4494,17 +4324,7 @@ fn pty_spawn(
         // by dropping the slot (what pty_kill does), which ends the read.
         #[cfg(windows)]
         {
-            let drained = {
-                let mut b = buf_w.0.lock();
-                let deadline = Instant::now() + Duration::from_millis(200);
-                while !done_w.load(Ordering::Acquire) {
-                    let now = Instant::now();
-                    if now >= deadline { break; }
-                    buf_w.1.wait_for(&mut b, deadline - now);
-                }
-                done_w.load(Ordering::Acquire)
-            };
-            if !drained {
+            if !pump_w.wait_done_for(Duration::from_millis(200)) {
                 let slot = state_w.lock().remove(&id_w);
                 if let Some(slot) = slot {
                     if let Some(name) = slot.docker_container.clone() {
@@ -4517,17 +4337,8 @@ fn pty_spawn(
         // Wait for the reader to drain and emit all remaining PTY output
         // before firing pty-exit. Without this the frontend could process
         // exit before the last bytes arrive and tear down the listener.
-        // Blocks on the same condvar the reader signals — the previous
-        // `sleep(1ms)` spin burned ~1000 wakeups/s, and if an orphaned
-        // grandchild kept the PTY slave open (reader never hits EOF) it
-        // spun forever, long after the pane was closed.
-        {
-            let mut b = buf_w.0.lock();
-            while !done_w.load(Ordering::Acquire) {
-                buf_w.1.wait(&mut b);
-            }
-        }
-        emit_to_window(&app_w, window_w.as_deref(), &format!("pty-exit://{}", id_w), PtyExit { code });
+        pump_w.wait_done();
+        sink_w.exit(code);
         // Drop this PID from the sandbox's PID set so the path watcher
         // stops counting denies from anything that happened to inherit
         // this PID after exit (rare but possible on macOS).
@@ -4574,7 +4385,7 @@ fn pty_spawn(
         id.clone(),
         PtySlot {
             writer: Arc::new(Mutex::new(writer)),
-            master,
+            master: Some(master),
             child_pid,
             sandbox: sandbox_bundle,
             task_id: args.task_id.clone(),
@@ -4584,8 +4395,8 @@ fn pty_spawn(
             docker_container,
             out_bytes,
             seq: next_pty_seq(),
-            attached,
-            out_buf: pty_buf,
+            pump,
+            daemon: None,
         },
     );
 
@@ -4594,6 +4405,31 @@ fn pty_spawn(
     // signature but mark it unused.
     let _ = app;
     Ok(SpawnResult { id, sandbox: status, account: spawn_account })
+}
+
+/// Start the PTY daemon in the background (the setting was just turned on).
+#[tauri::command]
+fn pty_daemon_warm(app: AppHandle) {
+    ptyd_host::warm(&app);
+}
+
+/// The daemon PTY still running this tab's agent, if any: what a tab asks
+/// on mount, before deciding to spawn. Async because it may connect to the
+/// daemon.
+#[tauri::command]
+async fn pty_daemon_find(app: AppHandle, task_id: String, tab_id: String) -> Result<Option<ptyd_host::LivePty>, String> {
+    tauri::async_runtime::spawn_blocking(move || ptyd_host::find(&app, &task_id, &tab_id))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Attach a tab to a running daemon PTY. Returns the ring to replay; live
+/// output follows on `pty://<id>` after the tab sends `pty_attached`.
+#[tauri::command]
+async fn pty_daemon_attach(app: AppHandle, id: String, rows: u16, cols: u16) -> Result<ptyd_host::AttachResult, String> {
+    tauri::async_runtime::spawn_blocking(move || ptyd_host::attach(&app, &id, rows, cols))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -4614,6 +4450,10 @@ fn pty_resize(
 #[tauri::command]
 fn pty_kill(state: State<'_, PtyManager>, pty_id: String) -> Result<(), String> {
     let slot = state.inner.lock().remove(&pty_id);
+    if let Some(client) = slot.as_ref().and_then(|s| s.daemon.clone()) {
+        ptyd_host::kill(client, pty_id);
+        return Ok(());
+    }
     if let Some(slot) = slot {
         // SIGKILL the child by raw pid (avoids deadlock with the waiter
         // thread that has the Child handle pinned in wait()).
@@ -21827,6 +21667,10 @@ pub struct Settings {
     /// `cli_default_migrated` is what reaches those.
     #[serde(default = "default_true")]
     pub cli_enabled: bool,
+    /// Agent PTYs run in the PTY daemon and outlive the app (ptyd_host.rs).
+    /// Off by default while it proves itself.
+    #[serde(default)]
+    pub pty_daemon_enabled: bool,
     /// One-time marker for the "CLI graduated, turn it on" migration
     /// (`migrate_cli_enabled_default`). False/absent means the flip has not
     /// happened for this profile yet.
@@ -25421,6 +25265,9 @@ fn perf_boot_elapsed_ms() -> u64 {
 }
 
 pub fn run() {
+    if let Some(socket) = ptyd::daemon_socket_arg(std::env::args()) {
+        std::process::exit(ptyd::main(&socket));
+    }
     let _ = BOOT.set(Instant::now());
     // WebKitGTK 2.42+ defaults to its DMA-BUF renderer. It's the FAST path on
     // AMD/Intel (X11 and Wayland) and MUST stay on there: disabling it drops
@@ -25623,6 +25470,12 @@ pub fn run() {
             // now is provably a leftover. Off the main thread since it
             // shells out to `docker ps`.
             tauri::async_runtime::spawn_blocking(docker::cleanup_all);
+            // Connect to the PTY daemon early (starting it if the setting is
+            // on), so the first agent spawn finds it ready instead of waiting
+            // on a cold start, and a relaunch can find the agents it left.
+            if load_settings_inner().pty_daemon_enabled {
+                ptyd_host::warm(app.handle());
+            }
             // `termic://` deep links (GH #192). Registered here, before the
             // window is built, so a link that LAUNCHED the app is already
             // queued by the time the webview asks for it. Two sources, both
@@ -25866,7 +25719,7 @@ pub fn run() {
             scratch_tree_list, scratch_file_read, scratch_file_write, scratch_file_create,
             scratch_path_rename, scratch_path_delete, scratch_path_reveal, scratch_copy_to_workspace, scratch_copy_from_workspace,
             task_rename, project_rename,
-            pty_spawn, pty_write, pty_resize, pty_kill,
+            pty_spawn, pty_write, pty_resize, pty_kill, pty_daemon_find, pty_daemon_attach, pty_daemon_warm,
             procmon_start, procmon_sample, procmon_stop, procmon_signal, procmon_open_window,
             lsp_offer, lsp_catalog, lsp_install, lsp_install_zuban, lsp_check_update, lsp_update, lsp_start, lsp_send, lsp_stop, lsp_reap_foreign, lsp_list,
             notify, open_path, reveal_path, open_file_external, open_with_apps, open_with_app, open_external_url, browser_command_check, home_dir, project_tasks_path_default, tasks_path_conflicts, default_shell, script_shell, path_exists, path_is_git_repo, log_line, pty_debug_append, terminal_stage_file, install_notification_sound, play_completion_sound,
@@ -26183,6 +26036,9 @@ fn cleanup_children(app: &tauri::AppHandle) {
     if let Some(mgr) = app.try_state::<PtyManager>() {
         let mut inner = mgr.inner.lock();
         for (_, slot) in inner.drain() {
+            // The daemon's PTYs are the ones meant to outlive this quit.
+            let owned_by_daemon = slot.daemon.is_some();
+            if owned_by_daemon { continue; }
             if let Some(pid) = slot.child_pid {
                 proc_ctl::signal_pid(pid as i32, proc_ctl::Sig::Kill);}
         }
@@ -27236,8 +27092,15 @@ mod tests {
         // needs an AppHandle this suite cannot build. Going back through
         // `emit_scoped` costs one scan per PTY with the memo above, and one
         // per keystroke for grep, so it is still wrong and this is what says so.
+        //
+        // A PTY's events go out through `WindowSink`, which carries the label
+        // `pty_spawn` resolved; the sink is what has to stay free of a
+        // per-event lookup, and `pty_spawn` is what has to keep building it.
         let src = include_str!("lib.rs");
-        for (func, topic) in [("fn pty_spawn(", "pty-exit://"), ("fn task_grep_start(", "grep-done://")] {
+        let spawn_body = src.split_once("fn pty_spawn(").expect("pty_spawn exists").1;
+        let spawn_body = &spawn_body[..spawn_body.find("\n}\n").expect("function ends")];
+        assert!(spawn_body.contains("WindowSink {"), "pty_spawn no longer builds its sink from the resolved label");
+        for (func, topic) in [("impl PtySink for WindowSink", "pty-exit://"), ("fn task_grep_start(", "grep-done://")] {
             let body = src.split_once(func).unwrap_or_else(|| panic!("{func} exists")).1;
             let body = &body[..body.find("\n}\n").expect("function ends")];
             assert!(body.contains(topic), "{func} no longer emits {topic}, so this slice is wrong");
@@ -30032,112 +29895,6 @@ mod tests {
         // "any close re-enables it" rule.
         assert!(!should_reenable_tray("quit", Some(false)));
         assert!(!should_reenable_tray("ask", Some(false)));
-    }
-
-    #[test]
-    fn pty_ring_caps_and_reports_truncation() {
-        let mut ring = PtyRing::new();
-        ring.push(b"hello ");
-        ring.push(b"world");
-        let (tail, truncated) = ring.tail(usize::MAX);
-        assert_eq!(tail, b"hello world");
-        assert!(!truncated);
-        // A capped tail flags the drop.
-        let (tail, truncated) = ring.tail(5);
-        assert_eq!(tail, b"world");
-        assert!(truncated);
-        // Overflow keeps the newest CAP bytes and flags the drop for good.
-        ring.push(&vec![b'x'; PtyRing::CAP]);
-        let (tail, truncated) = ring.tail(usize::MAX);
-        assert_eq!(tail.len(), PtyRing::CAP);
-        assert!(tail.iter().all(|b| *b == b'x'));
-        assert!(truncated);
-        // A single chunk larger than the cap keeps only its tail.
-        let mut ring = PtyRing::new();
-        let mut big = vec![b'a'; PtyRing::CAP];
-        big.extend_from_slice(b"end");
-        ring.push(&big);
-        let (tail, truncated) = ring.tail(usize::MAX);
-        assert_eq!(tail.len(), PtyRing::CAP);
-        assert!(tail.ends_with(b"end"));
-        assert!(truncated);
-    }
-
-    #[test]
-    fn wait_for_attach_returns_as_soon_as_the_webview_acks() {
-        // The normal path: the flusher parks, the ack lands a moment later,
-        // output flows. Nothing may wait out the grace here.
-        let buf: Arc<(Mutex<Vec<u8>>, Condvar)> = Arc::new((Mutex::new(Vec::new()), Condvar::new()));
-        let attached = Arc::new(AtomicBool::new(false));
-        let done = Arc::new(AtomicBool::new(false));
-        let b2 = buf.clone();
-        let a2 = attached.clone();
-        thread::spawn(move || {
-            thread::sleep(Duration::from_millis(50));
-            let _g = b2.0.lock();
-            a2.store(true, Ordering::Release);
-            b2.1.notify_all();
-        });
-        let t0 = Instant::now();
-        wait_for_attach(&buf, &attached, &done, Duration::from_secs(30));
-        assert!(t0.elapsed() < Duration::from_secs(5), "took {:?}", t0.elapsed());
-    }
-
-    #[test]
-    fn wait_for_attach_gives_up_after_the_grace() {
-        // A caller that never acks must not wedge its PTY forever: output is
-        // late, not lost.
-        let buf: Arc<(Mutex<Vec<u8>>, Condvar)> = Arc::new((Mutex::new(Vec::new()), Condvar::new()));
-        let attached = Arc::new(AtomicBool::new(false));
-        let done = Arc::new(AtomicBool::new(false));
-        let t0 = Instant::now();
-        wait_for_attach(&buf, &attached, &done, Duration::from_millis(120));
-        assert!(t0.elapsed() >= Duration::from_millis(100), "returned early: {:?}", t0.elapsed());
-        assert!(t0.elapsed() < Duration::from_secs(5), "overshot: {:?}", t0.elapsed());
-    }
-
-    #[test]
-    fn wait_for_attach_returns_when_the_process_dies_first() {
-        // The reader's final drain waits on this too, so a child that exits
-        // before the ack must not hold pty-exit for the whole grace.
-        let buf: Arc<(Mutex<Vec<u8>>, Condvar)> = Arc::new((Mutex::new(Vec::new()), Condvar::new()));
-        let attached = Arc::new(AtomicBool::new(false));
-        let done = Arc::new(AtomicBool::new(true));
-        let t0 = Instant::now();
-        wait_for_attach(&buf, &attached, &done, Duration::from_secs(30));
-        assert!(t0.elapsed() < Duration::from_secs(1), "took {:?}", t0.elapsed());
-    }
-
-    #[test]
-    fn pty_feed_tap_gets_backlog_then_live_data_exactly_once() {
-        let feed = PtyFeed::new();
-        feed.push(b"before");
-        let (backlog, truncated, rx, session_tx) = feed.subscribe();
-        assert_eq!(backlog, b"before");
-        assert!(!truncated);
-        feed.push(b"after");
-        match rx.recv_timeout(std::time::Duration::from_secs(1)) {
-            Ok(PtyTapMsg::Data(d)) => assert_eq!(d, b"after"),
-            other => panic!("expected live data, got {:?}", other.is_ok()),
-        }
-        // No duplicate of the backlog on the live channel.
-        assert!(rx.try_recv().is_err());
-        // A detach reaches the tap in-band, from the feed AND from the
-        // session's own sender clone (the input thread's path).
-        feed.send_detach("archived");
-        match rx.recv_timeout(std::time::Duration::from_secs(1)) {
-            Ok(PtyTapMsg::Detach(r)) => assert_eq!(r, "archived"),
-            other => panic!("expected detach, got {:?}", other.is_ok()),
-        }
-        session_tx.send(PtyTapMsg::Detach("detached".into())).unwrap();
-        match rx.recv_timeout(std::time::Duration::from_secs(1)) {
-            Ok(PtyTapMsg::Detach(r)) => assert_eq!(r, "detached"),
-            other => panic!("expected detach, got {:?}", other.is_ok()),
-        }
-        drop(rx);
-        drop(session_tx);
-        feed.push(b"into the void");
-        assert!(feed.inner.lock().taps.is_empty(), "dead taps must be pruned");
     }
 
     fn mkrepo(base: &Path, rel: &str) {

@@ -1163,6 +1163,26 @@ export const ptyWrite  = orderedPerKey((ptyId: string, data: number[]) => invoke
 export const ptyResize = (ptyId: string, rows: number, cols: number) => invoke<void>("pty_resize", { ptyId, rows, cols });
 export const ptyKill   = (ptyId: string) => invoke<void>("pty_kill", { ptyId });
 
+/** A daemon PTY still running a tab's agent after an app restart. */
+export interface LivePty {
+  id: string;
+  pid: number | null;
+  account: string | null;
+}
+/** What attaching to a daemon PTY hands back: the ring to replay, base64. */
+export interface PtyAttachResult {
+  id: string;
+  pid: number | null;
+  account: string | null;
+  snapshot: string;
+  truncated: boolean;
+}
+export const ptyDaemonWarm = () => invoke<void>("pty_daemon_warm");
+export const ptyDaemonFind = (taskId: string, tabId: string) =>
+  invoke<LivePty | null>("pty_daemon_find", { taskId, tabId });
+export const ptyDaemonAttach = (id: string, rows: number, cols: number) =>
+  invoke<PtyAttachResult>("pty_daemon_attach", { id, rows, cols });
+
 // ── Activity monitor (src-tauri/src/procmon.rs) ────────────────────────
 // Sampling is PULL-based: the Activity window's interval is the clock, so
 // nothing is measured while the window is closed. Never poll these from

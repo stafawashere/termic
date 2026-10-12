@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { settingsSave } from "@/lib/ipc";
+import { ptyDaemonWarm, settingsSave } from "@/lib/ipc";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type { Settings } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
@@ -36,6 +36,8 @@ export function TasksSection() {
   // Pre-create base fetch (GH #79). Backend Settings field; saved immediately
   // on toggle. Absent in settings = on.
   const [fetchBeforeCreate, setFetchBeforeCreate] = useState(true);
+  // PTY daemon (Settings.pty_daemon_enabled). Absent in settings = off.
+  const [keepAgentsRunning, setKeepAgentsRunning] = useState(false);
   // Worktree config-dir symlinks (personal). One path per line, cleaned on
   // save. Empty disables the linking; absent in settings means the pre-filled
   // agent-dir defaults.
@@ -84,6 +86,7 @@ export function TasksSection() {
     if (!settings || hydrated.current) return;
     hydrated.current = true;
     setFetchBeforeCreate(settings.fetch_before_create !== false);
+    setKeepAgentsRunning(settings.pty_daemon_enabled === true);
     const links = (settings.worktree_symlink_paths ?? []).join("\n");
     setSymlinkPaths(links);
     setSymlinkPathsOriginal(links);
@@ -120,6 +123,17 @@ export function TasksSection() {
   const conflictNames = conflicts.length > 3
     ? `${conflicts.slice(0, 3).join(", ")}, and ${conflicts.length - 3} more`
     : conflicts.join(", ");
+
+  async function saveKeepAgentsRunning(v: boolean) {
+    setKeepAgentsRunning(v);
+    if (!(await patch({ pty_daemon_enabled: v }))) {
+      setKeepAgentsRunning(!v);
+      return;
+    }
+    // Start it now, so the next agent spawns into it rather than waiting on
+    // a cold daemon.
+    if (v) ptyDaemonWarm().catch(() => {});
+  }
 
   async function saveFetchBeforeCreate(v: boolean) {
     setFetchBeforeCreate(v);
@@ -392,6 +406,15 @@ export function TasksSection() {
       {/* Same shape as the archive toggle above, and here for the same
           reason: its dialog can turn itself off, and a dialog you dismissed
           once is otherwise unreachable. */}
+      <Block>
+        <Toggle
+          label={t("tasks.keepAgentsRunning.label")}
+          hint={t("tasks.keepAgentsRunning.hint")}
+          value={keepAgentsRunning}
+          onChange={saveKeepAgentsRunning}
+        />
+      </Block>
+
       <Block>
         <Toggle
           label={t("tasks.confirmRestart.label")}

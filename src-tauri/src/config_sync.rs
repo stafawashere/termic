@@ -115,6 +115,8 @@ pub(crate) const SETTINGS_LOCAL: &[&str] = &[
     // CLI and MCP install state, one-time migration markers.
     "cli_enabled", "cli_default_migrated", "hooks_auto_default_migrated",
     "cli_user_link_installed", "mcp_enabled", "mcp_bind_address", "mcp_port",
+    // The PTY daemon runs on this machine.
+    "pty_daemon_enabled",
     "welcomed", "schema_version",
     // This module's own per-profile state.
     "sync",
@@ -3491,6 +3493,7 @@ mod tests {
             fetch_before_create: Some(true),
             discovery_dismissed: vec!["/Users/u/old".into()],
             cli_enabled: true,
+            pty_daemon_enabled: true,
             cli_default_migrated: true,
             hooks_auto_default_migrated: true,
             cli_user_link_installed: true,

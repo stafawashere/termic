@@ -899,6 +899,8 @@ export interface Settings {
    *  disabled CLI fails fast with a clear error rather than a launch
    *  timeout. See docs/plans/cli.md. */
   cli_enabled?: boolean;
+  /** Agent PTYs run in the PTY daemon and survive the app quitting. */
+  pty_daemon_enabled?: boolean;
   /** One-time marker for the "CLI graduated, turn it on" migration (lib.rs,
    *  `migrate_cli_enabled_default`). Backend-owned: the UI never writes it,
    *  but it has to round-trip through the settings object the UI saves, or

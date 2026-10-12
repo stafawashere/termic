@@ -22,7 +22,7 @@ vi.mock("@/lib/utils", () => ({
   slugify: (s: string) => s.toLowerCase().replace(/\s+/g, "-"),
 }));
 
-import { resumeIdArgsForCli, resumePickerArgsForCli, cliSupportsCaptureResume, postLaunchCaptureForCli, spawnArgsForCli, defaultCliFirst, visibleCliIds, cliSupportsIdSession, cliSupportsResumeById, agentDisplayName, decideResume, spawnResumeShape, isTerminalCli, workDoneCapable, terminalLaunchCommand, classifyAgentTitle, compileSignals, BUILTIN_TITLE_SIGNALS, BUILTIN_OUTPUT_SIGNALS, builtinBaseId, YOLO_ARGS_NOTES, yoloArgsNote, resolveAgent, agentOverrides, hasPendingWork, notificationWantsAttention, PENDING_TAIL_ROWS } from "@/lib/agents";
+import { resumeIdArgsForCli, resumePickerArgsForCli, cliSupportsCaptureResume, postLaunchCaptureForCli, spawnArgsForCli, defaultCliFirst, visibleCliIds, cliSupportsIdSession, cliSupportsResumeById, agentDisplayName, decideResume, decideSpawnOrAttach, spawnResumeShape, isTerminalCli, workDoneCapable, terminalLaunchCommand, classifyAgentTitle, compileSignals, BUILTIN_TITLE_SIGNALS, BUILTIN_OUTPUT_SIGNALS, builtinBaseId, YOLO_ARGS_NOTES, yoloArgsNote, resolveAgent, agentOverrides, hasPendingWork, notificationWantsAttention, PENDING_TAIL_ROWS } from "@/lib/agents";
 import type { Agent, CliInfo } from "@/lib/types";
 import type { ResumeDecision } from "@/lib/agents";
 
@@ -459,6 +459,26 @@ describe("decideResume", () => {
 // ids in one cwd stay separate (one answered "alpha", the other "bravo") while
 // `--continue` in that same cwd returned the most recent, i.e. the wrong task's
 // conversation. That is exactly why repo-root goes id-based and never cwd-based.
+describe("decideSpawnOrAttach", () => {
+  const live = { id: "pty-1" };
+
+  it("attaches a first mount to the agent the daemon kept running", () => {
+    expect(decideSpawnOrAttach({ isAgent: true, respawn: false, live })).toEqual({ kind: "attach", id: "pty-1" });
+  });
+
+  it("spawns when nothing survived", () => {
+    expect(decideSpawnOrAttach({ isAgent: true, respawn: false, live: null })).toEqual({ kind: "spawn" });
+  });
+
+  it("spawns on a respawn even if the old process is still listed", () => {
+    expect(decideSpawnOrAttach({ isAgent: true, respawn: true, live })).toEqual({ kind: "spawn" });
+  });
+
+  it("never attaches a shell or custom terminal", () => {
+    expect(decideSpawnOrAttach({ isAgent: false, respawn: false, live })).toEqual({ kind: "spawn" });
+  });
+});
+
 describe("pi resume", () => {
   beforeEach(() => { mockAgents.length = 0; });
   const args = (o: Parameters<typeof spawnArgsForCli>[1]) => spawnArgsForCli("pi", o);

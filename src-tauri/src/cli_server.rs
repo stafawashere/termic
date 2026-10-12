@@ -4008,7 +4008,7 @@ pub(crate) fn write_token_file(path: &Path, token: &str) -> std::io::Result<()> 
 
 /// Unix: the peer's uid must be ours (root included, no exemption).
 #[cfg(unix)]
-fn peer_is_current_user(stream: &LocalStream) -> bool {
+pub(crate) fn peer_is_current_user(stream: &LocalStream) -> bool {
     peer_uid(stream) == Some(unsafe { libc::geteuid() })
 }
 
@@ -4017,7 +4017,7 @@ fn peer_is_current_user(stream: &LocalStream) -> bool {
 /// is no kernel peer-identity check on this transport, so the per-boot
 /// token is the credential (see termic_proto::local).
 #[cfg(windows)]
-fn peer_is_current_user(stream: &LocalStream) -> bool {
+pub(crate) fn peer_is_current_user(stream: &LocalStream) -> bool {
     stream.peer_addr().map(|a| a.ip().is_loopback()).unwrap_or(false)
 }
 
