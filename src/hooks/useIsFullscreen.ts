@@ -15,18 +15,20 @@ export function useIsFullscreen(): boolean {
   useEffect(() => {
     const win = getCurrentWindow();
     let unlisten: (() => void) | undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timers: ReturnType<typeof setTimeout>[] = [];
 
     const read = () => { win.isFullscreen().then(setIsFullscreen).catch(() => {}); };
     const onResize = () => {
       read();
-      clearTimeout(timer);
-      timer = setTimeout(read, 350); // settle after the full-screen animation
+      timers.forEach(clearTimeout);
+      // The exit animation can outlast 350ms, so a single settle read can
+      // still see full-screen and leave the lights drawn over the controls.
+      timers = [setTimeout(read, 350), setTimeout(read, 1000)];
     };
 
     read();
     win.onResized(onResize).then(u => { unlisten = u; });
-    return () => { unlisten?.(); clearTimeout(timer); };
+    return () => { unlisten?.(); timers.forEach(clearTimeout); };
   }, []);
 
   return isFullscreen;

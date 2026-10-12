@@ -35,7 +35,7 @@ const CLIS = ["claude", "codex", "agy", "grok", "opencode"] as const;
 
 /** Height of the session bar (.sessionbar in index.css), which split panes
  *  position their content below. */
-export const SESSION_BAR_PX = 42;
+export const SESSION_BAR_PX = 44;
 
 export function TabBar({ task }: { task: Task }) {
   const { t } = useTranslation("task");

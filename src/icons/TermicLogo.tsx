@@ -106,14 +106,17 @@ const LETTER: Record<string, string[]> = {
   M: ["10001","11011","10101","10101","10001","10001","10001"],
   I: ["11111","00100","00100","00100","00100","00100","11111"],
   C: ["01111","10000","10000","10000","10000","10000","01111"],
+  "+": ["00000","00100","00100","11111","00100","00100","00000"],
 };
+
+const ACCENT_GLYPHS = new Set(["+"]);
 
 /** Block-art wordmark: each letter rendered as a 5×7 grid of small squares.
  *  Square cells (not stretched rectangles like LED segments). */
 export function TermicBlockmark({
   cellSize = 8,
   gap = 1,
-  letters = "TERMIC",
+  letters = "TERMIC+",
   className,
   /** When true, cells fade in column-by-column on mount (typewriter feel). */
   animate = true,
@@ -144,6 +147,9 @@ export function TermicBlockmark({
   for (let li = 0; li < chars.length; li++) {
     const glyph = LETTER[chars[li]];
     if (!glyph) { colOffset += letterCols + 1; continue; }
+
+    const glyphFill = ACCENT_GLYPHS.has(chars[li]) ? "var(--color-accent)" : "currentColor";
+
     for (let r = 0; r < rows; r++) {
       const row = glyph[r];
       for (let c = 0; c < letterCols; c++) {
@@ -156,7 +162,7 @@ export function TermicBlockmark({
               y={r * (cellSize + gap)}
               width={cellSize} height={cellSize}
               rx={Math.max(0, cellSize * 0.2)}
-              fill="currentColor"
+              fill={glyphFill}
               className={animate ? "termic-cell-in" : undefined}
               style={animate ? { animationDelay: `${globalCol * columnStepMs}ms` } : undefined}
             />,

@@ -1836,7 +1836,7 @@ describe("session bar", () => {
         inWell: !!tab.closest(".sessionbar-well"),
       };
     }, bar(), pill(shellTab));
-    expect(geometry).toEqual({ bar: 42, tab: 28, inWell: true });
+    expect(geometry).toEqual({ bar: 44, tab: 28, inWell: true });
   });
 
   it("underlines only the active tab", async () => {

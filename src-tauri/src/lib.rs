@@ -10121,17 +10121,6 @@ fn build_profile_window(app: &AppHandle, id: &ProfileId) -> tauri::Result<tauri:
             format!("Termic - {name}")
         }
     };
-    // Centres the lights on the 50px title bar, checked by eye on a Tahoe
-    // and later Mac. Against the old 38.5px bar they were 21 there and 16
-    // before Tahoe; moving the pre-Tahoe 16 by twice the 5.75px the bar's
-    // centre moved also lands on 27.5, but nobody has looked at that one.
-    // TERMIC_TRAFFIC_Y overrides it for tuning.
-    #[cfg(target_os = "macos")]
-    let traffic_y: f64 = std::env::var("TERMIC_TRAFFIC_Y")
-        .ok()
-        .and_then(|v| v.trim().parse::<f64>().ok())
-        .unwrap_or(27.5);
-
     #[allow(unused_mut)]
     let mut builder = tauri::WebviewWindowBuilder::new(
         app, &label, tauri::WebviewUrl::default(),
@@ -10145,8 +10134,7 @@ fn build_profile_window(app: &AppHandle, id: &ProfileId) -> tauri::Result<tauri:
     {
         builder = builder
             .title_bar_style(tauri::TitleBarStyle::Overlay)
-            .hidden_title(true)
-            .traffic_light_position(tauri::LogicalPosition::new(16.0, traffic_y));
+            .hidden_title(true);
     }
 
     // Windows: no native frame. The app's own top bar is the title bar there
@@ -10322,7 +10310,10 @@ fn build_profile_window(app: &AppHandle, id: &ProfileId) -> tauri::Result<tauri:
     });
 
     #[cfg(target_os = "macos")]
-    round_window_corners_for_tahoe(&win);
+    {
+        round_window_corners_for_tahoe(&win);
+        hide_native_traffic_lights(&win);
+    }
     set_open_at_quit(id, true);
     Ok(win)
 }
@@ -25722,6 +25713,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 round_window_corners_for_tahoe(&win);
+                hide_native_traffic_lights(&win);
                 // AppKit can rebuild the content view's backing layer on
                 // fullscreen enter/exit and zoom transitions, dropping the
                 // corner clip we just set. Re-apply on resize (which all those
@@ -25732,6 +25724,7 @@ pub fn run() {
                 win.on_window_event(move |event| {
                     if let tauri::WindowEvent::Resized(_) = event {
                         round_window_corners_for_tahoe(&win_for_corners);
+                        hide_native_traffic_lights(&win_for_corners);
                     }
                 });
             }
@@ -26182,6 +26175,37 @@ fn darwin_major_version() -> Option<u32> {
     }
     let s = String::from_utf8_lossy(&buf);
     s.trim_end_matches('\0').split('.').next()?.parse::<u32>().ok()
+}
+
+/// Hide the system's close / minimize / zoom buttons. The title bar draws its
+/// own (`TrafficLights.tsx`) so they follow the page zoom, which native ones
+/// cannot. Re-applied on resize because AppKit shows them again when a window
+/// leaves full-screen.
+#[cfg(target_os = "macos")]
+fn hide_native_traffic_lights(win: &tauri::WebviewWindow) {
+    use objc2::runtime::{AnyObject, Bool};
+    use objc2::msg_send;
+
+    // NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton.
+    const BUTTON_KINDS: [isize; 3] = [0, 1, 2];
+
+    let Ok(ns_window) = win.ns_window() else { return };
+    let ns_window = ns_window as *mut AnyObject;
+    if ns_window.is_null() {
+        return;
+    }
+
+    // SAFETY: callers run on the main thread (setup, window events, the
+    // window builder path). The pointer is the live NSWindow owned by tao and
+    // standardWindowButton: returns nil for a button the window lacks.
+    unsafe {
+        for kind in BUTTON_KINDS {
+            let button: *mut AnyObject = msg_send![ns_window, standardWindowButton: kind];
+            if !button.is_null() {
+                let _: () = msg_send![button, setHidden: Bool::new(true)];
+            }
+        }
+    }
 }
 
 /// Round the window's content layer to match macOS Tahoe's enlarged

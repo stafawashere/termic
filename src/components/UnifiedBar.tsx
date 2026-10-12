@@ -32,17 +32,12 @@ import { RunControls } from "@/components/task/RunControls";
 import { CommandPaletteButton } from "@/components/CommandPaletteButton";
 import { IS_MAC, DRAWS_WINDOW_CONTROLS, appRegionStyle } from "@/lib/platform";
 import { WindowControls } from "@/components/WindowControls";
+import { TrafficLights } from "@/components/TrafficLights";
 import {
   ArchiveGlyph, PromptsGlyph, SendUpGlyph, SidebarLeftGlyph, SidebarRightGlyph, TerminalGlyph,
 } from "@/components/titlebar/titlebarIcons";
 import { SessionStrip } from "@/components/titlebar/SessionStrip";
 import { FocusTitle } from "@/components/titlebar/FocusTitle";
-
-// Reserve enough room for the 3 traffic lights + breathing room before the
-// first interactive control. 16 (x offset) + ~58 (3 buttons + gaps) + 10 pad.
-// In macOS full-screen the traffic lights are hidden, so the bar reclaims this
-// space and the controls sit flush-left like the rest of the chrome.
-const TRAFFIC_LIGHT_WIDTH = 84;
 
 export function UnifiedBar() {
   const { t } = useTranslation("chrome");
@@ -144,12 +139,13 @@ export function UnifiedBar() {
           full-screen hides them, and nothing off macOS draws them at all.
           The reservation lives inside the left column, so the two side
           columns stay equal and the title stays on the window's centre. */}
-      <div className="titlebar-side" data-side="left" style={{ paddingLeft: IS_MAC && !isFullscreen ? TRAFFIC_LIGHT_WIDTH : 12 }}>
+      <div className="titlebar-side" data-side="left" style={{ paddingLeft: IS_MAC && !isFullscreen ? 16 : 12 }}>
       <div
         data-tauri-drag-region="false"
         className="flex min-w-0 items-center"
         style={appRegionStyle("no-drag")}
       >
+        <TrafficLights />
         <Tip content={compact ? t("unifiedBar.expandSidebar") : t("unifiedBar.collapseSidebar")} side="bottom">
           <button type="button" className="titlebar-icon-btn" data-testid="titlebar-sidebar-toggle" onClick={() => {
             // Suppress the 220ms grid-template-columns transition for

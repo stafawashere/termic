@@ -13,6 +13,7 @@ export default {
   close: "Close",
   minimize: "Minimize",
   maximize: "Maximize",
+  fullscreen: "Enter full screen",
   restore: "Restore",
   back: "Back",
   add: "Add",

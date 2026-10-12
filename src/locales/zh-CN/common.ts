@@ -12,6 +12,7 @@ export default {
   close: "关闭",
   minimize: "最小化",
   maximize: "最大化",
+  fullscreen: "进入全屏",
   restore: "还原",
   back: "返回",
   add: "添加",

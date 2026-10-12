@@ -161,7 +161,7 @@ pub fn connect_or_launch(paths: &SocketPaths, no_launch: bool) -> Result<Conn, C
         // LAUNCHES, which is exactly the case we want it to apply to - an
         // already-running Termic keeps whatever state it is in.
         let launched = std::process::Command::new("open")
-            .args(["-ga", "Termic", "--args", "--headless"])
+            .args(["-gb", "com.simion.termic", "--args", "--headless"])
             .status()
             .map(|s| s.success())
             .unwrap_or(false);

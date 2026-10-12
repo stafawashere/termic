@@ -1845,9 +1845,9 @@ the title bar's material (`TabBar`, `.sessionbar` in `index.css`). Every
 split pane's own strip (`PaneHeader`) is the same bar with a close-pane
 button on the end, and the bottom shell strip reuses the same `TabPill`.
 
-- **Shell**: 42px, a two-stop gradient with the title bar's grain baked
+- **Shell**: 44px, a two-stop gradient with the title bar's grain baked
   into a background layer (`--sessionbar-grain`, no pseudo-element and no
-  z-index games). `SESSION_BAR_PX` in `TabBar.tsx` is the same 42: split
+  z-index games). `SESSION_BAR_PX` in `TabBar.tsx` is the same 44: split
   panes place their content that far below each pane's top, so the two
   move together.
 - **Order**: the tab well, the + (opens the new-tab menu, as ⌘T does), a
