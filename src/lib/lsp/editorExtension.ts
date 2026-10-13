@@ -32,6 +32,7 @@ import { goBack, goForward } from "./navigate";
 import { fileStructure, showFileStructure } from "./fileStructure";
 import { usagesPopup } from "./usagesPopup";
 import { codeActionsPopup, showCodeActions } from "./codeActions";
+import { inlayHintsExtension } from "./inlayHints";
 import { clearActiveEditor, setActiveEditor } from "@/lib/editor/activeEditor";
 import { lspLanguageId, lspServerFor } from "./languages";
 import { bindingToCmKey } from "@/lib/shortcuts";
@@ -181,6 +182,9 @@ export async function codeIntelExtension(
     // every lookup a round trip across the pane.
     usagesPopup,
     codeActionsPopup,
+    // Inferred types and parameter names, viewport only. Mounted here so it
+    // exists only when code intelligence is armed.
+    inlayHintsExtension,
     trackActiveEditor,
     fileStructure,
     // A server that dies (crash, OOM, a `cargo` that ate the machine) must not

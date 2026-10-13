@@ -2592,6 +2592,14 @@ Two honesty rules, because a confidently wrong author is worse than none:
 
 A git tick is deliberately NOT a re-fetch. `gitRevision` bumps on every stage and unstage, not just on commits, so it dispatches `markBlameStale`: the annotation on screen stays put and the refetch rides the reader's next cursor move. Re-blaming per tick forks git once per open editor to redraw one line that usually did not change, and it measurably slowed the e2e suite when it was written that way.
 
+## Git change gutter
+
+`gitChangeGutterExtension(taskId, path)` marks lines added, modified or deleted against HEAD in a narrow gutter beside the line numbers: a bar for added, a bar for modified, a small triangle between lines for deleted, colored from `--ui-git-added`, `--ui-git-modified` and `--ui-git-deleted` in the `@theme` block of `index.css`. The diff is `task_git_line_changes` on the live buffer, requested on mount, 300ms after the last edit, and when the task's `gitRevision` changes.
+
+A result is applied only when the buffer is still the exact document that was sent. Otherwise it is dropped and a new request is scheduled, and a newer request supersedes an older one, so a slow answer can never paint markers on the wrong lines. Markers are mapped through edits in between.
+
+The pref is `editorGitGutter`, ON by default, in Settings → Appearance → Editor and in the command palette as "Toggle Git Gutter". It has its own `Compartment` in `EditorPane`, reconfigured in place, so cursor, undo history and scroll position survive. Scratch and external tabs never get it. Cost notes are in bear trap 10 of [performance.md](performance.md).
+
 ## The dashboard
 
 The home screen: hero, three action cards, a Recent row, and the project list.

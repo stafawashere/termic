@@ -1186,6 +1186,15 @@ export interface BlameFile {
   skipped: boolean;
 }
 
+/** Buffer lines that differ from HEAD. Ranges are inclusive and 1-based;
+ *  `deleted` holds the line sitting where removed lines used to be. */
+export interface LineChanges {
+  added: [number, number][];
+  modified: [number, number][];
+  deleted: number[];
+  truncated: boolean;
+}
+
 /** Result of a Git-tab branch switch. `stashed` = local work was parked and
  *  re-applied; `conflicted` = the re-apply hit conflicts (markers left in the
  *  tree, stash retained). */

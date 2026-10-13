@@ -619,6 +619,29 @@ the arming check.
   not send that notification, so the unopened files change on disk and the
   server's index catches up when it next reads them.
 
+## Inlay hints
+
+Inferred types and parameter names are drawn inline by `lib/lsp/inlayHints.ts`;
+the client has none, so it asks `textDocument/inlayHint` itself. It is mounted
+inside `codeIntelExtension`, so it exists only while code intelligence is
+armed, and the handshake advertises `textDocument.inlayHint`.
+
+- **Viewport only.** The request range is the visible lines padded by 20 on
+  each side, clamped to the document. Never the whole file: a large file has
+  thousands of hints and the reader sees dozens.
+- **Debounced 250ms** after the last document or viewport change, with a
+  timer rather than `requestAnimationFrame` (frozen while the window is
+  occluded). A response is dropped when the document is no longer the one asked
+  about, when the visible lines have left the asked range, or when a newer
+  request has gone out.
+- **No capability, no request.** A server without `inlayHintProvider` is never
+  asked.
+- **Rendering.** Each hint is a `Decoration.widget` kept in the plugin's
+  `DecorationSet` and mapped through edits until the next response. Label parts
+  are joined and set with `textContent`, never `innerHTML`. Type (kind 1) and
+  parameter (kind 2) hints get different classes, and `paddingLeft` and
+  `paddingRight` become margins.
+
 ## What is deliberately not built
 
 The plan this file replaced (`docs/plans/lsp.md`, deleted when the work

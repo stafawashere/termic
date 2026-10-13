@@ -67,6 +67,7 @@ export function AppearanceSection() {
   const setUiScale = usePrefs(s => s.setUiScale);
   const codeLigatures = usePrefs(s => s.codeLigatures);
   const inlineBlame = usePrefs(s => s.inlineBlame);
+  const editorGitGutter = usePrefs(s => s.editorGitGutter);
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
   const setEditorWordWrap = usePrefs(s => s.setEditorWordWrap);
   const editorKeymap = usePrefs(s => s.editorKeymap);
@@ -76,6 +77,7 @@ export function AppearanceSection() {
   const setCodeIntelDiagnostics = usePrefs(s => s.setCodeIntelDiagnostics);
   const setCodeIntelligence = usePrefs(s => s.setCodeIntelligence);
   const setInlineBlame = usePrefs(s => s.setInlineBlame);
+  const setEditorGitGutter = usePrefs(s => s.setEditorGitGutter);
   const setCodeLigatures = usePrefs(s => s.setCodeLigatures);
   const showAllInstalledFonts = usePrefs(s => s.showAllInstalledFonts);
   const resetAppearance = usePrefs(s => s.resetAppearance);
@@ -122,6 +124,7 @@ export function AppearanceSection() {
     uiScale               === APPEARANCE_DEFAULTS.uiScale &&
     codeLigatures         === APPEARANCE_DEFAULTS.codeLigatures &&
     inlineBlame           === APPEARANCE_DEFAULTS.inlineBlame &&
+    editorGitGutter       === APPEARANCE_DEFAULTS.editorGitGutter &&
     editorWordWrap        === APPEARANCE_DEFAULTS.editorWordWrap &&
     editorKeymap          === APPEARANCE_DEFAULTS.editorKeymap &&
     codeIntelligence        === APPEARANCE_DEFAULTS.codeIntelligence &&
@@ -331,6 +334,13 @@ export function AppearanceSection() {
         hint={t("appearance.blame.hint")}
         value={inlineBlame}
         onChange={setInlineBlame}
+      />
+
+      <Toggle
+        label={t("appearance.gitGutter.label")}
+        hint={t("appearance.gitGutter.hint")}
+        value={editorGitGutter}
+        onChange={setEditorGitGutter}
       />
 
       {/* ONE bounded section, not three loose toggles among the editor's.
