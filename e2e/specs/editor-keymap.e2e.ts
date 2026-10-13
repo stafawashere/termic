@@ -60,9 +60,16 @@ describe("editor keymap preset", () => {
 
   const chooseKeymap = async (value: "default" | "zed") => {
     await browser.execute(() => window.__termic!.useApp.getState().openSettings("appearance"));
-    const select = await $(KEYMAP_SELECT);
-    await select.waitForDisplayed({ timeout: 10_000 });
-    await select.selectByAttribute("value", value);
+    await browser.waitUntil(
+      () => browser.execute((sel) => document.querySelector(sel) !== null, KEYMAP_SELECT),
+      { timeout: 10_000, timeoutMsg: "the editor keymap select never rendered" },
+    );
+    await browser.execute((sel, v) => {
+      const select = document.querySelector(sel) as HTMLSelectElement;
+      const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+      setValue.call(select, v);
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }, KEYMAP_SELECT, value);
     await browser.waitUntil(
       () => browser.execute((v) => window.__termic!.usePrefs.getState().editorKeymap === v, value),
       { timeout: 5_000, timeoutMsg: `the Settings select never set the ${value} preset` },

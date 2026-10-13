@@ -56,6 +56,7 @@ export const PREF_KEYS: readonly PrefKey[] = [
   { key: "editorThemeId", scoped: false, class: "sync" },
   { key: "editorThemeIdLight", scoped: false, class: "sync" },
   { key: "editorWordWrap", scoped: false, class: "sync" },
+  { key: "editorKeymap", scoped: false, class: "sync" },
   { key: "codeLigatures", scoped: false, class: "sync" },
   { key: "inlineBlame", scoped: false, class: "sync" },
   { key: "showAllInstalledFonts", scoped: false, class: "sync" },

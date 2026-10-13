@@ -3610,7 +3610,7 @@ describe("spawn links across projects", () => {
     // every spawned child is marked, `near` included — the pair the sidebar
     // suppresses because its rail already says it.
     await clickByText("Dashboard");
-    await waitForText("HOME FOR YOUR CLI CODING AGENTS");
+    await waitForText("A BETTER HOME FOR YOUR AGENTS");
     // Scoped through `data-dashboard-task-id` for the same reason as
     // `dashboardBadge()`: the sidebar row for the same task renders the same
     // `task-spawned-from-*` testid, and a bare query returns whichever came
