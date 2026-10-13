@@ -192,6 +192,10 @@ export default {
         allFinished: "全部结束时",
         always: "始终",
       },
+      autoExpand: {
+        label: "子智能体启动时展开",
+        hint: "新子智能体启动时展开已折叠的子智能体分组。手动折叠的分组保持折叠，直到该标签页的会话变化。",
+      },
       view: {
         title: "记录视图",
         verbose: {
@@ -446,6 +450,10 @@ export default {
       label: "内联 git blame",
       hint: "在代码之后显示光标所在行的最后修改者。点击可打开该提交的差异。",
     },
+    gitGutter: {
+      label: "Git 变更标记栏",
+      hint: "在编辑器边栏中标出相对于 HEAD 新增、修改和删除的行。命令面板中也有此开关。",
+    },
     intel: {
       desc: "跳转到定义、查找引用、文件大纲和悬停类型提示，使用与完整 IDE 相同的工具。",
       descErrors: " 类型错误也会被下划线标出。",
@@ -473,6 +481,10 @@ export default {
       clickHint: "点击当前行的名称来切换；2 个以上智能体时自动展开。",
       always: "自动展开",
       alwaysHint: "默认展开。箭头仍可收起，并且会记住。",
+    },
+    autoExpandActive: {
+      label: "智能体开始工作时展开任务",
+      hint: "已折叠的任务在其智能体开始忙碌时自动展开。手动折叠的任务保持折叠。",
     },
     hoverReveal: {
       label: "悬停展开收起的侧边栏",

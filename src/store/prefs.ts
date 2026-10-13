@@ -76,6 +76,7 @@ const LS_TERMINAL_SIZE = "terminalFontSize";
 const LS_EDITOR_SIZE   = "editorFontSize";
 const LS_LIGATURES     = "codeLigatures";
 const LS_INLINE_BLAME  = "inlineBlame";
+const LS_EDITOR_GIT_GUTTER = "editorGitGutter";
 const LS_EDITOR_WORD_WRAP = "editorWordWrap";
 const LS_EDITOR_KEYMAP = "editorKeymap";
 const LS_CODE_NAV      = "codeIntelligence";
@@ -125,6 +126,8 @@ const LS_SUBAGENTS_ENABLED = scoped("subagentsEnabled");
 const LS_SUBAGENT_TYPE_FILTER = scoped("subagentTypeFilter");
 const LS_SUBAGENT_RETENTION = scoped("subagentRetention");
 const LS_SUBAGENT_AUTO_COLLAPSE = scoped("subagentAutoCollapse");
+const LS_AUTO_EXPAND_ACTIVE_AGENTS = scoped("autoExpandActiveAgents");
+const LS_AUTO_EXPAND_SUBAGENTS = scoped("autoExpandSubagents");
 const LS_SUBAGENT_VIEW_SHOW_THINKING = "subagentViewShowThinking";
 const LS_SUBAGENT_VIEW_SHOW_TOOL_INPUTS = "subagentViewShowToolInputs";
 const LS_SUBAGENT_VIEW_SHOW_TOOL_OUTPUTS = "subagentViewShowToolOutputs";
@@ -638,6 +641,10 @@ interface PrefsState {
   /** Whether a claude tab's subagent group starts collapsed. A manual fold of
    *  the group wins until the tab's session changes. */
   subagentAutoCollapse: SubagentAutoCollapse;
+  /** Expand a collapsed task when its agent goes busy. */
+  autoExpandActiveAgents: boolean;
+  /** Expand a tab's subagent fold when a subagent spawns. */
+  autoExpandSubagents: boolean;
   /** Transcript view rendering. Global: taste, not identity. */
   subagentViewShowThinking: boolean;
   subagentViewShowToolInputs: boolean;
@@ -785,6 +792,9 @@ interface PrefsState {
    *  Deliberately not a whole-file blame column either: see inlineBlameExt.ts
    *  for why every-line annotation is the expensive shape. */
   inlineBlame: boolean;
+  /** Mark lines added, modified or deleted against HEAD in the editor
+   *  gutter. ON by default; see gitChangeGutterExt.ts. */
+  editorGitGutter: boolean;
   /** Soft-wrap long lines in the editor instead of scrolling sideways. Off by
    *  default, like VS Code's `editor.wordWrap`. Display only: the file on disk
    *  is untouched. No toolbar control, on purpose: Settings and the command
@@ -1016,6 +1026,7 @@ interface PrefsState {
   nudgeUiScale:       (dir: 1 | -1) => void;
   setCodeLigatures:   (v: boolean) => void;
   setInlineBlame:     (v: boolean) => void;
+  setEditorGitGutter: (v: boolean) => void;
   setEditorWordWrap:  (v: boolean) => void;
   toggleEditorWordWrap: () => void;
   setEditorKeymap: (v: EditorKeymap) => void;
@@ -1030,6 +1041,7 @@ interface PrefsState {
   setAgentFooterShown: (agentId: string, part: AgentFooterPart, shown: boolean) => void;
   setConfirmBeforeCodeIntel: (v: boolean) => void;
   toggleInlineBlame:  () => void;
+  toggleEditorGitGutter: () => void;
   setShowAllInstalledFonts: (v: boolean) => void;
   /** Restore every Appearance-section pref (fonts, sizes, weight,
    *  letter-spacing, ligatures) to `APPEARANCE_DEFAULTS`. Theme is
@@ -1066,6 +1078,8 @@ interface PrefsState {
   setAttentionIndicator: (v: boolean) => void;
   setLoadRemoteImages: (v: boolean) => void;
   setSubagentsEnabled: (v: boolean) => void;
+  setAutoExpandActiveAgents: (v: boolean) => void;
+  setAutoExpandSubagents: (v: boolean) => void;
   setSubagentTypeFilter: (kind: SubagentKind, v: boolean) => void;
   setSubagentRetention: (v: SubagentRetention) => void;
   setSubagentAutoCollapse: (v: SubagentAutoCollapse) => void;
@@ -1153,11 +1167,11 @@ export function taskLocationIconShown(mode: TaskLocationIconMode, isMainCheckout
 /** Whether the Scheduled nav entry shows. "auto" counts ANY schedule on a
  *  live task, paused ones included: the view is where a paused schedule is
  *  switched back on, so pausing the only one must not remove the way to it. */
-export type SidebarView = "tree" | "status";
+export type SidebarView = "tree" | "status" | "workspace";
 
-/** Anything but "status" is the tree, the view a new install starts on. */
+/** Anything but "status" or "workspace" is the tree, the view a new install starts on. */
 export function parseSidebarView(raw: string): SidebarView {
-  return raw === "status" ? "status" : "tree";
+  return raw === "status" || raw === "workspace" ? raw : "tree";
 }
 
 export function scheduledNavVisible(mode: ScheduledNavMode, hasSchedule: boolean): boolean {
@@ -1224,6 +1238,7 @@ export const APPEARANCE_DEFAULTS = {
   uiScale:               100,
   codeLigatures:         true,
   inlineBlame:           false,
+  editorGitGutter:       true,
   editorWordWrap:        false,
   editorKeymap:          "default" as EditorKeymap,
   codeIntelligence:        true,
@@ -1310,6 +1325,7 @@ function readStoredPrefs() {
   const initialUiScale      = clampUiScale(lsGetNum(LS_UI_SCALE, APPEARANCE_DEFAULTS.uiScale));
   const initialLigatures    = lsGetBool(LS_LIGATURES, APPEARANCE_DEFAULTS.codeLigatures);
   const initialInlineBlame  = lsGetBool(LS_INLINE_BLAME, APPEARANCE_DEFAULTS.inlineBlame);
+  const initialEditorGitGutter = lsGetBool(LS_EDITOR_GIT_GUTTER, APPEARANCE_DEFAULTS.editorGitGutter);
   const initialWordWrap     = lsGetBool(LS_EDITOR_WORD_WRAP, APPEARANCE_DEFAULTS.editorWordWrap);
   const initialEditorKeymap: EditorKeymap = lsGet(LS_EDITOR_KEYMAP, "default") === "zed" ? "zed" : "default";
   const initialCodeNav      = lsGetBool(LS_CODE_NAV, APPEARANCE_DEFAULTS.codeIntelligence);
@@ -1357,6 +1373,8 @@ function readStoredPrefs() {
   const lsGetRaw = (k: string): string | null => {
     try { return localStorage.getItem(k); } catch { return null; }
   };
+  const initialAutoExpandActiveAgents = parseStoredFlag(lsGetRaw(LS_AUTO_EXPAND_ACTIVE_AGENTS), false);
+  const initialAutoExpandSubagents = parseStoredFlag(lsGetRaw(LS_AUTO_EXPAND_SUBAGENTS), false);
   const initialSubagentsEnabled = parseStoredFlag(lsGetRaw(LS_SUBAGENTS_ENABLED), true);
   const initialSubagentTypeFilter = parseSubagentTypeFilter(lsGetRaw(LS_SUBAGENT_TYPE_FILTER));
   const initialSubagentRetention = parseSubagentRetention(lsGet(LS_SUBAGENT_RETENTION, ""));
@@ -1455,6 +1473,8 @@ function readStoredPrefs() {
     attentionIndicator: initialAttentionIndicator,
     loadRemoteImages: initialLoadRemoteImages,
     subagentsEnabled: initialSubagentsEnabled,
+    autoExpandActiveAgents: initialAutoExpandActiveAgents,
+    autoExpandSubagents: initialAutoExpandSubagents,
     subagentTypeFilter: initialSubagentTypeFilter,
     subagentRetention: initialSubagentRetention,
     subagentAutoCollapse: initialSubagentAutoCollapse,
@@ -1488,6 +1508,7 @@ function readStoredPrefs() {
     uiScale: initialUiScale,
     codeLigatures: initialLigatures,
     inlineBlame: initialInlineBlame,
+    editorGitGutter: initialEditorGitGutter,
     editorWordWrap: initialWordWrap,
     editorKeymap: initialEditorKeymap,
     codeIntelligence: initialCodeNav,
@@ -1647,6 +1668,11 @@ export const usePrefs = create<PrefsState>(set => ({
     try { localStorage.setItem(LS_INLINE_BLAME, v ? "1" : "0"); } catch {}
     set({ inlineBlame: v });
   },
+  setEditorGitGutter: (v) => {
+    if (usePrefs.getState().editorGitGutter === v) return;
+    try { localStorage.setItem(LS_EDITOR_GIT_GUTTER, v ? "1" : "0"); } catch {}
+    set({ editorGitGutter: v });
+  },
   setEditorWordWrap: (v) => {
     if (usePrefs.getState().editorWordWrap === v) return;
     try { localStorage.setItem(LS_EDITOR_WORD_WRAP, v ? "1" : "0"); } catch {}
@@ -1717,6 +1743,9 @@ export const usePrefs = create<PrefsState>(set => ({
   toggleInlineBlame: () => {
     usePrefs.getState().setInlineBlame(!usePrefs.getState().inlineBlame);
   },
+  toggleEditorGitGutter: () => {
+    usePrefs.getState().setEditorGitGutter(!usePrefs.getState().editorGitGutter);
+  },
   setShowAllInstalledFonts: (v) => {
     try { localStorage.setItem(LS_SHOW_ALL_FONTS, v ? "1" : "0"); } catch {}
     set({ showAllInstalledFonts: v });
@@ -1737,6 +1766,7 @@ export const usePrefs = create<PrefsState>(set => ({
     s.setUiScale(d.uiScale);
     s.setCodeLigatures(d.codeLigatures);
     s.setInlineBlame(d.inlineBlame);
+    s.setEditorGitGutter(d.editorGitGutter);
     s.setEditorWordWrap(d.editorWordWrap);
     s.setEditorKeymap(d.editorKeymap);
     s.setCodeIntelligence(d.codeIntelligence);
@@ -1869,6 +1899,16 @@ export const usePrefs = create<PrefsState>(set => ({
     if (usePrefs.getState().subagentsEnabled === v) return;  // bear trap 8
     try { localStorage.setItem(LS_SUBAGENTS_ENABLED, v ? "1" : "0"); } catch {}
     set({ subagentsEnabled: v });
+  },
+  setAutoExpandActiveAgents: (v) => {
+    if (usePrefs.getState().autoExpandActiveAgents === v) return;  // bear trap 8
+    try { localStorage.setItem(LS_AUTO_EXPAND_ACTIVE_AGENTS, v ? "1" : "0"); } catch {}
+    set({ autoExpandActiveAgents: v });
+  },
+  setAutoExpandSubagents: (v) => {
+    if (usePrefs.getState().autoExpandSubagents === v) return;  // bear trap 8
+    try { localStorage.setItem(LS_AUTO_EXPAND_SUBAGENTS, v ? "1" : "0"); } catch {}
+    set({ autoExpandSubagents: v });
   },
   setSubagentTypeFilter: (kind, v) => {
     const current = usePrefs.getState().subagentTypeFilter;

@@ -339,7 +339,7 @@ describe("subagent rows", () => {
 
     const geometry = await rowGeometry();
     const typed = geometry.rows.filter(row => ids.includes(row.id));
-    expect(typed.map(row => [row.id, row.icon])).toEqual(byType.map(([agentId, , icon]) => [agentId, icon]));
+    expect(typed.map(row => [row.id, row.icon])).toEqual(byType.map(([agentId, , icon]) => [agentId, icon]).reverse());
     expect(typed.every(row => row.iconHidden === "true")).toBe(true);
 
     const first = typed[0];
@@ -393,6 +393,32 @@ describe("subagent rows", () => {
     await snap("subagent-rows-nested-depth-3.png");
   });
 
+  it("lists sibling agents newest first, a later start landing above the earlier ones", async function () {
+    this.timeout(60_000);
+    const siblings = ["e2esib1", "e2esib2", "e2esib3"];
+    for (const agentId of siblings) {
+      await start(agentId);
+      await waitRowState(agentId, "running");
+    }
+
+    const drawnOrder = async () => (await rows()).map(row => row.id).filter(id => siblings.includes(id));
+    expect(await drawnOrder()).toEqual([...siblings].reverse());
+
+    // A stop is not activity: finishing the oldest leaves it where it was.
+    await stop("e2esib1");
+    await browser.waitUntil(async () => (await rowState("e2esib1")) !== "running", {
+      timeout: 10_000, timeoutMsg: "the stopped agent's row never left running",
+    });
+    expect(await drawnOrder()).toEqual([...siblings].reverse());
+
+    // A later start goes on top.
+    await start("e2esib4");
+    await waitRowState("e2esib4", "running");
+    expect((await rows()).map(row => row.id).filter(id => id.startsWith("e2esib")))
+      .toEqual(["e2esib4", "e2esib3", "e2esib2", "e2esib1"]);
+    await snap("subagent-rows-newest-first.png");
+  });
+
   it("a parent's chevron folds its subtree, and collapsing the task hides every row", async function () {
     this.timeout(30_000);
     const fold = `${rowSelector("e2ed1")} [data-testid="subagent-fold"]`;
@@ -443,7 +469,7 @@ describe("subagent rows", () => {
       return [parent, other, child].every(id => ids.includes(id));
     }, { timeout: 10_000, timeoutMsg: "the three rows never appeared" });
     const flat = (await rows()).filter(row => [parent, other, child].includes(row.id));
-    expect(flat.map(row => row.id)).toEqual([parent, other, child]);
+    expect(flat.map(row => row.id)).toEqual([child, other, parent]);
     expect(flat.every(row => row.depth === "1")).toBe(true);
 
     await browser.execute((sel) => {
@@ -486,7 +512,7 @@ describe("subagent rows", () => {
     expect(sample.swapped).toBe(0);
 
     const moved = (await rows()).filter(row => [parent, other, child].includes(row.id));
-    expect(moved.map(row => row.id)).toEqual([parent, child, other]);
+    expect(moved.map(row => row.id)).toEqual([other, parent, child]);
   });
 
   it("draws a workflow agent inside its run node, never as a loose row", async function () {
@@ -553,6 +579,105 @@ describe("subagent rows", () => {
     }, taskId);
 
     expect(selection).toEqual({ header: false, tabRow: true, subagents: 0 });
+  });
+
+  describe("auto-expand on spawn", () => {
+    const groupToggle = () => `[data-sidebar-task-row="${taskId}"] [data-testid="subagent-group-toggle"]`;
+
+    const groupOpen = () => browser.execute(
+      (sel) => document.querySelector(sel)?.getAttribute("aria-expanded") ?? null, groupToggle());
+
+    /** The hand-made fold of the tab's group, or null when nobody made one.
+     *  Read off the store, which the spawn writes to synchronously. */
+    const foldEntry = () => browser.execute((task) => {
+      const tab = (window.__termic!.useApp.getState().tabs[task] ?? [])[0];
+      return window.__termic!.useSubagentFold.getState().groupByTab[tab.id]?.collapsed ?? null;
+    }, taskId);
+
+    async function waitStoreAgent(agentId: string): Promise<void> {
+      await browser.waitUntil(() => storeHasAgent(agentId), {
+        timeout: 10_000,
+        interval: 50,
+        timeoutMsg: `the store never learned of ${agentId}`,
+      });
+    }
+
+    async function waitGroup(open: boolean, why: string): Promise<void> {
+      await browser.waitUntil(async () => (await groupOpen()) === String(open), {
+        timeout: 10_000,
+        interval: 50,
+        timeoutMsg: `${why}: the group's aria-expanded was ${await groupOpen()}, wanted ${open}`,
+      });
+    }
+
+    before(async () => {
+      await browser.execute(() => {
+        const t = window.__termic!;
+        t.useSubagentFold.setState({ groupByTab: {} });
+        t.usePrefs.getState().setSubagentAutoCollapse("always");
+        t.usePrefs.getState().setAutoExpandSubagents(false);
+      });
+    });
+
+    after(async () => {
+      await browser.execute(() => {
+        const t = window.__termic!;
+        t.useSubagentFold.setState({ groupByTab: {} });
+        t.usePrefs.getState().setSubagentAutoCollapse("never");
+        t.usePrefs.getState().setAutoExpandSubagents(false);
+      });
+    });
+
+    it("the switch in Settings turns the pref on and stores it", async function () {
+      this.timeout(30_000);
+      await browser.execute(() => window.__termic!.useApp.getState().openSettings("tasks"));
+      const switchSel = '[data-testid="subagent-setting-auto-expand"] button[role="switch"]';
+      await waitVisible(switchSel);
+      expect(await $(switchSel).getAttribute("aria-checked")).toBe("false");
+
+      await clickPresent(switchSel);
+      await browser.waitUntil(
+        () => browser.execute(() => window.__termic!.usePrefs.getState().autoExpandSubagents),
+        { timeout: 5_000, timeoutMsg: "the switch never turned the pref on" },
+      );
+      expect(await browser.execute(() => localStorage.getItem("autoExpandSubagents"))).toBe("1");
+
+      await clickPresent(switchSel);
+      await browser.waitUntil(
+        () => browser.execute(() => !window.__termic!.usePrefs.getState().autoExpandSubagents),
+        { timeout: 5_000, timeoutMsg: "the switch never turned the pref back off" },
+      );
+      await browser.execute(() => window.__termic!.useApp.getState().closeSettings());
+    });
+
+    it("leaves a folded group folded when the pref is off", async function () {
+      this.timeout(30_000);
+      await start("e2eexp1");
+      await waitStoreAgent("e2eexp1");
+      expect(await foldEntry()).toBeNull();
+      await waitGroup(false, "a spawn with the pref off");
+    });
+
+    it("opens the folded group when a subagent spawns and the pref is on", async function () {
+      this.timeout(30_000);
+      await browser.execute(() => window.__termic!.usePrefs.getState().setAutoExpandSubagents(true));
+
+      await start("e2eexp2");
+      await waitGroup(true, "a spawn with the pref on");
+      expect((await rows()).some(row => row.id === "e2eexp2")).toBe(true);
+      await snap("subagent-group-auto-expanded.png");
+    });
+
+    it("never reopens a group the user folded afterwards", async function () {
+      this.timeout(30_000);
+      await clickPresent(groupToggle());
+      await waitGroup(false, "the manual fold");
+
+      await start("e2eexp3");
+      await waitStoreAgent("e2eexp3");
+      expect(await foldEntry()).toBe(true);
+      await waitGroup(false, "a spawn after a manual fold");
+    });
   });
 
   it("an agent still running when the parent exits flips to interrupted", async function () {

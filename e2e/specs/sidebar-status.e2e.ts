@@ -136,6 +136,8 @@ describe("sidebar status section", () => {
   let groupMember = "";
   let multi = "";
   let labelled = "";
+  let recentOld = "";
+  let recentNew = "";
   let folderName = "";
   let widthWas = 0;
   let hoverRevealWas = false;
@@ -179,7 +181,7 @@ describe("sidebar status section", () => {
       }
     }, projectId, folderName, widthWas);
     await resetPrefs();
-    for (const id of [fresh, blocked, reviewed, groupLead, groupMember, multi, labelled]) if (id) await archiveTask(id);
+    for (const id of [fresh, blocked, reviewed, groupLead, groupMember, multi, labelled, recentOld, recentNew]) if (id) await archiveTask(id);
   });
 
   it("is off by default, and the list options menu turns it on above the project tree", async () => {
@@ -844,6 +846,80 @@ describe("sidebar status section", () => {
     expect(await present(`${TOGGLE_ROW} svg`)).toBe(false);
     await click(TOGGLE_ROW);
     await waitVisible(SECTION);
+  });
+
+  it("orders rows newest activity first, every reorder landing when a turn ends", async () => {
+    const treeIds = () => browser.execute(
+      () => [...document.querySelectorAll<HTMLElement>("[data-sidebar-task-id]")]
+        .map(el => el.dataset.sidebarTaskId as string));
+    const above = async (upper: string, lower: string) => {
+      const ids = await treeIds();
+      return ids.indexOf(upper) >= 0 && ids.indexOf(lower) >= 0 && ids.indexOf(upper) < ids.indexOf(lower);
+    };
+    const setTurn = (id: string, working: boolean) => browser.execute((tid, w) => {
+      const app = window.__termic!.useApp.getState();
+      const tab = (app.tabs[tid] ?? []).find((t: any) => t.type === "terminal");
+      // A finished turn's "done" refuses a bare "working", so start from idle.
+      if (w) app.setWorkState(tid, tab.id, "idle");
+      app.setWorkState(tid, tab.id, w ? "working" : "done");
+    }, id, working);
+
+    await browser.execute(pid => window.__termic!.useApp.getState().setProjectCollapsed(pid, false), projectId);
+    recentOld = await openTask("recency-old", false);
+    recentNew = await openTask("recency-new", false);
+
+    // Created order: the newer task is on top.
+    await browser.waitUntil(() => above(recentNew, recentOld), {
+      timeout: 5_000, timeoutMsg: "the newer task did not sit above the older one",
+    });
+
+    // Opening the older task is held back, not applied: its row stays put.
+    await ensureActiveTask(recentOld);
+    await waitForAgentReady(recentOld);
+    expect(await above(recentNew, recentOld)).toBe(true);
+
+    // Another task's turn ending folds the held open in, and that task goes on top.
+    await ensureActiveTask(blocked);
+    await waitForAgentReady(blocked);
+    await ensureActiveTask(recentOld);
+    await setTurn(blocked, true);
+    await setTurn(blocked, false);
+    await browser.waitUntil(() => above(recentOld, recentNew), {
+      timeout: 5_000, timeoutMsg: "a turn ending did not apply the held open",
+    });
+    expect(await above(blocked, recentOld)).toBe(true);
+
+    // A turn that has started but not ended moves nothing.
+    await ensureActiveTask(recentNew);
+    await waitForAgentReady(recentNew);
+    await setTurn(recentNew, true);
+    await browser.waitUntil(async () => (await sidebarBadge(recentNew)) === "working", {
+      timeout: 5_000, timeoutMsg: "the started turn never drew its working badge",
+    });
+    expect(await above(recentOld, recentNew)).toBe(true);
+
+    // The turn ending moves it to the top.
+    await setTurn(recentNew, false);
+    await browser.waitUntil(() => above(recentNew, recentOld), {
+      timeout: 5_000, timeoutMsg: "a finished turn did not move its task to the top",
+    });
+
+    // The status section lists the same two in the same order, once both
+    // have finished a turn with the user looking elsewhere.
+    await ensureActiveTask(blocked);
+    await setTurn(recentOld, true);
+    await setTurn(recentOld, false);
+    await setTurn(recentNew, true);
+    await setTurn(recentNew, false);
+    await browser.waitUntil(() => above(recentNew, recentOld), { timeout: 5_000 });
+    await setBucketOpen("settled", true);
+    const sectionIds = await browser.execute(
+      () => [...document.querySelectorAll<HTMLElement>('[data-testid="status-section"] [data-status-task-id]')]
+        .map(el => el.dataset.statusTaskId as string));
+    expect(sectionIds.indexOf(recentNew)).toBeGreaterThanOrEqual(0);
+    expect(sectionIds.indexOf(recentOld)).toBeGreaterThanOrEqual(0);
+    expect(sectionIds.indexOf(recentNew)).toBeLessThan(sectionIds.indexOf(recentOld));
+    await snap("sidebar-recency-order.png");
   });
 
   it("the icon rail does not carry it, and the hover overlay does", async () => {

@@ -7,10 +7,14 @@
 // subtree and mounting another. A nested tree of components would remount,
 // which is a frame without the row.
 //
+// Top-level agents and runs run newest first by start time; inside a run the
+// phases and agents keep their order.
+//
 // A workflow run is one row of its own, with its phases and agents after it
 // in the same list, and starts collapsed: a run can hold hundreds of agents.
 
 import type { SubagentRecord, SubagentState, TabSubagents } from "@/store/subagents";
+import { sortByRecency } from "@/lib/recencyOrder";
 import { subagentKind } from "@/lib/subagentKind";
 import type { SubagentAutoCollapse, SubagentTypeFilter } from "@/lib/subagentPrefs";
 
@@ -90,7 +94,7 @@ export function phaseRowKey(runId: string, index: number): string {
   return `phase:${runId}:${index}`;
 }
 
-/** The rows to draw, in spawn order with each child right after its parent.
+/** The rows to draw, in key order (newest start first) with each child right after its parent.
  *  A run sits where its first shown agent started. An agent whose parent has
  *  no row (unknown, or a workflow agent) sits under the tab. The subtree of
  *  an agent in `folded`, and the agents of a phase in it, are left out. */
@@ -394,8 +398,14 @@ export function subagentStructureKey(
     parts.push(created);
   }
 
+  const startedAtOf = (part: string | RunGroup): number | undefined => {
+    if (typeof part !== "string") return Math.max(...part.agents.map(record => record.startedAt));
+
+    return entry.agents[part.slice(0, part.indexOf(">"))]?.startedAt;
+  };
+
   let key = "";
-  for (const part of parts) {
+  for (const part of sortByRecency(parts, startedAtOf)) {
     if (typeof part === "string") {
       key += part;
       continue;

@@ -82,6 +82,15 @@ function otherMainTabsOpen(taskId: string, tabId: string): boolean {
 
 async function confirmTabClose(taskId: string, tab: Tab | undefined, paneTab: boolean): Promise<boolean> {
   if (tab?.type === "scratch") return confirmScratchClose(taskId, tab);
+  if (tab?.type === "multibuffer" && tab.dirty) {
+    const ok = await useUI.getState().askConfirm({
+      title: i18n.t("backend:closeTab.unsavedTitle"),
+      message: i18n.t("backend:closeTab.unsavedMessage", { name: tab.title, combo: kbd("⌘S") }),
+      confirmLabel: i18n.t("backend:closeTab.unsavedConfirm"),
+      destructive: true,
+    });
+    return ok === true;
+  }
   if (tab?.type === "edit" && tab.dirty) {
     const name = tab.path.split("/").pop() || tab.path;
     // No checkbox in the request → askConfirm resolves a plain boolean; the
@@ -172,7 +181,7 @@ async function confirmTabClose(taskId: string, tab: Tab | undefined, paneTab: bo
  *  this dialog counts the losses and asks once. */
 async function confirmBulkClose(tabs: Tab[]): Promise<boolean> {
   const agents = useApp.getState().agents;
-  const dirty = tabs.filter(t => t.type === "edit" && t.dirty);
+  const dirty = tabs.filter(t => (t.type === "edit" || t.type === "multibuffer") && t.dirty);
   // Same rule as confirmTabClose: an already-exited terminal-like tab has
   // neither a process to stop nor a session to lose.
   const live = tabs.filter(t =>

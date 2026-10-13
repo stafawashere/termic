@@ -3477,6 +3477,7 @@ const captureArmedRef = useRef(false);
             submittedSinceSpawnRef.current = true;
             persistMintedSession();
             noteSubmit(tab.cli);
+            useApp.getState().noteTaskPrompt(task.id);
             submitAtRef.current = Date.now();
             submitWindowUntilRef.current = submitAtRef.current + 5_000;
             preSubmitHashRef.current = hashVisibleBuffer(term);

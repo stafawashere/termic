@@ -56,11 +56,15 @@ import { StatusChips } from "./StatusChips";
 import { ChecklistGlyph, CritterGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
 import { STATUS_BUCKETS } from "@/lib/sidebarStatus";
 import { StatusSection, StatusViewCount } from "./StatusSection";
+import { WorkspaceSection } from "./WorkspaceSection";
+import { selectActiveProjectIds, useWorkspaces } from "@/store/workspaces";
 import { RollupMarks } from "./RollupMarks";
 import { BoardFilterBar } from "@/components/views/BoardFilterBar";
 import { useTaskQuery } from "@/hooks/useTaskQuery";
+import { useAutoExpand } from "@/components/sidebar/useAutoExpand";
 import { setTreeFold, treeFoldKey, type TreeFold } from "@/lib/treeFold";
 import { SpawnedFromMark, SpawnLinksOverlay } from "./SpawnLinks";
+import { createTaskOrderSelector, freezeDisplayOrder, parseTaskOrderKey, rankTasks } from "@/lib/recencyOrder";
 import { crossProjectStrays, flattenSegments, groupColorCss as taskGroupColorCss, groupLabel, layoutTaskList, liveGroups, nextGroupColor } from "@/lib/taskGroups";
 import { taskNeedsAttention, taskWorkDone, taskWorking, taskDelegated } from "@/lib/taskWorkState";
 import { delegatedTitle } from "@/lib/delegatedWork";
@@ -118,6 +122,7 @@ export function Sidebar({ compact: compactProp }: {
   const compactStore = useApp(s => s.compactSidebar);
   const compact = compactProp ?? compactStore;
   const openSettings = useApp(s => s.openSettings);
+  useAutoExpand();
   // Whether the compact rail's list has more below the fold. Written only when
   // it FLIPS, so scrolling costs no re-render of the sidebar per frame.
   const projectsScrollRef = useRef<HTMLDivElement | null>(null);
@@ -147,6 +152,9 @@ export function Sidebar({ compact: compactProp }: {
   const sidebarWidth = useApp(s => s.sidebarWidth);
   const setSidebarWidth = useApp(s => s.setSidebarWidth);
   const tasks = useApp(s => s.tasks);
+  const [selectTaskOrder] = useState(createTaskOrderSelector);
+  const taskOrderKey = useApp(selectTaskOrder);
+  const taskRanks = useMemo(() => parseTaskOrderKey(taskOrderKey), [taskOrderKey]);
   const activeTask = useApp(s => s.activeTaskId);
   const setActive = useApp(s => s.setActiveTask);
   const setView = useApp(s => s.setView);
@@ -213,6 +221,8 @@ export function Sidebar({ compact: compactProp }: {
   const sidebarView = usePrefs(s => s.sidebarView);
   const setSidebarView = usePrefs(s => s.setSidebarView);
   const statusView = sidebarView === "status" && !compact;
+  const workspaceView = sidebarView === "workspace" && !compact;
+  const workspaceProjectIds = useWorkspaces(selectActiveProjectIds);
   // What the header's expand toggle does next. Not derived from the folds:
   // reading every task's fold to draw one glyph would subscribe the body to
   // all of them. It starts on expand, the glyph the design draws at rest.
@@ -291,6 +301,12 @@ export function Sidebar({ compact: compactProp }: {
     const scroller = projectsScrollRef.current;
     if (scroller) viewScrollTop.current[sidebarView] = scroller.scrollTop;
     setSidebarView(sidebarView === "status" ? "tree" : "status");
+  };
+
+  const toggleWorkspaceView = () => {
+    const scroller = projectsScrollRef.current;
+    if (scroller) viewScrollTop.current[sidebarView] = scroller.scrollTop;
+    setSidebarView(sidebarView === "workspace" ? "tree" : "workspace");
   };
 
   useLayoutEffect(() => {
@@ -413,6 +429,7 @@ export function Sidebar({ compact: compactProp }: {
   // is still mounted. Also set after a completed group drag so the click
   // that follows pointerup doesn't collapse the folder that was just moved.
   const suppressGroupToggle = useRef(false);
+  const projectClickSuppressed = useRef(false);
 
   // ── Task drag-to-reorder ──────────────────────────────────────────────
   // Same document-level pointer pattern as project rows (see the long note
@@ -540,6 +557,9 @@ export function Sidebar({ compact: compactProp }: {
       const dy = e.clientY - armed.y;
       if (dx * dx + dy * dy < 16) return;
       armed.started = true;
+      // The store array is not the order on screen (rows run newest activity
+      // first), so pin the drawn order before the splice below indexes it.
+      useApp.setState(s => ({ tasks: freezeDisplayOrder(s.tasks, armed.projectId, s.activityAt) }));
       setDragTaskId(armed.id);
     }
     // Stashed for the post-reorder re-anchor effect, which has no event to
@@ -1226,10 +1246,12 @@ export function Sidebar({ compact: compactProp }: {
   const queryNamed = queryOn
     ? new Set(taskQuery.query.clauses.filter(c => c.key === "project" && !c.negated).flatMap(c => c.values))
     : null;
-  const activeProjects = queryProjectIds
+  const inWorkspace = (p: typeof projects[number]) =>
+    !workspaceView || (workspaceProjectIds?.includes(p.id) ?? false);
+  const activeProjects = (queryProjectIds
     ? projects.filter(p => queryProjectIds.has(p.id) || !!queryNamed?.has(p.name.toLowerCase()))
-    : projects.filter(shownInline);
-  const inactiveProjects = projects.filter(p => !shownInline(p));
+    : projects.filter(shownInline)).filter(inWorkspace);
+  const inactiveProjects = projects.filter(p => !shownInline(p) && inWorkspace(p));
   const inactiveCount = inactiveProjects.length;
   // If hiding is disabled (or nothing is hidden), keep the reveal latch off so
   // re-enabling starts collapsed.
@@ -1354,10 +1376,10 @@ export function Sidebar({ compact: compactProp }: {
       {!compact && (
         <div
           data-testid="projects-section-header"
-          className="mt-[var(--sidebar-head-pad)] flex h-[28px] shrink-0 select-none items-center gap-[8px] px-[14px]"
+          className={`mt-[var(--sidebar-head-pad)] flex h-[28px] shrink-0 select-none items-center ${workspaceView ? "gap-[4px]" : "gap-[8px]"} px-[14px]`}
         >
           <span data-testid="sidebar-section-eyebrow" className="truncate text-[11px] font-bold uppercase tracking-[0.8px] text-[var(--sidebar-eyebrow)]">
-            {statusView ? t("statusHeader") : t("projectsHeader")}
+            {statusView ? t("statusHeader") : workspaceView ? t("workspaceHeader") : t("projectsHeader")}
           </span>
           {statusView && <StatusViewCount matchIds={queryMatchIds} />}
           <div className="flex-1" />
@@ -1367,6 +1389,14 @@ export function Sidebar({ compact: compactProp }: {
             onClick={swapView}
           >
             <SwapGlyph size={14} />
+          </HeaderButton>
+          <HeaderButton
+            testId="sidebar-workspace-view"
+            label={workspaceView ? t("swapToProjects") : t("workspaceView")}
+            onClick={toggleWorkspaceView}
+            aria-pressed={workspaceView}
+          >
+            <Layers className="h-[14px] w-[14px]" />
           </HeaderButton>
           <HeaderButton
             testId="sidebar-expand-toggle"
@@ -1541,7 +1571,8 @@ export function Sidebar({ compact: compactProp }: {
         {/* STATUS above PROJECTS, in the same scroller (docs/ui.md "The
             sidebar's status section"). Not on the icon rail: the hover
             overlay is a full sidebar and shows it there instead. */}
-        {!statusView && !compact && showStatusSection && <StatusSection matchIds={queryMatchIds} />}
+        {!statusView && !workspaceView && !compact && showStatusSection && <StatusSection matchIds={queryMatchIds} />}
+        {workspaceView && <WorkspaceSection />}
         {compact && (
           <div data-testid="projects-section-header" className="flex flex-col gap-1.5 py-1">
             {/* The ONE Add project button (GH #280 removed the footer copy):
@@ -1563,7 +1594,7 @@ export function Sidebar({ compact: compactProp }: {
           // `depth`: 0 for a loose project, 1 inside a folder or the Inactive
           // fold. Everything under the row indents from it on the 18px grid.
           const renderProject = (p: typeof projects[number], depth = 0) => {
-            const taskList = tasks.filter(w => w.project_id === p.id && !w.archived);
+            const taskList = rankTasks(tasks.filter(w => w.project_id === p.id && !w.archived), taskRanks);
             const pendingForProject = pendingTaskList.filter(t => t.projectId === p.id);
             // Empty projects default to collapsed (no point pinning a blank
             // expanded row). User overrides stick: explicit true / false
@@ -1650,7 +1681,15 @@ export function Sidebar({ compact: compactProp }: {
                     // Compact mode has no drag-to-reorder (the pointer
                     // handler below bails), so a plain click handles the
                     // collapse toggle the monogram represents.
-                    onClick={compact ? () => setTreeFold("project", p.id, !collapsed, compact) : undefined}
+                    onClick={compact ? () => setTreeFold("project", p.id, !collapsed, compact) : (e) => {
+                      // The toggle rides the click, not the pointerup, so a
+                      // double-click (click, click, dblclick) toggles once.
+                      if (projectClickSuppressed.current) { projectClickSuppressed.current = false; return; }
+                      if (e.detail > 1) return;
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button, input, a, [data-no-drag], [role="menu"], [role="dialog"]')) return;
+                      setTreeFold("project", p.id, !collapsed, compact);
+                    }}
                     // Project header is the drag handle. Pointer-down
                     // arms it (doesn't commit to "we're dragging" yet);
                     // a pointer-move past the threshold flips into
@@ -1686,17 +1725,11 @@ export function Sidebar({ compact: compactProp }: {
                         const armed = dragArmed.current;
                         const wasStarted = armed?.started ?? false;
                         endDrag(true);
-                        // Plain click (no drag past threshold) →
-                        // toggle collapse, matching the original
-                        // header onClick behavior we replaced.
-                        if (armed && !wasStarted && ev.target instanceof Node) {
-                          // Only fire collapse if pointerup is still
-                          // over the same project header — same as a
-                          // real click would behave.
-                          const header = (ev.target as HTMLElement).closest('[data-project-id]') as HTMLElement | null;
-                          if (header?.dataset.projectId === p.id) {
-                            setTreeFold("project", p.id, !collapsed, compact);
-                          }
+                        // The click that follows a completed drag must not
+                        // toggle the project that was just moved.
+                        if (wasStarted) {
+                          projectClickSuppressed.current = true;
+                          setTimeout(() => { projectClickSuppressed.current = false; }, 0);
                         }
                       };
                       dragListenersRef.current = { move: onDragPointerMove, up: onUp };
@@ -2090,11 +2123,9 @@ export function Sidebar({ compact: compactProp }: {
                   </div>
                 )}
 
-                {/* Store order IS display order. Rust sorts the task list by
-                    manual `order` then `created` (so a project nobody has
-                    dragged still reads oldest-first, and new tasks append at
-                    the bottom), and a live drag splices the same array — an
-                    extra sort here would fight the drag. */}
+                {/* Rust sorts the task list by manual `order` then `created`;
+                    taskList above re-orders the never-dragged tasks newest
+                    activity first (lib/recencyOrder.ts). */}
                 {!collapsed && layoutTaskList(visibleTasks, groupFor).map(seg => {
                   const row = (w: Task) => (
                     <TaskRowSlot
@@ -2372,8 +2403,9 @@ export function Sidebar({ compact: compactProp }: {
                         document.addEventListener("pointerup", onUp);
                         document.addEventListener("pointercancel", onUp);
                       }}
-                      onClick={() => {
+                      onClick={(ev) => {
                         if (suppressGroupToggle.current) { suppressGroupToggle.current = false; return; }
+                        if (ev.detail > 1) return;
                         toggleGroup();
                       }}
                       onKeyDown={(ev) => {
@@ -2958,6 +2990,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
   // Task rename
   const [taskRenaming, setTaskRenaming] = useState<string | null>(null);
   const taskRenameInputRef = useRef<HTMLInputElement | null>(null);
+  const clickToggledRef = useRef(false);
   // External rename trigger (⇧⌘P command palette → "Rename task"). The
   // palette can't reach into this row's local state, so it bumps a nonce on
   // the UI store; we start the inline rename when it targets us, then clear
@@ -3157,7 +3190,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
         data-sidebar-task-project-id={w.project_id}
         style={dragging ? { transform: `translateY(${dragTy}px)`, position: "relative", zIndex: 20 } : undefined}
         onPointerDown={onDragPointerDown ? (e) => onDragPointerDown(e, w) : undefined}
-        onClick={() => {
+        onClick={(e) => {
           // The click that trails a drop is not a selection.
           if (clickSuppressed?.current) { clickSuppressed.current = false; return; }
           setActive(w.id);
@@ -3175,8 +3208,22 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
             // active task as a collapse toggle. The other modes
             // require the explicit chevron, which removed the "random
             // expand" feel users complained about.
-            if (isActive && expandMode === "click") setTaskCollapsed(w.id, !collapsed);
+            // The second click of a double-click is left to onDoubleClick.
+            if (e.detail <= 1) {
+              const togglesOnClick = isActive && expandMode === "click";
+              clickToggledRef.current = togglesOnClick;
+              if (togglesOnClick) setTaskCollapsed(w.id, !collapsed);
+            }
           }
+        }}
+        onDoubleClick={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest("button, input, a, [data-no-drag]")) return;
+          const hasTabs = terminalTabs.length > 0;
+          const alreadyToggled = clickToggledRef.current;
+          clickToggledRef.current = false;
+          if (taskRenaming !== null || !hasTabs || alreadyToggled) return;
+          setTaskCollapsed(w.id, !collapsed);
         }}
         // Right-click anywhere on the row opens the same actions menu as
         // the kebab button (which it anchors to).

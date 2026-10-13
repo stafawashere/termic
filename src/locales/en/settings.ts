@@ -193,6 +193,10 @@ export default {
         allFinished: "When all have finished",
         always: "Always",
       },
+      autoExpand: {
+        label: "Expand subagents when one spawns",
+        hint: "Opens a folded subagent group when a new subagent starts. A group you folded by hand stays folded until the tab's session changes.",
+      },
       view: {
         title: "Transcript view",
         verbose: {
@@ -447,6 +451,10 @@ export default {
       label: "Inline git blame",
       hint: "Show who last changed the line the cursor is on, after the code. Click it to open that commit's diff.",
     },
+    gitGutter: {
+      label: "Git change gutter",
+      hint: "Mark added, modified and deleted lines against HEAD in the editor gutter. Also in the command palette.",
+    },
     intel: {
       desc: "Go to definition, find usages, an outline of the file, and types on hover, using the same tools a full IDE uses.",
       descErrors: " Type errors are underlined too.",
@@ -490,6 +498,10 @@ export default {
       icon: "Icon",
       number: "Number",
       none: "None",
+    },
+    autoExpandActive: {
+      label: "Expand a task when its agent starts working",
+      hint: "Opens a collapsed task the moment its agent goes busy. A task you collapsed by hand stays collapsed.",
     },
     hoverReveal: {
       label: "Hover to reveal the collapsed sidebar",

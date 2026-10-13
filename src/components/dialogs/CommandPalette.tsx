@@ -130,6 +130,7 @@ export function CommandPalette() {
   const importedThemes = usePrefs(s => s.importedThemes);
   const binds = usePrefs(s => s.shortcuts);
   const inlineBlame = usePrefs(s => s.inlineBlame);
+  const editorGitGutter = usePrefs(s => s.editorGitGutter);
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
   const editorKeymap = usePrefs(s => s.editorKeymap);
   const useBranchAsTaskName = usePrefs(s => s.useBranchAsTaskName);
@@ -616,6 +617,12 @@ export function CommandPalette() {
       run: act(() => usePrefs.getState().toggleInlineBlame()),
     });
     cmds.push({
+      id: "toggle-git-gutter", section: "View", label: t("commandPalette.cmd.toggleGitGutter"),
+      suffix: editorGitGutter ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: GitBranch,
+      keywords: "change gutter diff added modified deleted lines head",
+      run: act(() => usePrefs.getState().toggleEditorGitGutter()),
+    });
+    cmds.push({
       id: "toggle-word-wrap", section: "View", label: t("commandPalette.cmd.toggleWordWrap"),
       suffix: editorWordWrap ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: WrapText,
       keywords: "editor soft wrap long lines wordwrap horizontal scroll",
@@ -731,7 +738,7 @@ export function CommandPalette() {
     }
 
     return cmds;
-  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorWordWrap, editorKeymap, useBranchAsTaskName, activeEditTab, sidebarFiltered, open, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorGitGutter, editorWordWrap, editorKeymap, useBranchAsTaskName, activeEditTab, sidebarFiltered, open, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Recents, re-read on every open so an hour spent with the palette closed
   // expires them (the list is only ever consulted at build time). Empty query

@@ -46,6 +46,7 @@ import { visualProjectOrder } from "@/lib/projectGroups";
 import type { TerminalTab } from "@/lib/types";
 import { findAdjacentPane, findLeaf, computeLeafBounds, getAllLeaves, treeHasDir } from "@/lib/splitTree";
 import type { NavDir } from "@/lib/splitTree";
+import { orderTasksByRecency } from "@/lib/recencyOrder";
 
 /**
  * Pick the next pane to focus in `dir`, preferring the most recently visited
@@ -190,9 +191,9 @@ export function useShortcuts() {
       // tasks → next project …) or the jumps feel random. Computed
       // lazily; only some commands need it.
       const awakeTasks = () => visualProjectOrder(state.projects).flatMap(p =>
-        state.tasks.filter(w =>
+        orderTasksByRecency(state.tasks.filter(w =>
           w.project_id === p.id && !w.archived && (state.tabs[w.id]?.length ?? 0) > 0,
-        ),
+        ), state.activityAt),
       );
 
       switch (cmd) {
@@ -204,8 +205,8 @@ export function useShortcuts() {
           type Row = { taskId: string; tabId?: string };
           const rows: Row[] = [];
           for (const p of visualProjectOrder(state.projects)) {
-            for (const w of state.tasks) {
-              if (w.project_id !== p.id || w.archived) continue;
+            const projectTasks = state.tasks.filter(w => w.project_id === p.id && !w.archived);
+            for (const w of orderTasksByRecency(projectTasks, state.activityAt)) {
               rows.push({ taskId: w.id });
               const taskTabs = state.tabs[w.id] ?? [];
               // Exclude pane tabs from sidebar rows — they live in split panes.

@@ -123,19 +123,13 @@ export function TaskGroupBlock({ group, projectId, label, compact, count, member
             className="mt-[2px] flex h-[var(--sidebar-task-row-h)] cursor-pointer select-none items-center gap-[8px] rounded-[6px] pl-[var(--sb-task-pad,42px)] pr-[8px] text-[13px] font-medium transition-[background-color] duration-[120ms] hover:bg-[var(--sidebar-row-hover)]"
             style={{ color }}
             onPointerDown={onDragPointerDown ? (e) => onDragPointerDown(e, group.id, projectId) : undefined}
-            // A click toggles, at once. A double-click still renames, and it
-            // arrives as click(1), click(2), dblclick: the second click is
-            // ignored and the dblclick undoes the first one's toggle, so a
-            // rename leaves the group as it was. Delaying every click by the
-            // double-click window instead would make every expand feel slow.
+            // A click toggles, at once. A double-click arrives as click(1),
+            // click(2), dblclick: click(1) already toggled, so click(2) is
+            // ignored and the dblclick adds nothing, leaving one toggle.
+            // Renaming lives in the context menu only.
             onClick={(e) => {
               if (renaming !== null || e.detail > 1) return;
               onToggleCollapsed?.();
-            }}
-            onDoubleClick={() => {
-              if (renaming !== null) return;
-              onToggleCollapsed?.();
-              setRenaming(label);
             }}
           >
             {/* The chevron sits where a task row's does. It is a button of

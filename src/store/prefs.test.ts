@@ -1046,6 +1046,39 @@ describe("prefs: claude subagents", () => {
     expect(localStorage.getItem("profile-work:subagentViewShowThinking")).toBeNull();
   });
 
+  it("defaults both auto-expand prefs off and reads them back after a reload", async () => {
+    let { usePrefs } = await import("./prefs");
+    expect(usePrefs.getState().autoExpandActiveAgents).toBe(false);
+    expect(usePrefs.getState().autoExpandSubagents).toBe(false);
+
+    usePrefs.getState().setAutoExpandActiveAgents(true);
+    usePrefs.getState().setAutoExpandSubagents(true);
+    vi.resetModules();
+    ({ usePrefs } = await import("./prefs"));
+
+    expect(usePrefs.getState().autoExpandActiveAgents).toBe(true);
+    expect(usePrefs.getState().autoExpandSubagents).toBe(true);
+  });
+
+  it("keeps the auto-expand prefs under the profile's scoped keys", async () => {
+    asProfileWindow("profile-work");
+    const { usePrefs } = await import("./prefs");
+    usePrefs.getState().setAutoExpandActiveAgents(true);
+    usePrefs.getState().setAutoExpandSubagents(true);
+
+    expect(localStorage.getItem("profile-work:autoExpandActiveAgents")).toBe("1");
+    expect(localStorage.getItem("profile-work:autoExpandSubagents")).toBe("1");
+    expect(localStorage.getItem("autoExpandActiveAgents")).toBeNull();
+  });
+
+  it("an unchanged auto-expand value notifies nobody (bear trap 8)", async () => {
+    const { usePrefs } = await import("./prefs");
+
+    expect(countNotifications(usePrefs, () => usePrefs.getState().setAutoExpandActiveAgents(false))).toBe(0);
+    expect(countNotifications(usePrefs, () => usePrefs.getState().setAutoExpandSubagents(false))).toBe(0);
+    expect(countNotifications(usePrefs, () => usePrefs.getState().setAutoExpandActiveAgents(true))).toBe(1);
+  });
+
   it("does not read the root profile's row settings in another profile's window", async () => {
     localStorage.setItem("subagentsEnabled", "0");
     localStorage.setItem("subagentRetention", "hour");

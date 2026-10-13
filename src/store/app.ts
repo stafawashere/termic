@@ -404,7 +404,7 @@ export interface AppState {
    *  (wired into its tab strip) or the main pane. Used by the Run pop-out
    *  (GH #54) so the run terminal lands where the user is looking.
    *  `opts.focus` — see `addTab`. */
-  addTabToActivePane: (taskId: string, tab: TerminalTab, opts?: { focus?: boolean }) => void;
+  addTabToActivePane: (taskId: string, tab: Tab, opts?: { focus?: boolean }) => void;
   /** Move `tabId` to `toIndex` — its final position in the list AFTER the
    *  tab is pulled out (i.e. an index into the other tabs, 0..length-1).
    *  No-op if the order is unchanged. */
@@ -504,6 +504,15 @@ export interface AppState {
    *  for an FS watcher: the file tree, open editor tabs, and the Git panel
    *  re-read on the rising edge. Ephemeral (not persisted). */
   fsRevision: Record<string, number>;
+  /** When each task last had activity the sidebar orders by, never PTY output
+   *  (src/lib/recencyOrder.ts). Only a turn ending writes it, so every reorder
+   *  lands at a turn end. Ephemeral; a task with no entry orders by its
+   *  creation time. */
+  activityAt: Record<string, number>;
+  /** The user opening a task or sending it a prompt, waiting for the next
+   *  turn end to be folded into `activityAt` so no row moves under the user. */
+  pendingActivityAt: Record<string, number>;
+  noteTaskPrompt: (taskId: string) => void;
   bumpFsRevision: (taskId: string) => void;
   /** Per-task "git status may have changed" tick — the lighter sibling of
    *  `fsRevision` for mutations that can't have changed the visible file
@@ -776,6 +785,8 @@ export const useApp = create<AppState>((set, get) => ({
   activeTab: {},
   closedTabs: {},
   fsRevision: {},
+  activityAt: {},
+  pendingActivityAt: {},
   gitRevision: {},
   view: { page: "dashboard" },
   compactSidebar: initialCompact,
@@ -1067,7 +1078,9 @@ export const useApp = create<AppState>((set, get) => ({
       nextCollapsedTaskGroups = { ...nextCollapsedTaskGroups, [gid]: false };
       try { localStorage.setItem(LS_COLLAPSED_TASK_GRP, JSON.stringify(nextCollapsedTaskGroups)); } catch {}
     }
+    const opened = id !== null && id !== prev;
     set({
+      ...(opened ? { pendingActivityAt: { ...get().pendingActivityAt, [id]: Date.now() } } : null),
       activeTaskId: id,
       view: { page: id ? "dashboard" : get().view.page },
       mountedTasks: nextMounted,
@@ -3109,10 +3122,18 @@ export const useApp = create<AppState>((set, get) => ({
     return {
       tabs: { ...s.tabs, [taskId]: next },
       ...(settled
-        ? { fsRevision: { ...s.fsRevision, [taskId]: (s.fsRevision[taskId] ?? 0) + 1 } }
+        ? {
+          fsRevision: { ...s.fsRevision, [taskId]: (s.fsRevision[taskId] ?? 0) + 1 },
+          activityAt: { ...s.activityAt, ...s.pendingActivityAt, [taskId]: Date.now() },
+          pendingActivityAt: {},
+        }
         : null),
     };
   }),
+
+  noteTaskPrompt: (taskId) => set(s => ({
+    pendingActivityAt: { ...s.pendingActivityAt, [taskId]: Date.now() },
+  })),
 
   bumpFsRevision: (taskId) => set(s => ({
     fsRevision: { ...s.fsRevision, [taskId]: (s.fsRevision[taskId] ?? 0) + 1 },

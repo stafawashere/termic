@@ -1295,12 +1295,22 @@ open task or not, until you answer in that terminal or the agent's turn ends
 moves to whatever bucket its other evidence gives it. The board reads the same
 field, so it agrees; the section has no rule of its own.
 
-Rows keep TREE order: `visualProjectOrder`, then each project's rows as the
-tree lays them out (`layoutTaskList`, so a task group is one block at its
-first member's position). The section walks projects rather than tasks, so a
-task whose project left the profile is skipped exactly as the tree skips it,
-and a row never shuffles inside its bucket; it moves only when its bucket
-changes. The per-project task filter (#324) does not apply here; the
+Rows run newest activity first (`src/lib/recencyOrder.ts`), ties in TREE
+order: `visualProjectOrder`, then each project's rows as the tree lays them
+out (`layoutTaskList`, so a task group is one block, keyed by its newest
+member). Activity is `activityAt` in the app store, written only when a turn
+ends (the `working` to not-working edge), never by PTY output. Opening a task
+or sending it a prompt is held in `pendingActivityAt` and folded in at the
+next turn end, so every reorder lands at a turn end and nothing moves under
+the user. A row also moves when its bucket changes. Keyboard task navigation
+(`useShortcuts.ts`) walks the same order. A
+task with no stamp orders by its creation time. The tree orders the same
+way, except that a task the user dragged (`order` set) keeps its manual slot
+ahead of the rest; a drag first pins the drawn order (`freezeDisplayOrder`)
+so its indices match what is on screen. Subagent rows list the newest start first, a workflow run
+counting as one block at its newest agent. The section walks projects rather
+than tasks, so a task whose project left the profile is skipped exactly as
+the tree skips it. The per-project task filter (#324) does not apply here; the
 sidebar's filter bar does (see "The sidebar's filter bar").
 
 **Task groups** draw the way the tree draws them: a caption in the group's
@@ -1365,6 +1375,38 @@ Settled. Still open:
 whether `taskBoardColumn` should grow a Merged column so "finished and can
 go" has an answer on both surfaces.
 
+
+## The sidebar's workspace view
+
+A third `sidebarView` beside the tree and STATUS (`"workspace"` in
+`parseSidebarView`, so a stored unknown value still lands on the tree). The
+header's layers button (`sidebar-workspace-view`) swaps it with the tree; the
+swap arrows keep swapping tree and STATUS, and leave the workspace view for
+STATUS. Not on the icon rail, like STATUS.
+
+A workspace is a named, saved set of project ids with one active. It is a
+view filter, not project data: the view draws the ordinary project tree
+filtered to the active set, in the tree's own project order, and the STATUS
+section is not drawn above it (it would list tasks the filter hides). Nothing
+about a project or task is written.
+
+State is `src/store/workspaces.ts`, in scoped localStorage (`workspaces`, the
+list, and `activeWorkspace`, the id), no Rust. A stored active id that names
+no workspace boots as none. A project the user removes from the app leaves
+every set, and only that: `ipc.projectRemove` calls `forgetProject` once the
+backend call succeeds. A project list that merely lacks an id (a partial or
+failed load) prunes nothing, because a lost set costs the user the filter they
+built. An id whose project is gone by another route stays in the set and is
+never drawn, since the tree lists existing projects only.
+Deleting the active workspace activates the first one left.
+
+`WorkspaceSection` is only the picker: chips (`workspace-chip`, one
+`data-active`), the manage button, and the empty states (`workspace-empty-none`
+with no workspaces, `workspace-empty-unselected`, `workspace-empty-projects`
+for an active set with no projects). The manager
+(`WorkspaceManagerDialog`, `React.lazy`, mounted on first open) creates,
+renames and deletes workspaces (delete asks inline, in place of the button) and ticks projects in and out of the selected
+one.
 
 ## The sidebar's status chips
 
@@ -2550,6 +2592,14 @@ Two honesty rules, because a confidently wrong author is worse than none:
 
 A git tick is deliberately NOT a re-fetch. `gitRevision` bumps on every stage and unstage, not just on commits, so it dispatches `markBlameStale`: the annotation on screen stays put and the refetch rides the reader's next cursor move. Re-blaming per tick forks git once per open editor to redraw one line that usually did not change, and it measurably slowed the e2e suite when it was written that way.
 
+## Git change gutter
+
+`gitChangeGutterExtension(taskId, path)` marks lines added, modified or deleted against HEAD in a narrow gutter beside the line numbers: a bar for added, a bar for modified, a small triangle between lines for deleted, colored from `--ui-git-added`, `--ui-git-modified` and `--ui-git-deleted` in the `@theme` block of `index.css`. The diff is `task_git_line_changes` on the live buffer, requested on mount, 300ms after the last edit, and when the task's `gitRevision` changes.
+
+A result is applied only when the buffer is still the exact document that was sent. Otherwise it is dropped and a new request is scheduled, and a newer request supersedes an older one, so a slow answer can never paint markers on the wrong lines. Markers are mapped through edits in between.
+
+The pref is `editorGitGutter`, ON by default, in Settings → Appearance → Editor and in the command palette as "Toggle Git Gutter". It has its own `Compartment` in `EditorPane`, reconfigured in place, so cursor, undo history and scroll position survive. Scratch and external tabs never get it. Cost notes are in bear trap 10 of [performance.md](performance.md).
+
 ## The dashboard
 
 The home screen: hero, three action cards, a Recent row, and the project list.
@@ -2977,3 +3027,33 @@ installed and supported from the store (`agentHooksInstalled`,
 `agentHooksSupported`), the same read a live tab uses, so the block, the cards
 and the terminals cannot disagree. The link out of Notifications does not gate
 on which agents are supported; the cards are the authority on that.
+
+## The multibuffer tab
+
+Find in files (and its Open as Multibuffer button, or Alt-Enter) turns the
+current matches into one `multibuffer` tab: each file gets a header (name and
+path, click opens the file at that excerpt) followed by an editable excerpt of
+the lines around each hit, three lines of context either side, with adjacent
+hits merged.
+
+- **It is its own tab type, not an `edit` tab.** There is no single `path`, so
+  inline blame, review comments and the breadcrumb all stay off it. It is never
+  persisted: the excerpts live in memory and a relaunch starts without it.
+- **One CodeMirror view per excerpt, built lazily.** `MultibufferPane` leaves
+  a placeholder sized from the line count and creates the view when an
+  IntersectionObserver reports it within 600px of the viewport, so a
+  500-match result does not build 500 views. Views are never torn down on
+  scroll back, so undo history survives.
+- **Line numbers are the real ones.** `lineNumbers` is given a `formatNumber`
+  that adds the excerpt's start line, and the gutter compartment is
+  reconfigured after a save because a write can change how many lines an
+  earlier excerpt in the same file has.
+- **Saving writes the whole file, once.** Mod-s re-reads each edited file,
+  asks `saveTargets` (`src/lib/multibuffer.ts`) what to write, and sends it
+  through `taskFileWrite`. A file whose excerpt no longer matches what is on
+  disk is a conflict: it gets a toast and is not written. The dirty dot clears
+  only when every write succeeded, so a conflict leaves the tab dirty and
+  Mod-s retries what is left. A successful write rebases that file's excerpts
+  (new start and end lines, new base text) and bumps `gitRevision`.
+- **Closing a dirty multibuffer asks**, with the same prompt as a dirty editor
+  tab (`lib/closeTab.ts`).

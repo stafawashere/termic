@@ -38,6 +38,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 portable-pty = "0.8"
 parking_lot = "0.12"
+similar = "3"
 libc = "0.2"
 # font-kit enumerates installed system fonts and exposes is_monospace().
 # Lazy-evaluated: only the `list_monospace_fonts` command pulls families.

@@ -80,6 +80,8 @@ export function SubagentSettingsBlock() {
   const setRetention = usePrefs(s => s.setSubagentRetention);
   const autoCollapse = usePrefs(s => s.subagentAutoCollapse);
   const setAutoCollapse = usePrefs(s => s.setSubagentAutoCollapse);
+  const autoExpand = usePrefs(s => s.autoExpandSubagents);
+  const setAutoExpand = usePrefs(s => s.setAutoExpandSubagents);
   const showThinking = usePrefs(s => s.subagentViewShowThinking);
   const setShowThinking = usePrefs(s => s.setSubagentViewShowThinking);
   const showToolInputs = usePrefs(s => s.subagentViewShowToolInputs);
@@ -165,6 +167,16 @@ export function SubagentSettingsBlock() {
             disabled={rowsDisabled}
           />
         </ChoiceRow>
+
+        <div data-testid="subagent-setting-auto-expand">
+          <Toggle
+            label={t("tasks.subagents.autoExpand.label")}
+            hint={t("tasks.subagents.autoExpand.hint")}
+            value={autoExpand}
+            onChange={setAutoExpand}
+            disabled={rowsDisabled}
+          />
+        </div>
 
         <div className="flex flex-col gap-4">
           <div className="text-[13px] font-medium text-[var(--color-fg-dim)]">{t("tasks.subagents.view.title")}</div>

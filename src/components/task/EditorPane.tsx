@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/Button";
 import { ExternalLink, FolderOpen } from "lucide-react";
 import { attachHiddenScrollRestore } from "@/lib/hiddenScrollRestore";
 import { reviewCommentsExtension, dispatchSelectionComment } from "./reviewCommentsExt";
+import { gitChangeGutterExtension, refreshGitGutter } from "./gitChangeGutterExt";
 import { inlineBlameExtension, invalidateBlame, refreshBlame, markBlameStale } from "./inlineBlameExt";
 import { bindingMatches } from "@/lib/shortcuts";
 import { padDiskGen, padDiskSettled, registerLivePad, trackPadDiskWrite } from "@/lib/scratchLive";
@@ -194,6 +195,9 @@ export function EditorPane({ task, tab, active, onContent }: {
   // extension is not constructed at all, so nothing is fetched, no state
   // field exists, and the editor is byte-for-byte what it was before.
   const blameCompRef = useRef(new Compartment());
+  // Git change gutter (prefs.editorGitGutter), reconfigured in place like blame.
+  const gitGutterCompRef = useRef(new Compartment());
+  const gitGutterOnRef = useRef<boolean | null>(null);
   // Soft wrap (prefs.editorWordWrap), reconfigured in place like blame.
   const wrapCompRef = useRef(new Compartment());
   const wrapOnRef = useRef<boolean | null>(null);
@@ -266,9 +270,14 @@ export function EditorPane({ task, tab, active, onContent }: {
       })
     : [], [task.id, filePath, isTaskFile]);
 
+  const buildGitGutter = useCallback((enabled: boolean) => enabled && isTaskFile
+    ? gitChangeGutterExtension(task.id, filePath)
+    : [], [task.id, filePath, isTaskFile]);
+
   const editorFontSize = usePrefs(s => s.editorFontSize);
   const codeLigatures  = usePrefs(s => s.codeLigatures);
   const inlineBlame    = usePrefs(s => s.inlineBlame);
+  const editorGitGutter = usePrefs(s => s.editorGitGutter);
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
   const editorKeymap   = usePrefs(s => s.editorKeymap);
   // Syntax theme (atomone, tokyo-night, …), independently configurable per
@@ -361,6 +370,7 @@ export function EditorPane({ task, tab, active, onContent }: {
           if (!alive || !hostRef.current || !langIsCurrent()) return;
         }
         blameOnRef.current = usePrefs.getState().inlineBlame;
+        gitGutterOnRef.current = usePrefs.getState().editorGitGutter;
         langIdRef.current = resolved.id;
         const lang = resolved.ext;
         // Persisted AFTER the guard and with nothing awaited behind it, so the
@@ -586,6 +596,7 @@ export function EditorPane({ task, tab, active, onContent }: {
                 }
               }),
               blameCompRef.current.of(buildBlame(blameOnRef.current ?? false)),
+              gitGutterCompRef.current.of(buildGitGutter(gitGutterOnRef.current ?? false)),
               wrapCompRef.current.of((wrapOnRef.current = usePrefs.getState().editorWordWrap) ? EditorView.lineWrapping : []),
               Prec.high(keymapCompRef.current.of(
                 (keymapRef.current = usePrefs.getState().editorKeymap) === "zed" ? zedKeymapExtension() : [],
@@ -866,6 +877,19 @@ export function EditorPane({ task, tab, active, onContent }: {
     blameOnRef.current = inlineBlame;
     v.dispatch({ effects: blameCompRef.current.reconfigure(buildBlame(inlineBlame)) });
   }, [inlineBlame, buildBlame]);
+
+  useEffect(() => {
+    const v = viewRef.current;
+    if (!v || gitGutterOnRef.current === editorGitGutter) return;
+    gitGutterOnRef.current = editorGitGutter;
+    v.dispatch({ effects: gitGutterCompRef.current.reconfigure(buildGitGutter(editorGitGutter)) });
+  }, [editorGitGutter, buildGitGutter]);
+
+  useEffect(() => {
+    if (gitRevision === 0 || !editorGitGutter || !isTaskFile) return;
+    viewRef.current?.dispatch({ effects: refreshGitGutter.of() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gitRevision, task.id, editorGitGutter, isTaskFile]);
 
   // Same in-place reconfigure for word wrap: toggling it from the palette
   // keeps the cursor, undo history and scroll position. The ref records what

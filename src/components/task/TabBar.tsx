@@ -12,7 +12,7 @@ import { DropdownRoot, DropdownTrigger, DropdownMenu } from "@/components/ui/Dro
 import { NewTabMenuItems } from "./NewTabMenuItems";
 import { newScratchTab, openOrCreateScopedScratchTab } from "@/lib/scratchTabs";
 import { CliIcon, CLI_BRAND_COLOR, CLI_LABEL, resolveIconId } from "@/icons/cli";
-import { GitCompare, NotepadText, Bot, Bell, Pin, Repeat, RotateCw, Square, Play, AlertTriangle } from "lucide-react";
+import { GitCompare, NotepadText, Bot, Rows3, Bell, Pin, Repeat, RotateCw, Square, Play, AlertTriangle } from "lucide-react";
 import { BroadcastGlyph, CloseGlyph, PlusGlyph, SplitDownGlyph, SplitRightGlyph, TabTrace } from "./sessionBarIcons";
 import { useDocumentVisible } from "@/hooks/useDocumentVisible";
 import { ptyKill } from "@/lib/ipc";
@@ -480,13 +480,14 @@ export function TabPill({ task, tab, active, paneFocused, compact, onSelect, onC
     >
       <span className="sessionbar-tab-label">
         {/* Terminals get CLI brand icons, edit/diff tabs file icons when a path is known. */}
-        {(tab.type === "terminal" || fileIcon || tab.type === "diff" || tab.type === "scratch" || tab.type === "subagent") && (
+        {(tab.type === "terminal" || fileIcon || tab.type === "diff" || tab.type === "scratch" || tab.type === "subagent" || tab.type === "multibuffer") && (
           <span className={cn("sessionbar-tab-glyph", brandClass)} data-brand={brandClass ? "" : undefined}>
             {tab.type === "terminal" && <CliIcon cli={iconId} />}
             {(tab.type === "edit" || tab.type === "dir" || tab.type === "external") && fileIcon && <img src={fileIcon} alt="" className="file-icon" />}
             {tab.type === "diff" && (fileIcon ? <img src={fileIcon} alt="" className="file-icon" /> : <GitCompare />)}
             {tab.type === "scratch" && <NotepadText />}
             {tab.type === "subagent" && <Bot />}
+            {tab.type === "multibuffer" && <Rows3 />}
           </span>
         )}
         {/* Running message queue (ralph loop): subtle accent marker. */}
