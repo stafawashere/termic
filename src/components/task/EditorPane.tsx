@@ -32,6 +32,7 @@ import { ExternalLink, FolderOpen } from "lucide-react";
 import { attachHiddenScrollRestore } from "@/lib/hiddenScrollRestore";
 import { reviewCommentsExtension, dispatchSelectionComment } from "./reviewCommentsExt";
 import { gitChangeGutterExtension, refreshGitGutter } from "./gitChangeGutterExt";
+import { indentGuidesExtension, loadMinimapExtension } from "./editorLookExt";
 import { inlineBlameExtension, invalidateBlame, refreshBlame, markBlameStale } from "./inlineBlameExt";
 import { bindingMatches } from "@/lib/shortcuts";
 import { padDiskGen, padDiskSettled, registerLivePad, trackPadDiskWrite } from "@/lib/scratchLive";
@@ -202,6 +203,14 @@ export function EditorPane({ task, tab, active, onContent }: {
   // Soft wrap (prefs.editorWordWrap), reconfigured in place like blame.
   const wrapCompRef = useRef(new Compartment());
   const wrapOnRef = useRef<boolean | null>(null);
+  // Indent guides (prefs.editorIndentGuides) and the minimap (prefs.editorMinimap)
+  // are one compartment each. The minimap package is fetched on first use, so
+  // its compartment starts empty and is filled once the import resolves.
+  const guidesCompRef = useRef(new Compartment());
+  const guidesOnRef = useRef<boolean | null>(null);
+  const minimapCompRef = useRef(new Compartment());
+  const minimapOnRef = useRef<boolean | null>(null);
+  const minimapLoadSeqRef = useRef(0);
   // Key preset (prefs.editorKeymap). Holds nothing under "default", so that
   // editor's keymaps are exactly basicSetup's; "zed" layers the Zed bindings
   // above them.
@@ -280,6 +289,8 @@ export function EditorPane({ task, tab, active, onContent }: {
   const inlineBlame    = usePrefs(s => s.inlineBlame);
   const editorGitGutter = usePrefs(s => s.editorGitGutter);
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
+  const editorIndentGuides = usePrefs(s => s.editorIndentGuides);
+  const editorMinimap = usePrefs(s => s.editorMinimap);
   const editorKeymap   = usePrefs(s => s.editorKeymap);
   // Syntax theme (atomone, tokyo-night, …), independently configurable per
   // app mode (#40): a dark-optimized theme can look wrong on a light app
@@ -290,13 +301,14 @@ export function EditorPane({ task, tab, active, onContent }: {
   const themeMode      = usePrefs(s => s.themeMode);
   const appIsLight     = resolveTheme(themeMode) === "light";
   const editorThemeId  = appIsLight ? editorThemeIdLight : editorThemeIdDark;
+  const zedEditorThemes = usePrefs(s => s.zedEditorThemes);
 
   // Everything in the theme compartment: the chosen syntax theme plus the
   // surface overrides (font-size / ligatures fold in here too). All
   // reconfigure live — no EditorView rebuild, so cursor + undo survive.
   function buildTheme(sizePx: number, ligatures: boolean, themeId: string): Extension[] {
     return [
-      resolveEditorTheme(themeId, appIsLight),
+      resolveEditorTheme(themeId, appIsLight, zedEditorThemes),
       editorSurfaceTheme(sizePx, ligatures),
     ];
   }
@@ -371,6 +383,7 @@ export function EditorPane({ task, tab, active, onContent }: {
         }
         blameOnRef.current = usePrefs.getState().inlineBlame;
         gitGutterOnRef.current = usePrefs.getState().editorGitGutter;
+        minimapOnRef.current = usePrefs.getState().editorMinimap;
         gutterRevisionRef.current = useApp.getState().gitRevision[task.id] ?? 0;
         langIdRef.current = resolved.id;
         const lang = resolved.ext;
@@ -599,6 +612,8 @@ export function EditorPane({ task, tab, active, onContent }: {
               blameCompRef.current.of(buildBlame(blameOnRef.current ?? false)),
               gitGutterCompRef.current.of(buildGitGutter(gitGutterOnRef.current ?? false)),
               wrapCompRef.current.of((wrapOnRef.current = usePrefs.getState().editorWordWrap) ? EditorView.lineWrapping : []),
+              guidesCompRef.current.of((guidesOnRef.current = usePrefs.getState().editorIndentGuides) ? indentGuidesExtension() : []),
+              minimapCompRef.current.of([]),
               Prec.high(keymapCompRef.current.of(
                 (keymapRef.current = usePrefs.getState().editorKeymap) === "zed" ? zedKeymapExtension() : [],
               )),
@@ -618,6 +633,7 @@ export function EditorPane({ task, tab, active, onContent }: {
         });
         viewRef.current = view;
         elog("view created");
+        if (minimapOnRef.current) applyMinimap(true);
         if (tab.type === "scratch" && !tab.path) {
           // An agent's `termic scratchpad write` lands IN this buffer: the human sees
           // it at once, Cmd+Z takes it back, and the immediate flush makes the
@@ -895,6 +911,34 @@ export function EditorPane({ task, tab, active, onContent }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gitRevision, task.id, editorGitGutter, isTaskFile]);
 
+  const applyMinimap = useCallback((on: boolean) => {
+    const loadSeq = ++minimapLoadSeqRef.current;
+    if (!on) {
+      viewRef.current?.dispatch({ effects: minimapCompRef.current.reconfigure([]) });
+      return;
+    }
+    void loadMinimapExtension().then(extension => {
+      const v = viewRef.current;
+      const isSuperseded = loadSeq !== minimapLoadSeqRef.current;
+      const isStillWanted = minimapOnRef.current === true;
+      if (!v || isSuperseded || !isStillWanted) return;
+      v.dispatch({ effects: minimapCompRef.current.reconfigure(extension) });
+    });
+  }, []);
+
+  useEffect(() => {
+    const v = viewRef.current;
+    if (!v || guidesOnRef.current === editorIndentGuides) return;
+    guidesOnRef.current = editorIndentGuides;
+    v.dispatch({ effects: guidesCompRef.current.reconfigure(editorIndentGuides ? indentGuidesExtension() : []) });
+  }, [editorIndentGuides]);
+
+  useEffect(() => {
+    if (!viewRef.current || minimapOnRef.current === editorMinimap) return;
+    minimapOnRef.current = editorMinimap;
+    applyMinimap(editorMinimap);
+  }, [editorMinimap, applyMinimap]);
+
   // Same in-place reconfigure for word wrap: toggling it from the palette
   // keeps the cursor, undo history and scroll position. The ref records what
   // the view was built with, so a mount never dispatches a no-op transaction.
@@ -1032,7 +1076,7 @@ export function EditorPane({ task, tab, active, onContent }: {
       ),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editorFontSize, codeLigatures, editorThemeId, appIsLight]);
+  }, [editorFontSize, codeLigatures, editorThemeId, appIsLight, zedEditorThemes]);
 
   // Absolute path the two OS actions on the notice act on. A `scratch` pad
   // has no file behind it (and cannot fail either read check anyway), so it

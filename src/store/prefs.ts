@@ -3,6 +3,7 @@
 // font, but built for future things (themes, terminal opacity, etc.).
 
 import { SEATBELT_AVAILABLE } from "@/lib/platform";
+import { sanitizeZedThemes, type ZedEditorTheme } from "@/lib/zedTheme";
 import { create } from "zustand";
 import type { SandboxSelection } from "@/lib/types";
 import { setDiagnosticsEnabled } from "@/lib/lsp/diagnosticsPref";
@@ -69,6 +70,7 @@ export type AgentFooterHidden = Partial<Record<AgentFooterPart, true>>;
 const LS_EDITOR_FONT   = "editorFont";
 const LS_EDITOR_THEME  = "editorThemeId";
 const LS_EDITOR_THEME_LIGHT = "editorThemeIdLight";
+const LS_ZED_EDITOR_THEMES = "zedEditorThemes";
 const LS_TERMINAL_FONT = "terminalFont";
 const LS_TERMINAL_SIZE = "terminalFontSize";
 const LS_EDITOR_SIZE   = "editorFontSize";
@@ -76,6 +78,8 @@ const LS_LIGATURES     = "codeLigatures";
 const LS_INLINE_BLAME  = "inlineBlame";
 const LS_EDITOR_GIT_GUTTER = "editorGitGutter";
 const LS_EDITOR_WORD_WRAP = "editorWordWrap";
+const LS_EDITOR_INDENT_GUIDES = "editorIndentGuides";
+const LS_EDITOR_MINIMAP = "editorMinimap";
 const LS_EDITOR_KEYMAP = "editorKeymap";
 const LS_CODE_NAV      = "codeIntelligence";
 const LS_CODE_DIAGS    = "codeIntelDiagnostics";
@@ -734,6 +738,9 @@ interface PrefsState {
    *  syntax theme on both (a dark-optimized theme can look wrong on a
    *  light app surface, and vice versa). */
   editorThemeIdLight: string;
+  /** Zed themes imported through the palette, as validated plain data. The
+   *  editor builds the extension from these at resolve time. */
+  zedEditorThemes: ZedEditorTheme[];
   /** Font for the xterm terminals (main + aux). Kept separate because power
    *  users often want a Nerd Font for the shell but a clean prose-friendly
    *  font for the editor. */
@@ -795,6 +802,11 @@ interface PrefsState {
    *  is untouched. No toolbar control, on purpose: Settings and the command
    *  palette's "Toggle word wrap" are the two ways in. */
   editorWordWrap: boolean;
+  /** Vertical indent guides in the editor. ON by default. */
+  editorIndentGuides: boolean;
+  /** Canvas minimap in the editor's right gutter. OFF by default; the
+   *  minimap package is only fetched once this is on. */
+  editorMinimap: boolean;
   /** Which key bindings the editor layers over CodeMirror's own. "zed" adds
    *  Zed's macOS editor bindings (lib/editor/zedKeymap.ts). */
   editorKeymap: EditorKeymap;
@@ -1004,6 +1016,8 @@ interface PrefsState {
   setLanguage:        (l: LanguagePref) => void;
   setEditorThemeIdDark:  (id: string) => void;
   setEditorThemeIdLight: (id: string) => void;
+  /** Add imported Zed themes, replacing any already stored under the same id. */
+  addZedEditorThemes: (themes: ZedEditorTheme[]) => void;
   setTerminalFontId:  (id: string) => void;
   setTerminalFontSize:(px: number) => void;
   setTerminalLetterSpacing:(px: number) => void;
@@ -1022,6 +1036,10 @@ interface PrefsState {
   setEditorGitGutter: (v: boolean) => void;
   setEditorWordWrap:  (v: boolean) => void;
   toggleEditorWordWrap: () => void;
+  setEditorIndentGuides: (v: boolean) => void;
+  toggleEditorIndentGuides: () => void;
+  setEditorMinimap: (v: boolean) => void;
+  toggleEditorMinimap: () => void;
   setEditorKeymap: (v: EditorKeymap) => void;
   toggleZedKeymap: () => void;
   setCodeIntelligence:  (v: boolean) => void;
@@ -1130,6 +1148,11 @@ interface PrefsState {
 const lsGet = (k: string, fallback: string) => {
   try { return localStorage.getItem(k) ?? fallback; } catch { return fallback; }
 };
+function readStoredZedThemes(): ZedEditorTheme[] {
+  const raw = lsGet(LS_ZED_EDITOR_THEMES, "");
+  if (!raw) return [];
+  try { return sanitizeZedThemes(JSON.parse(raw)); } catch { return []; }
+}
 const lsGetNum = (k: string, fallback: number) => {
   const v = Number(lsGet(k, String(fallback)));
   return Number.isFinite(v) ? v : fallback;
@@ -1228,6 +1251,8 @@ export const APPEARANCE_DEFAULTS = {
   inlineBlame:           false,
   editorGitGutter:       true,
   editorWordWrap:        false,
+  editorIndentGuides:    true,
+  editorMinimap:         false,
   editorKeymap:          "default" as EditorKeymap,
   codeIntelligence:        true,
   codeIntelDiagnostics:    false,
@@ -1295,6 +1320,7 @@ function readStoredPrefs() {
   // key yet) so an existing explicit pick (or "auto") keeps applying to
   // both modes exactly as before, until the user overrides light on its own.
   const initialEditorThemeLight = lsGet(LS_EDITOR_THEME_LIGHT, initialEditorThemeDark);
+  const initialZedEditorThemes = readStoredZedThemes();
   const initialTerminalFont = lsGet(LS_TERMINAL_FONT, APPEARANCE_DEFAULTS.terminalFontId);
   const initialTerminalSize = lsGetNum(LS_TERMINAL_SIZE, APPEARANCE_DEFAULTS.terminalFontSize);
   const initialTerminalLetterSpacing = Math.max(0, Math.round(lsGetNum(LS_TERMINAL_LETTERSPACING, APPEARANCE_DEFAULTS.terminalLetterSpacing)));
@@ -1314,6 +1340,8 @@ function readStoredPrefs() {
   const initialInlineBlame  = lsGetBool(LS_INLINE_BLAME, APPEARANCE_DEFAULTS.inlineBlame);
   const initialEditorGitGutter = lsGetBool(LS_EDITOR_GIT_GUTTER, APPEARANCE_DEFAULTS.editorGitGutter);
   const initialWordWrap     = lsGetBool(LS_EDITOR_WORD_WRAP, APPEARANCE_DEFAULTS.editorWordWrap);
+  const initialIndentGuides = lsGetBool(LS_EDITOR_INDENT_GUIDES, APPEARANCE_DEFAULTS.editorIndentGuides);
+  const initialMinimap       = lsGetBool(LS_EDITOR_MINIMAP, APPEARANCE_DEFAULTS.editorMinimap);
   const initialEditorKeymap: EditorKeymap = lsGet(LS_EDITOR_KEYMAP, "default") === "zed" ? "zed" : "default";
   const initialCodeNav      = lsGetBool(LS_CODE_NAV, APPEARANCE_DEFAULTS.codeIntelligence);
   const initialCodeDiags    = lsGetBool(LS_CODE_DIAGS, APPEARANCE_DEFAULTS.codeIntelDiagnostics);
@@ -1482,6 +1510,7 @@ function readStoredPrefs() {
     editorFontId: initialEditorFont,
     editorThemeIdDark: initialEditorThemeDark,
     editorThemeIdLight: initialEditorThemeLight,
+    zedEditorThemes: initialZedEditorThemes,
     terminalFontId: initialTerminalFont,
     terminalFontSize: initialTerminalSize,
     terminalLetterSpacing: initialTerminalLetterSpacing,
@@ -1496,6 +1525,8 @@ function readStoredPrefs() {
     inlineBlame: initialInlineBlame,
     editorGitGutter: initialEditorGitGutter,
     editorWordWrap: initialWordWrap,
+    editorIndentGuides: initialIndentGuides,
+    editorMinimap: initialMinimap,
     editorKeymap: initialEditorKeymap,
     codeIntelligence: initialCodeNav,
     codeIntelDiagnostics: initialCodeDiags,
@@ -1573,6 +1604,13 @@ export const usePrefs = create<PrefsState>(set => ({
   setEditorThemeIdLight: (id) => {
     try { localStorage.setItem(LS_EDITOR_THEME_LIGHT, id); } catch {}
     set({ editorThemeIdLight: id });
+  },
+  addZedEditorThemes: (themes) => {
+    const incomingIds = new Set(themes.map(theme => theme.id));
+    const kept = usePrefs.getState().zedEditorThemes.filter(theme => !incomingIds.has(theme.id));
+    const merged = sanitizeZedThemes([...kept, ...themes]);
+    try { localStorage.setItem(LS_ZED_EDITOR_THEMES, JSON.stringify(merged)); } catch {}
+    set({ zedEditorThemes: merged });
   },
   setTerminalFontId: (id) => {
     try { localStorage.setItem(LS_TERMINAL_FONT, id); } catch {}
@@ -1659,6 +1697,22 @@ export const usePrefs = create<PrefsState>(set => ({
   },
   toggleEditorWordWrap: () => {
     usePrefs.getState().setEditorWordWrap(!usePrefs.getState().editorWordWrap);
+  },
+  setEditorIndentGuides: (v) => {
+    if (usePrefs.getState().editorIndentGuides === v) return;
+    try { localStorage.setItem(LS_EDITOR_INDENT_GUIDES, v ? "1" : "0"); } catch {}
+    set({ editorIndentGuides: v });
+  },
+  toggleEditorIndentGuides: () => {
+    usePrefs.getState().setEditorIndentGuides(!usePrefs.getState().editorIndentGuides);
+  },
+  setEditorMinimap: (v) => {
+    if (usePrefs.getState().editorMinimap === v) return;
+    try { localStorage.setItem(LS_EDITOR_MINIMAP, v ? "1" : "0"); } catch {}
+    set({ editorMinimap: v });
+  },
+  toggleEditorMinimap: () => {
+    usePrefs.getState().setEditorMinimap(!usePrefs.getState().editorMinimap);
   },
   setEditorKeymap: (v) => {
     if (usePrefs.getState().editorKeymap === v) return;
@@ -1747,6 +1801,8 @@ export const usePrefs = create<PrefsState>(set => ({
     s.setInlineBlame(d.inlineBlame);
     s.setEditorGitGutter(d.editorGitGutter);
     s.setEditorWordWrap(d.editorWordWrap);
+    s.setEditorIndentGuides(d.editorIndentGuides);
+    s.setEditorMinimap(d.editorMinimap);
     s.setEditorKeymap(d.editorKeymap);
     s.setCodeIntelligence(d.codeIntelligence);
     s.setCodeIntelDiagnostics(d.codeIntelDiagnostics);

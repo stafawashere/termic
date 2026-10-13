@@ -2337,6 +2337,8 @@ features read them:
 Appearance and the palette's "Toggle word wrap". No toolbar control, by
 choice. It is its own compartment in `EditorPane`, reconfigured in place.
 
+**Indent guides** (`prefs.editorIndentGuides`, on by default) and **minimap** (`prefs.editorMinimap`, off by default) are toggles in Settings > Appearance and the palette's "Toggle indent guides" and "Toggle minimap". Each is its own compartment in `EditorPane`, reconfigured in place. Guide colors are `--color-indent-guide` and `--color-indent-guide-active` in `index.css` `@theme`, mixed from `--color-fg` so every theme follows. The minimap renders to a canvas and is loaded on first use; see [performance.md](performance.md) bear trap 15.
+
 **Editor keymap** (`prefs.editorKeymap`, `"default"` | `"zed"`) is a select in
 Settings > Appearance and the palette's "Toggle Zed keymap". The Zed preset is
 its own `Prec.high` compartment in `EditorPane`; see

@@ -18,6 +18,7 @@ import { gruvboxDark } from "@uiw/codemirror-theme-gruvbox-dark";
 import { nord } from "@uiw/codemirror-theme-nord";
 import { tokyoNight } from "@uiw/codemirror-theme-tokyo-night";
 import { xcodeDark, xcodeLight } from "@uiw/codemirror-theme-xcode";
+import { zedThemeExtension, type ZedAppearance, type ZedEditorTheme } from "@/lib/zedTheme";
 
 export type EditorThemeId =
   | "auto"
@@ -71,12 +72,33 @@ export const EDITOR_THEMES: { id: EditorThemeId; label: string }[] = [
   { id: "xcode-light", label: "Xcode Light" },
 ];
 
+/** Picker rows for one app mode: the built-ins plus the imported Zed themes
+ *  whose appearance matches it. */
+export function editorThemeOptions(
+  zedThemes: readonly ZedEditorTheme[],
+  appearance: ZedAppearance,
+): { id: string; label: string }[] {
+  const matching = zedThemes
+    .filter(theme => theme.appearance === appearance)
+    .map(theme => ({ id: theme.id, label: `${theme.name} (Zed)` }));
+  return [...EDITOR_THEMES, ...matching];
+}
+
 /** Resolve a (possibly stale) theme id to its CodeMirror extension.
  *  "auto" follows the app palette (`appIsLight`) so a light app never
  *  renders dark-theme tokens on a light background (issue #40). Unknown
- *  ids fall back to the auto behaviour. */
-export function resolveEditorTheme(id: string, appIsLight = false): Extension {
+ *  ids fall back to the auto behaviour, which is also what an id of a
+ *  removed Zed theme does. */
+export function resolveEditorTheme(
+  id: string,
+  appIsLight = false,
+  zedThemes: readonly ZedEditorTheme[] = [],
+): Extension {
   if (id === "auto") return THEME_EXT[appIsLight ? AUTO_LIGHT : AUTO_DARK];
+
+  const zedTheme = id.startsWith("zed:") ? zedThemes.find(theme => theme.id === id) : undefined;
+  if (zedTheme) return zedThemeExtension(zedTheme);
+
   return THEME_EXT[id as ConcreteThemeId] ?? THEME_EXT[appIsLight ? AUTO_LIGHT : AUTO_DARK];
 }
 

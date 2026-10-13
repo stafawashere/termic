@@ -98,6 +98,43 @@ Caps, since those dirs are writable by other apps and cloned repos: 256 KB
 per file, 512 files per source dir, 128 characters per name, and colors
 must be hex.
 
+## Zed editor themes
+
+The command palette's Import Zed theme row opens a file picker for a Zed
+theme family file (the JSON with a `themes` array). Each entry becomes an
+editor syntax theme, listed in Settings > Appearance as `<name> (Zed)`
+under the dark or the light picker according to the entry's `appearance`
+(anything but `light` counts as dark). Picking one applies live through the
+editor's theme compartment, so open buffers keep their cursor and undo
+history. Importing a name that already exists replaces it.
+
+This is the editor's syntax theme only. The app chrome and the terminal
+palette are untouched. The editor surface layer (`editorSurfaceTheme`) is
+applied after every syntax theme and wins on background, gutter, selection,
+active line, line numbers and cursor, so those Zed colors are converted and
+stored but do not repaint the editor. What visibly applies is the syntax
+colors, with italic and weight.
+
+The mapping is lossy:
+
+- Captures map to lezer highlight tags (`keyword` to keyword, `string.escape`
+  to escape, `punctuation.bracket` to bracket, and so on). A capture with no
+  entry falls back to its nearest dotted ancestor (`keyword.control` to
+  `keyword`), and one with no ancestor either is kept as data but colors
+  nothing, so that code keeps the editor foreground.
+- When several captures share a tag, the more specific one (more dots) wins.
+- Selection (stored, see above) comes from `players[0].selection`, else
+  `element.selection_background`.
+- Only `#rgb`, `#rrggbb` and `#rrggbbaa` colors are read; anything else is
+  ignored. Zed's other style keys (diagnostics, git, terminal, UI chrome) are
+  ignored.
+
+Caps: 512 KB per file, 64 themes per file (the rest are dropped), 80
+characters per name, 256 captures per theme. The converted themes are kept
+as plain data in the `zedEditorThemes` pref and re-validated on every read;
+the CodeMirror extension is built from that data when it is first needed.
+They sync like the other editor preferences.
+
 ## File format
 
 ```json

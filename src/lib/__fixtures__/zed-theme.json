@@ -1,0 +1,53 @@
+{
+  "$schema": "https://zed.dev/schema/themes/v0.2.0.json",
+  "name": "Acme Fixture",
+  "author": "alice",
+  "themes": [
+    {
+      "name": "Acme Night",
+      "appearance": "dark",
+      "style": {
+        "editor.background": "#101820",
+        "editor.foreground": "#ddeeff",
+        "editor.gutter.background": "#0c131a",
+        "editor.line_number": "#556677",
+        "editor.active_line.background": "#18242f80",
+        "players": [
+          { "cursor": "#ffcc00", "selection": "#3366ff55" }
+        ],
+        "syntax": {
+          "comment": { "color": "#667788", "font_style": "italic" },
+          "keyword": { "color": "#ff6688" },
+          "keyword.control": { "color": "#ff3366", "font_weight": 700 },
+          "string": { "color": "#88cc66" },
+          "string.escape": { "color": "#abc" },
+          "function.method.call": { "color": "#66aaff" },
+          "type": { "color": "not-a-color" },
+          "number": { "color": "rgb(1, 2, 3)" },
+          "constant": { "color": "#12345" },
+          "unknown.capture.name": { "color": "#aabbcc" },
+          "variable": { "font_style": "normal" }
+        }
+      }
+    },
+    {
+      "name": "Acme Day",
+      "appearance": "light",
+      "style": {
+        "editor.background": "#fafafa",
+        "editor.foreground": "#222222",
+        "element.selection_background": "#cce0ff",
+        "syntax": {
+          "keyword": { "color": "#aa0033" }
+        }
+      }
+    },
+    {
+      "name": "Acme Odd",
+      "appearance": "sepia",
+      "style": {}
+    },
+    { "appearance": "dark", "style": {} },
+    "not an object"
+  ]
+}
