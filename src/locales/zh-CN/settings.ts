@@ -192,6 +192,10 @@ export default {
         allFinished: "全部结束时",
         always: "始终",
       },
+      autoExpand: {
+        label: "子智能体启动时展开",
+        hint: "新子智能体启动时展开已折叠的子智能体分组。手动折叠的分组保持折叠，直到该标签页的会话变化。",
+      },
       view: {
         title: "记录视图",
         verbose: {
@@ -473,6 +477,10 @@ export default {
       clickHint: "点击当前行的名称来切换；2 个以上智能体时自动展开。",
       always: "自动展开",
       alwaysHint: "默认展开。箭头仍可收起，并且会记住。",
+    },
+    autoExpandActive: {
+      label: "智能体开始工作时展开任务",
+      hint: "已折叠的任务在其智能体开始忙碌时自动展开。手动折叠的任务保持折叠。",
     },
     hoverReveal: {
       label: "悬停展开收起的侧边栏",

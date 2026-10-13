@@ -110,6 +110,8 @@ export const PREF_KEYS: readonly PrefKey[] = [
   { key: "subagentTypeFilter", scoped: true, class: "sync" },
   { key: "subagentRetention", scoped: true, class: "sync" },
   { key: "subagentAutoCollapse", scoped: true, class: "sync" },
+  { key: "autoExpandActiveAgents", scoped: true, class: "sync" },
+  { key: "autoExpandSubagents", scoped: true, class: "sync" },
   { key: "subagentViewShowThinking", scoped: false, class: "sync" },
   { key: "subagentViewShowToolInputs", scoped: false, class: "sync" },
   { key: "subagentViewShowToolOutputs", scoped: false, class: "sync" },

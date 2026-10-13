@@ -1295,12 +1295,22 @@ open task or not, until you answer in that terminal or the agent's turn ends
 moves to whatever bucket its other evidence gives it. The board reads the same
 field, so it agrees; the section has no rule of its own.
 
-Rows keep TREE order: `visualProjectOrder`, then each project's rows as the
-tree lays them out (`layoutTaskList`, so a task group is one block at its
-first member's position). The section walks projects rather than tasks, so a
-task whose project left the profile is skipped exactly as the tree skips it,
-and a row never shuffles inside its bucket; it moves only when its bucket
-changes. The per-project task filter (#324) does not apply here; the
+Rows run newest activity first (`src/lib/recencyOrder.ts`), ties in TREE
+order: `visualProjectOrder`, then each project's rows as the tree lays them
+out (`layoutTaskList`, so a task group is one block, keyed by its newest
+member). Activity is `activityAt` in the app store, written only when a turn
+ends (the `working` to not-working edge), never by PTY output. Opening a task
+or sending it a prompt is held in `pendingActivityAt` and folded in at the
+next turn end, so every reorder lands at a turn end and nothing moves under
+the user. A row also moves when its bucket changes. Keyboard task navigation
+(`useShortcuts.ts`) walks the same order. A
+task with no stamp orders by its creation time. The tree orders the same
+way, except that a task the user dragged (`order` set) keeps its manual slot
+ahead of the rest; a drag first pins the drawn order (`freezeDisplayOrder`)
+so its indices match what is on screen. Subagent rows list the newest start first, a workflow run
+counting as one block at its newest agent. The section walks projects rather
+than tasks, so a task whose project left the profile is skipped exactly as
+the tree skips it. The per-project task filter (#324) does not apply here; the
 sidebar's filter bar does (see "The sidebar's filter bar").
 
 **Task groups** draw the way the tree draws them: a caption in the group's
@@ -1365,6 +1375,38 @@ Settled. Still open:
 whether `taskBoardColumn` should grow a Merged column so "finished and can
 go" has an answer on both surfaces.
 
+
+## The sidebar's workspace view
+
+A third `sidebarView` beside the tree and STATUS (`"workspace"` in
+`parseSidebarView`, so a stored unknown value still lands on the tree). The
+header's layers button (`sidebar-workspace-view`) swaps it with the tree; the
+swap arrows keep swapping tree and STATUS, and leave the workspace view for
+STATUS. Not on the icon rail, like STATUS.
+
+A workspace is a named, saved set of project ids with one active. It is a
+view filter, not project data: the view draws the ordinary project tree
+filtered to the active set, in the tree's own project order, and the STATUS
+section is not drawn above it (it would list tasks the filter hides). Nothing
+about a project or task is written.
+
+State is `src/store/workspaces.ts`, in scoped localStorage (`workspaces`, the
+list, and `activeWorkspace`, the id), no Rust. A stored active id that names
+no workspace boots as none. A project the user removes from the app leaves
+every set, and only that: `ipc.projectRemove` calls `forgetProject` once the
+backend call succeeds. A project list that merely lacks an id (a partial or
+failed load) prunes nothing, because a lost set costs the user the filter they
+built. An id whose project is gone by another route stays in the set and is
+never drawn, since the tree lists existing projects only.
+Deleting the active workspace activates the first one left.
+
+`WorkspaceSection` is only the picker: chips (`workspace-chip`, one
+`data-active`), the manage button, and the empty states (`workspace-empty-none`
+with no workspaces, `workspace-empty-unselected`, `workspace-empty-projects`
+for an active set with no projects). The manager
+(`WorkspaceManagerDialog`, `React.lazy`, mounted on first open) creates,
+renames and deletes workspaces (delete asks inline, in place of the button) and ticks projects in and out of the selected
+one.
 
 ## The sidebar's status chips
 

@@ -1,6 +1,19 @@
 // Dialog, palette and wizard copy (Simplified Chinese). Mirrors en/dialogs.ts
 // key-for-key; src/locales/parity.test.ts enforces the match.
 export default {
+  workspaceManager: {
+    title: "工作区",
+    description: "工作区是一组已保存的项目。工作区视图只显示当前选中的那个。",
+    newPlaceholder: "新工作区名称",
+    create: "创建",
+    empty: "还没有工作区。在上方输入名称即可创建。",
+    pick: "选择一个工作区进行编辑。",
+    rename: "重命名",
+    delete: "删除",
+    deleteConfirm: "确认删除",
+    projects: "此工作区中的项目",
+    noProjects: "暂无可添加的项目。",
+  },
   broadcast: {
     title: "广播消息",
     descProject: "将一条消息发送到此项目中每个任务的主智能体。",

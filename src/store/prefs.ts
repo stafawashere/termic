@@ -123,6 +123,8 @@ const LS_SUBAGENTS_ENABLED = scoped("subagentsEnabled");
 const LS_SUBAGENT_TYPE_FILTER = scoped("subagentTypeFilter");
 const LS_SUBAGENT_RETENTION = scoped("subagentRetention");
 const LS_SUBAGENT_AUTO_COLLAPSE = scoped("subagentAutoCollapse");
+const LS_AUTO_EXPAND_ACTIVE_AGENTS = scoped("autoExpandActiveAgents");
+const LS_AUTO_EXPAND_SUBAGENTS = scoped("autoExpandSubagents");
 const LS_SUBAGENT_VIEW_SHOW_THINKING = "subagentViewShowThinking";
 const LS_SUBAGENT_VIEW_SHOW_TOOL_INPUTS = "subagentViewShowToolInputs";
 const LS_SUBAGENT_VIEW_SHOW_TOOL_OUTPUTS = "subagentViewShowToolOutputs";
@@ -636,6 +638,10 @@ interface PrefsState {
   /** Whether a claude tab's subagent group starts collapsed. A manual fold of
    *  the group wins until the tab's session changes. */
   subagentAutoCollapse: SubagentAutoCollapse;
+  /** Expand a collapsed task when its agent goes busy. */
+  autoExpandActiveAgents: boolean;
+  /** Expand a tab's subagent fold when a subagent spawns. */
+  autoExpandSubagents: boolean;
   /** Transcript view rendering. Global: taste, not identity. */
   subagentViewShowThinking: boolean;
   subagentViewShowToolInputs: boolean;
@@ -1059,6 +1065,8 @@ interface PrefsState {
   setAttentionIndicator: (v: boolean) => void;
   setLoadRemoteImages: (v: boolean) => void;
   setSubagentsEnabled: (v: boolean) => void;
+  setAutoExpandActiveAgents: (v: boolean) => void;
+  setAutoExpandSubagents: (v: boolean) => void;
   setSubagentTypeFilter: (kind: SubagentKind, v: boolean) => void;
   setSubagentRetention: (v: SubagentRetention) => void;
   setSubagentAutoCollapse: (v: SubagentAutoCollapse) => void;
@@ -1141,11 +1149,11 @@ export function taskLocationIconShown(mode: TaskLocationIconMode, isMainCheckout
 /** Whether the Scheduled nav entry shows. "auto" counts ANY schedule on a
  *  live task, paused ones included: the view is where a paused schedule is
  *  switched back on, so pausing the only one must not remove the way to it. */
-export type SidebarView = "tree" | "status";
+export type SidebarView = "tree" | "status" | "workspace";
 
-/** Anything but "status" is the tree, the view a new install starts on. */
+/** Anything but "status" or "workspace" is the tree, the view a new install starts on. */
 export function parseSidebarView(raw: string): SidebarView {
-  return raw === "status" ? "status" : "tree";
+  return raw === "status" || raw === "workspace" ? raw : "tree";
 }
 
 export function scheduledNavVisible(mode: ScheduledNavMode, hasSchedule: boolean): boolean {
@@ -1344,6 +1352,8 @@ function readStoredPrefs() {
   const lsGetRaw = (k: string): string | null => {
     try { return localStorage.getItem(k); } catch { return null; }
   };
+  const initialAutoExpandActiveAgents = parseStoredFlag(lsGetRaw(LS_AUTO_EXPAND_ACTIVE_AGENTS), false);
+  const initialAutoExpandSubagents = parseStoredFlag(lsGetRaw(LS_AUTO_EXPAND_SUBAGENTS), false);
   const initialSubagentsEnabled = parseStoredFlag(lsGetRaw(LS_SUBAGENTS_ENABLED), true);
   const initialSubagentTypeFilter = parseSubagentTypeFilter(lsGetRaw(LS_SUBAGENT_TYPE_FILTER));
   const initialSubagentRetention = parseSubagentRetention(lsGet(LS_SUBAGENT_RETENTION, ""));
@@ -1442,6 +1452,8 @@ function readStoredPrefs() {
     attentionIndicator: initialAttentionIndicator,
     loadRemoteImages: initialLoadRemoteImages,
     subagentsEnabled: initialSubagentsEnabled,
+    autoExpandActiveAgents: initialAutoExpandActiveAgents,
+    autoExpandSubagents: initialAutoExpandSubagents,
     subagentTypeFilter: initialSubagentTypeFilter,
     subagentRetention: initialSubagentRetention,
     subagentAutoCollapse: initialSubagentAutoCollapse,
@@ -1848,6 +1860,16 @@ export const usePrefs = create<PrefsState>(set => ({
     if (usePrefs.getState().subagentsEnabled === v) return;  // bear trap 8
     try { localStorage.setItem(LS_SUBAGENTS_ENABLED, v ? "1" : "0"); } catch {}
     set({ subagentsEnabled: v });
+  },
+  setAutoExpandActiveAgents: (v) => {
+    if (usePrefs.getState().autoExpandActiveAgents === v) return;  // bear trap 8
+    try { localStorage.setItem(LS_AUTO_EXPAND_ACTIVE_AGENTS, v ? "1" : "0"); } catch {}
+    set({ autoExpandActiveAgents: v });
+  },
+  setAutoExpandSubagents: (v) => {
+    if (usePrefs.getState().autoExpandSubagents === v) return;  // bear trap 8
+    try { localStorage.setItem(LS_AUTO_EXPAND_SUBAGENTS, v ? "1" : "0"); } catch {}
+    set({ autoExpandSubagents: v });
   },
   setSubagentTypeFilter: (kind, v) => {
     const current = usePrefs.getState().subagentTypeFilter;

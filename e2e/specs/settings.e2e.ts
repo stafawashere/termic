@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import os from "node:os";
 import path from "node:path";
 import { dataDir } from "../../wdio.conf.js";
-import { archiveTask, clearLanguagePref, clickWhenVisible, dismissOverlays, openTask, pointerDrag, requireTermicApi, snap, waitForAppShell, waitForText, waitForTextGone, waitGone, waitVisible, rmTree } from "../helpers";
+import { archiveTask, clearLanguagePref, clickWhenVisible, dismissOverlays, openTask, pointerDrag, requireTermicApi, requireWorkBadges, snap, submitToAgent, waitForAgentReady, waitForAppShell, waitForWorkBadge, waitForWorkBadgeGone, waitForText, waitForTextGone, waitGone, waitVisible, rmTree } from "../helpers";
 
 /** Click the [role="switch"] in the settings row whose label matches exactly.
  *  Toggle rows are label + switch inside one .justify-between wrapper
@@ -4021,5 +4021,123 @@ describe("agent state section", () => {
       if ((await tracked()) === "0") await clickWhenVisible(card(PLAIN, '[data-testid="agent-state-switch"]'));
     }
     await waitVisible(source(PLAIN));
+  });
+});
+
+describe("auto-expand active agents", () => {
+  let taskId!: string;
+  const SWITCH = '[data-testid="auto-expand-active-setting"] button[role="switch"]';
+
+  const pref = () => browser.execute(() => window.__termic!.usePrefs.getState().autoExpandActiveAgents);
+  const explicitFold = () => browser.execute(
+    (id) => window.__termic!.useApp.getState().collapsedTasks[id] ?? null, taskId);
+  const tabRowsShown = () => browser.execute(
+    (id) => document.querySelectorAll(`[data-sidebar-task-row="${id}"] [data-sidebar-tab-id]`).length, taskId);
+
+  /** The task folded by its mode's default, with no fold of the user's own. */
+  async function foldByDefault() {
+    await browser.execute((id) => {
+      const t = window.__termic!;
+      t.usePrefs.getState().setTaskExpandMode("chevron");
+      const { [id]: _dropped, ...rest } = t.useApp.getState().collapsedTasks;
+      t.useApp.setState({ collapsedTasks: rest });
+    }, taskId);
+    await browser.waitUntil(async () => (await tabRowsShown()) === 0, { timeout: 5_000, timeoutMsg: "the task never folded" });
+  }
+
+  /** Back on the task after the reload and the settings page above. */
+  async function showTask() {
+    await browser.execute((id) => {
+      const app = window.__termic!.useApp.getState();
+      app.closeSettings();
+      app.setActiveTask(id);
+    }, taskId);
+    await waitVisible(`[data-task-id="${taskId}"]`);
+    await waitForAgentReady(taskId);
+  }
+
+  async function goBusy(text: string) {
+    await submitToAgent(taskId, text);
+    await waitForWorkBadge(taskId, "working", { timeout: 10_000, message: "the agent never went busy" });
+  }
+
+  async function settle() {
+    await waitForWorkBadgeGone(taskId, "working", { timeout: 60_000, message: "the agent never settled" });
+  }
+
+  before(async function () {
+    this.timeout(60_000);
+    await waitForAppShell();
+    await requireTermicApi();
+    await requireWorkBadges();
+    taskId = await openTask("e2e-auto-expand");
+    await waitForAgentReady(taskId);
+  });
+
+  after(async () => {
+    await browser.execute(() => {
+      const p = window.__termic!.usePrefs.getState();
+      p.setAutoExpandActiveAgents(false);
+      p.setTaskExpandMode("chevron");
+    });
+    if (taskId) await archiveTask(taskId);
+  });
+
+  it("the toggle is off by default, flips from the settings page and survives a reload", async function () {
+    this.timeout(120_000);
+    expect(await pref()).toBe(false);
+
+    await browser.execute(() => window.__termic!.useApp.getState().openSettings("appearance"));
+    await waitVisible('[data-appearance-tab="interface"]');
+    await browser.execute(() => (document.querySelector('[data-appearance-tab="interface"]') as HTMLElement).click());
+    await waitVisible(SWITCH);
+    await clickWhenVisible(SWITCH);
+    await browser.waitUntil(async () => (await pref()) === true, { timeout: 5_000, timeoutMsg: "the switch never turned the pref on" });
+    await snap("auto-expand-active-on.png");
+
+    await browser.refresh();
+    await waitForAppShell();
+    await requireTermicApi();
+    await dismissOverlays();
+    expect(await pref()).toBe(true);
+
+    await browser.execute(() => {
+      const t = window.__termic!;
+      t.usePrefs.getState().setAutoExpandActiveAgents(false);
+      t.useApp.getState().closeSettings();
+    });
+  });
+
+  it("leaves a folded task alone when the pref is off", async function () {
+    this.timeout(90_000);
+    await showTask();
+    await foldByDefault();
+
+    await goBusy("do something");
+
+    expect(await explicitFold()).toBeNull();
+    expect(await tabRowsShown()).toBe(0);
+    await settle();
+  });
+
+  it("opens a folded task when its agent goes busy, and a fold made afterwards sticks", async function () {
+    this.timeout(120_000);
+    await browser.execute(() => window.__termic!.usePrefs.getState().setAutoExpandActiveAgents(true));
+    await showTask();
+    await foldByDefault();
+
+    await goBusy("do something");
+    await browser.waitUntil(async () => (await explicitFold()) === false, { timeout: 5_000, timeoutMsg: "the busy agent never opened its task" });
+    await browser.waitUntil(async () => (await tabRowsShown()) > 0, { timeout: 5_000, timeoutMsg: "the opened task showed no tab rows" });
+    await snap("auto-expand-active-opened.png");
+    await settle();
+
+    await browser.execute((id) => window.__termic!.useApp.getState().setTaskCollapsed(id, true), taskId);
+    await browser.waitUntil(async () => (await tabRowsShown()) === 0, { timeout: 5_000, timeoutMsg: "the manual fold never took" });
+
+    await goBusy("do something again");
+    expect(await explicitFold()).toBe(true);
+    expect(await tabRowsShown()).toBe(0);
+    await settle();
   });
 });
