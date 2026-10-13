@@ -136,6 +136,7 @@ export default {
       filterFiles: "Filter files",
       clearSidebarFilter: "Clear sidebar filter",
       toggleWordWrap: "Toggle word wrap",
+      toggleReindentToThree: "Toggle reindent to 3 spaces on open",
       toggleIndentGuides: "Toggle indent guides",
       toggleMinimap: "Toggle minimap",
       toggleZedKeymap: "Toggle Zed keymap",

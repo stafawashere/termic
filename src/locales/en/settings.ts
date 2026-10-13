@@ -441,6 +441,10 @@ export default {
       label: "Word wrap",
       hint: "Wrap long lines to the width of the editor instead of scrolling sideways. Also in the command palette.",
     },
+    reindentToThree: {
+      label: "Reindent to 3 spaces on open",
+      hint: "Reindent a file to 3 spaces in the editor when it opens, if it uses 2 spaces, 4 spaces, 8 spaces or tabs. The file on disk only changes when you save. Only TS/JS, JSON, CSS, HTML, Rust, C/C++, Java, Kotlin, Swift, PHP and Lua are touched. Python, YAML, Makefiles, Go and Markdown are always left alone, as are files with mixed indentation and files over 1 MB. Off by default. Also in the command palette.",
+    },
     indentGuides: {
       label: "Indent guides",
       hint: "Draw vertical lines at each indent level and highlight the block around the cursor. Also in the command palette.",

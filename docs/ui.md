@@ -2602,6 +2602,14 @@ A result is applied only when the buffer is still the exact document that was se
 
 The pref is `editorGitGutter`, ON by default, in Settings → Appearance → Editor and in the command palette as "Toggle Git Gutter". It has its own `Compartment` in `EditorPane`, reconfigured in place, so cursor, undo history and scroll position survive. Scratch and external tabs never get it. Cost notes are in bear trap 10 of [performance.md](performance.md).
 
+## Reindent to 3 spaces on open
+
+`editorReindentToThree` (OFF by default; Settings → Appearance → Editor and the palette's "Toggle reindent to 3 spaces on open") makes `EditorPane` reindent an `edit` tab's buffer to 3 spaces right after the view is created, in the same task as creation so no 2-space frame paints. Nothing is written: it is one ordinary transaction, so it marks the tab dirty, `Mod-z` takes it back in one step, and the file changes only on save. It is deliberately NOT annotated `ExternalReload`, which would hide the dirty dot.
+
+`src/lib/editor/reindent.ts` decides. Allowed languages are TS/JS/JSX/TSX, JSON, CSS/SCSS/LESS, HTML, Rust, C/C++, Java, Kotlin, Swift, PHP and Lua. It skips everything else (Python, YAML, Makefile, Go, Markdown), mixed tab and space files, files with no clear width, files already at 3, files over 1 MB, and any parse that does not finish inside 80ms. Only leading whitespace is edited, and lines that begin inside a string, template literal, raw string, heredoc, block comment or HTML `pre`/`textarea` are left alone, found from the lezer tree. Kotlin, Swift and Lua use CodeMirror 5 stream grammars whose tokens never cross a line, so they get a small scanner instead.
+
+`reindentedFromRef` holds the disk text the buffer was reindented from. The focus reload compares disk to the buffer, which now always differs, so while disk still equals that text the "changed on disk" banner stays down. Saving clears it. A live reload that changes disk re-applies the reindent if the pref is on and the new text is not already 3-space.
+
 ## The dashboard
 
 The home screen: hero, three action cards, a Recent row, and the project list.

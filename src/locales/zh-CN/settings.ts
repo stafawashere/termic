@@ -440,6 +440,10 @@ export default {
       label: "自动换行",
       hint: "长行按编辑器宽度折行，而不是横向滚动。命令面板中也有此开关。",
     },
+    reindentToThree: {
+      label: "打开时重新缩进为 3 个空格",
+      hint: "文件打开时，如果缩进为 2 个空格、4 个空格、8 个空格或制表符，就在编辑器中把它重新缩进为 3 个空格。磁盘上的文件只在你保存时才会改变。会跳过 Python、YAML、Makefile、Go、Markdown、纯文本，以及 TS/JS、JSON、CSS、HTML、Rust、C/C++、Java、Kotlin、Swift、PHP 和 Lua 之外的所有语言，还会跳过缩进混用的文件和超过 1 MB 的文件。默认关闭。命令面板中也可切换。",
+    },
     indentGuides: {
       label: "缩进参考线",
       hint: "在每个缩进层级绘制竖线，并高亮光标所在的代码块。命令面板中也有此开关。",

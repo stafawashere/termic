@@ -22,6 +22,7 @@ import { langForId, langForPath } from "@/lib/languageExts";
 import { PLAIN_TEXT, effectiveLanguageId, normalizeLanguageId } from "@/lib/languages";
 import { detectSyntaxFromContent } from "@/lib/detectSyntax";
 import { detectIndent, type IndentStyle } from "@/lib/detectIndent";
+import { planReindent } from "@/lib/editor/reindent";
 import { useCodeIntel, checkoutRoot, grantKey } from "@/store/codeIntel";
 import { lspServerFor } from "@/lib/lsp/languages";
 import { classifyEditorLoadError, isUnviewable, type EditorLoadError } from "@/lib/editorError";
@@ -123,6 +124,8 @@ function indentExtension(style: IndentStyle): Extension {
 // Marks a doc-replacing transaction as an external reload (file changed on
 // disk), not a user edit — so the updateListener skips flipping the dirty dot.
 const ExternalReload = Annotation.define<boolean>();
+
+const THREE_SPACES: IndentStyle = { useTabs: false, size: 3, unit: "   " };
 
 export function EditorPane({ task, tab, active, onContent }: {
   task: Task;
@@ -226,6 +229,27 @@ export function EditorPane({ task, tab, active, onContent }: {
   // only touches the store on the clean→dirty edge, not every
   // keystroke (patchTab re-renders the whole TabBar).
   const dirtyRef = useRef(false);
+  // The disk text a reindented buffer came from. While the file on disk still
+  // equals it, the buffer differing from disk is our own doing and not an
+  // outside change, so the focus reload must not raise the banner.
+  const reindentedFromRef = useRef<string | null>(null);
+  // One undoable, dirty-marking transaction, deliberately NOT annotated as an
+  // external reload. Returns whether it changed the buffer.
+  const reindentView = (view: EditorView, languageId: string, diskText: string): boolean => {
+    const isEnabled = usePrefs.getState().editorReindentToThree;
+    const isEditTab = tab.type === "edit";
+    if (!isEnabled || !isEditTab) return false;
+
+    const plan = planReindent(view.state, languageId);
+    if (!plan) return false;
+
+    reindentedFromRef.current = diskText;
+    view.dispatch({
+      changes: plan.edits,
+      effects: indentCompRef.current.reconfigure(indentExtension(THREE_SPACES)),
+    });
+    return true;
+  };
   // Scratchpad flush state (GH #244). The last content and title actually
   // written, so the debounced flush can bail when nothing changed; the
   // pending timer; and the unmount flush, rebound by every mount.
@@ -505,6 +529,7 @@ export function EditorPane({ task, tab, active, onContent }: {
           taskFileWrite(task.id, tab.path, v.state.doc.toString())
             .then(() => {
               dirtyRef.current = false;
+              reindentedFromRef.current = null;
               useApp.getState().patchTab(task.id, tab.id, { dirty: false });
               useUI.getState().pushToast(t("editor.savedToast", { name }), "success");
               // Git-only tick (NOT bumpFsRevision: that would make every
@@ -632,6 +657,7 @@ export function EditorPane({ task, tab, active, onContent }: {
           parent: hostRef.current,
         });
         viewRef.current = view;
+        reindentView(view, resolved.id, content);
         elog("view created");
         if (minimapOnRef.current) applyMinimap(true);
         if (tab.type === "scratch" && !tab.path) {
@@ -794,12 +820,15 @@ export function EditorPane({ task, tab, active, onContent }: {
   const applyDiskContent = useCallback((content: string) => {
     const v = viewRef.current;
     if (!v || !isTaskFile) return;
-    if (content !== v.state.doc.toString())
+    if (content !== v.state.doc.toString()) {
       v.dispatch({
         effects: indentCompRef.current.reconfigure(indentExtension(detectIndent(content))),
         changes: { from: 0, to: v.state.doc.length, insert: content },
         annotations: ExternalReload.of(true),
       });
+      reindentedFromRef.current = null;
+      reindentView(v, langIdRef.current ?? "", content);
+    }
     // The buffer now matches disk again, so blame can be trusted again. Same
     // reasoning as the save path, and the same reason docs/ideas/lsp.md wants
     // this path to fire a full-document didChange.
@@ -827,6 +856,8 @@ export function EditorPane({ task, tab, active, onContent }: {
       const v2 = viewRef.current;
       if (!v2) return;
       if (content === v2.state.doc.toString()) { setDiskChanged(false); return; }
+      const isOwnReindent = reindentedFromRef.current !== null && content === reindentedFromRef.current;
+      if (isOwnReindent) { setDiskChanged(false); return; }
       if (dirtyRef.current) { setDiskChanged(true); return; }
       applyDiskContent(content);
     }).catch(() => {});
@@ -838,8 +869,9 @@ export function EditorPane({ task, tab, active, onContent }: {
   const acceptDiskReload = useCallback(() => {
     taskFileRead(task.id, filePath).then(content => {
       applyDiskContent(content);
-      dirtyRef.current = false;
-      useApp.getState().patchTab(task.id, tab.id, { dirty: false });
+      const isStillDirty = reindentedFromRef.current !== null;
+      dirtyRef.current = isStillDirty;
+      useApp.getState().patchTab(task.id, tab.id, { dirty: isStillDirty });
     }).catch(() => {});
   }, [task.id, filePath, tab.id, applyDiskContent]);
 

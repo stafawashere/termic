@@ -133,6 +133,7 @@ export function CommandPalette() {
   const editorGitGutter = usePrefs(s => s.editorGitGutter);
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
   const editorIndentGuides = usePrefs(s => s.editorIndentGuides);
+  const editorReindentToThree = usePrefs(s => s.editorReindentToThree);
   const editorMinimap = usePrefs(s => s.editorMinimap);
   const editorKeymap = usePrefs(s => s.editorKeymap);
   const useBranchAsTaskName = usePrefs(s => s.useBranchAsTaskName);
@@ -637,6 +638,12 @@ export function CommandPalette() {
       run: act(() => usePrefs.getState().toggleEditorIndentGuides()),
     });
     cmds.push({
+      id: "toggle-reindent-to-three", section: "View", label: t("commandPalette.cmd.toggleReindentToThree"),
+      suffix: editorReindentToThree ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: AlignLeft,
+      keywords: "editor reindent indentation three 3 spaces open",
+      run: act(() => usePrefs.getState().toggleEditorReindentToThree()),
+    });
+    cmds.push({
       id: "toggle-minimap", section: "View", label: t("commandPalette.cmd.toggleMinimap"),
       suffix: editorMinimap ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: MapIcon,
       keywords: "editor minimap overview scroll canvas",
@@ -752,7 +759,7 @@ export function CommandPalette() {
     }
 
     return cmds;
-  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorGitGutter, editorWordWrap, editorIndentGuides, editorMinimap, editorKeymap, useBranchAsTaskName, activeEditTab, sidebarFiltered, open, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorGitGutter, editorWordWrap, editorIndentGuides, editorReindentToThree, editorMinimap, editorKeymap, useBranchAsTaskName, activeEditTab, sidebarFiltered, open, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Recents, re-read on every open so an hour spent with the palette closed
   // expires them (the list is only ever consulted at build time). Empty query

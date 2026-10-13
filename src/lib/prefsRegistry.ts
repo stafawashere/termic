@@ -58,6 +58,7 @@ export const PREF_KEYS: readonly PrefKey[] = [
   { key: "zedEditorThemes", scoped: false, class: "sync" },
   { key: "editorWordWrap", scoped: false, class: "sync" },
   { key: "editorIndentGuides", scoped: false, class: "sync" },
+  { key: "editorReindentToThree", scoped: false, class: "sync" },
   { key: "editorMinimap", scoped: false, class: "sync" },
   { key: "editorKeymap", scoped: false, class: "sync" },
   { key: "codeLigatures", scoped: false, class: "sync" },
