@@ -219,6 +219,7 @@ export function DiffPane({ task, tab }: { task: Task; tab: DiffTab }) {
   const themeMode = usePrefs(s => s.themeMode);
   const appIsLight = resolveTheme(themeMode) === "light";
   const editorThemeId = appIsLight ? editorThemeIdLight : editorThemeIdDark;
+  const zedEditorThemes = usePrefs(s => s.zedEditorThemes);
 
   function setModeAndPersist(m: Mode) {
     writeMode(m);
@@ -288,7 +289,7 @@ export function DiffPane({ task, tab }: { task: Task; tab: DiffTab }) {
         // Same syntax theme as the editor; surfaces pulled from the app
         // CSS vars. dimActiveLine=true — the diff's per-line red/green
         // tints carry the signal, the active-line wash would muddy it.
-        resolveEditorTheme(editorThemeId, appIsLight),
+        resolveEditorTheme(editorThemeId, appIsLight, zedEditorThemes),
         diffCommentContrast, // issue #40: keep changed comments legible on the wash
         editorSurfaceTheme(editorFontSize, false, true),
         EditorView.theme({
@@ -432,7 +433,7 @@ export function DiffPane({ task, tab }: { task: Task; tab: DiffTab }) {
       mergeRef.current?.destroy(); mergeRef.current = null;
       editorRef.current?.destroy(); editorRef.current = null;
     };
-  }, [task.id, tab.path, tab.scope, editorFontSize, mode, editorThemeId, appIsLight, tab.reloadNonce]);
+  }, [task.id, tab.path, tab.scope, editorFontSize, mode, editorThemeId, appIsLight, zedEditorThemes, tab.reloadNonce]);
 
   const effectiveMode: Mode = oneSided ? "unified" : mode;
 
