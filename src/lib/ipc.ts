@@ -9,7 +9,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   Project, ProjectMember, Task, CreateTaskArgs, CreateMultiArgs, CreateMultiMember, Settings, DiscoveredRepo,
   ImportableWorktree, CliInfo, ChangeFile, Changes, GitStatus, CheckoutResult, UpdateMode, UpdateResult, UpdateInfo, UpdateAllItem, FileEntry, Agent, RepoConfig,
-  SandboxMode, TaskDiffSummary, TaskDiffStat, DesktopIntegration, CliInstallStatus, McpStatus, BranchContext, PrPickList, PrScope, BlameFile, GitCommit, GitCompare, GitFile, GitLogPage, GitRef,
+  SandboxMode, TaskDiffSummary, TaskDiffStat, DesktopIntegration, CliInstallStatus, McpStatus, BranchContext, PrPickList, PrScope, BlameFile, LineChanges, GitCommit, GitCompare, GitFile, GitLogPage, GitRef,
   ForgeCliStatus, ForgeProvider, PrLookup, MemberPrLookup, PrComment, IssueLookup, IssueScope, AgentHookStatus, HookPlan,
   ProfileView, ProfilesView, ProfileDeletePreview, AgentAccountsView, ExternalAppInfo,
   SyncStatus, SyncConnectInfo, SyncChange, SyncPrefsSnapshot, SyncRunResult,
@@ -971,6 +971,11 @@ export const taskGitPush = (id: string, dirName: string) =>
  *  (a few hundred ms on a big file), and cached per file by `blameCache`. */
 export const taskGitBlame = (id: string, path: string) =>
   invoke<BlameFile>("task_git_blame", { id, path });
+/** Added, modified and deleted buffer lines versus HEAD for the change gutter.
+ *  Diffs `text` (the live buffer, not the file on disk) on a Rust blocking
+ *  thread; over the size cap it returns empty lists with `truncated` set. */
+export const taskGitLineChanges = (id: string, path: string, text: string) =>
+  invoke<LineChanges>("task_git_line_changes", { id, path, text });
 /** How many commits sit between HEAD and `sha`, i.e. the page `skip` that lands
  *  on it. Lets "show this commit in History" jump straight there instead of
  *  paging forward: on a monorepo the target can be tens of thousands of rows

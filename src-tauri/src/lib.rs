@@ -52,6 +52,7 @@ mod shell_env;
 mod automation;
 mod cli_server;
 mod forge;
+mod line_changes;
 mod theme_import;
 mod mcp_server;
 // Config sync through a git repo the user owns (docs/ideas/config-sync.md).
@@ -13079,6 +13080,59 @@ async fn task_git_blame(id: String, path: String) -> Result<BlameFile, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Which lines of an open buffer differ from HEAD, for the editor's change
+/// gutter. Diffs the buffer text the frontend sends (not the file on disk) so
+/// unsaved edits show up while typing. Async + `spawn_blocking`: one `git show`
+/// fork per call.
+fn task_git_line_changes_for_task(w: &Task, path: &str, text: &str) -> Result<line_changes::LineChanges, String> {
+    let (cwd, rel) = resolve_task_git_path(w, path)?;
+    reject_escaping_segments(&rel)?;
+
+    let is_empty_path = rel.trim().is_empty();
+    let is_directory_like = rel.ends_with('/') || rel.ends_with('\\') || rel == ".";
+    if is_empty_path || is_directory_like {
+        return Err(format!("not a file path: {path}"));
+    }
+
+    let has_head = git(&["--no-optional-locks", "rev-parse", "--verify", "HEAD"], &cwd).is_ok();
+    if !has_head {
+        return Ok(line_changes::LineChanges::default());
+    }
+
+    let listing = git(&["--no-optional-locks", "ls-tree", "HEAD", "--", &rel], &cwd)
+        .map_err(|e| format!("git ls-tree failed: {e}"))?;
+    let entry = listing.lines().next().unwrap_or("").trim();
+    let is_absent_from_head = entry.is_empty();
+    if is_absent_from_head {
+        return Ok(line_changes::line_changes("", text));
+    }
+
+    let entry_meta = entry.split('\t').next().unwrap_or("");
+    let mut meta_fields = entry_meta.split_whitespace();
+    let _mode = meta_fields.next();
+    let object_type = meta_fields.next().unwrap_or("");
+    let blob_sha = meta_fields.next().unwrap_or("");
+    let is_blob = object_type == "blob" && !blob_sha.is_empty();
+    if !is_blob {
+        return Err(format!("not a file in HEAD: {path}"));
+    }
+
+    let blob = git_bytes(&["--no-optional-locks", "show", blob_sha], &cwd)
+        .map_err(|e| format!("git show failed: {e}"))?;
+    let head_text = String::from_utf8_lossy(&blob);
+    Ok(line_changes::line_changes(&head_text, text))
+}
+
+#[tauri::command]
+async fn task_git_line_changes(id: String, path: String, text: String) -> Result<line_changes::LineChanges, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<line_changes::LineChanges, String> {
+        let w = load_tasks_all().into_iter().find(|w| w.id == id).ok_or("no task")?;
+        task_git_line_changes_for_task(&w, &path, &text)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// One commit in full, for the blame popup's hover card: author, email, date,
 /// subject and the whole message body (trailers included, `Co-authored-by:`
 /// pulled out on the frontend by `splitTrailers`).
@@ -25721,7 +25775,7 @@ pub fn run() {
             task_diff, task_diff_stat, task_files,
             desktop_integration_status, desktop_integration_add, desktop_integration_remove, task_list_files_for_finder, task_match_ignored_files, task_send_diff_to_main,
             task_changes, task_git_status, task_git_branches, project_git_branches, project_branch_context, task_git_checkout, task_git_update, task_git_update_all, task_git_update_info, task_stage, task_unstage, task_commit, task_discard,
-            task_git_log, task_git_refs, task_git_push, task_git_commit_files, task_git_compare, task_git_blame, task_git_commit_meta, task_git_commit_offset,
+            task_git_log, task_git_refs, task_git_push, task_git_commit_files, task_git_compare, task_git_blame, task_git_line_changes, task_git_commit_meta, task_git_commit_offset,
             detect_forges, task_pr_status, task_member_pr_status, task_pr_create, task_pr_comments, task_set_pr_watch, task_set_pr_comments_seen,
             project_forge_issues, project_forge_provider, project_forge_prs, project_fetch_pr_branch, project_git_checkout,
             task_file_diff, task_file_diff_sides, task_file_read, file_read_external, clipboard_image_save, clipboard_image_capture, task_file_read_base64, task_file_fp, task_file_write, task_dir_list, task_path_stat,
