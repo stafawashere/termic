@@ -3,6 +3,7 @@
 // The one import here, and type-only so nothing is pulled in at runtime: the
 // shape belongs with the policy that reads it, not with the wire structs.
 import type { DelegatedWork } from "./delegatedWork";
+import type { Excerpt } from "./multibuffer";
 // Dependency-free (a user-agent check), so this still pulls in nothing.
 import { SEATBELT_AVAILABLE } from "./platform";
 
@@ -1397,7 +1398,7 @@ export type { SplitDir, SplitNode, PaneLeaf, SplitTree } from "@/lib/splitTree";
 
 // ───────────────────────────── tab model (frontend only) ─────────────────────────────
 
-export type TabType = "terminal" | "diff" | "edit" | "dir" | "scratch" | "external" | "subagent";
+export type TabType = "terminal" | "diff" | "edit" | "dir" | "scratch" | "external" | "subagent" | "multibuffer";
 
 export interface BaseTab {
   id: string;
@@ -1900,7 +1901,21 @@ export interface SubagentTab extends BaseTab {
   workflowRunId?: string | null;
 }
 
-export type Tab = TerminalTab | DiffTab | EditTab | DirTab | ScratchTab | ExternalTab | SubagentTab;
+/** Search hits from several files as one editable view. Each excerpt is a
+ *  few lines of a file around a hit, edited in place and written back into
+ *  its file on save.
+ *
+ *  A distinct type for the same reason `ScratchTab` is one: there is no
+ *  single `path`, so every place that reads `EditTab.path` is a compiler error
+ *  to answer. Never persisted, and the excerpts live only in memory. */
+export interface MultibufferTab extends BaseTab {
+  type: "multibuffer";
+  /** The excerpts as they were when the tab opened. The pane owns the edited
+   *  text from then on. */
+  excerpts: Excerpt[];
+}
+
+export type Tab = TerminalTab | DiffTab | EditTab | DirTab | ScratchTab | ExternalTab | SubagentTab | MultibufferTab;
 
 /** Mirror of `repo_config::RepoConfig` (src-tauri/src/repo_config.rs).
  *  Parsed from the repo-root `.termic.yaml` — committed, team-shared

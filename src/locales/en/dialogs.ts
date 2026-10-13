@@ -306,6 +306,10 @@ export default {
     noMatches: "No matches",
     searching: "searching…",
     cancelSearchTitle: "Cancel search (Esc)",
+    openMultibuffer: "Open as Multibuffer",
+    openMultibufferTitle: "Open all matches as one editable tab ({{keys}})",
+    multibufferTitle: "Multibuffer: {{query}}",
+    multibufferEmpty: "Could not read any of the matched files",
   },
   newProfile: {
     title: "New profile",

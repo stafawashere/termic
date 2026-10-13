@@ -3027,3 +3027,33 @@ installed and supported from the store (`agentHooksInstalled`,
 `agentHooksSupported`), the same read a live tab uses, so the block, the cards
 and the terminals cannot disagree. The link out of Notifications does not gate
 on which agents are supported; the cards are the authority on that.
+
+## The multibuffer tab
+
+Find in files (and its Open as Multibuffer button, or Alt-Enter) turns the
+current matches into one `multibuffer` tab: each file gets a header (name and
+path, click opens the file at that excerpt) followed by an editable excerpt of
+the lines around each hit, three lines of context either side, with adjacent
+hits merged.
+
+- **It is its own tab type, not an `edit` tab.** There is no single `path`, so
+  inline blame, review comments and the breadcrumb all stay off it. It is never
+  persisted: the excerpts live in memory and a relaunch starts without it.
+- **One CodeMirror view per excerpt, built lazily.** `MultibufferPane` leaves
+  a placeholder sized from the line count and creates the view when an
+  IntersectionObserver reports it within 600px of the viewport, so a
+  500-match result does not build 500 views. Views are never torn down on
+  scroll back, so undo history survives.
+- **Line numbers are the real ones.** `lineNumbers` is given a `formatNumber`
+  that adds the excerpt's start line, and the gutter compartment is
+  reconfigured after a save because a write can change how many lines an
+  earlier excerpt in the same file has.
+- **Saving writes the whole file, once.** Mod-s re-reads each edited file,
+  asks `saveTargets` (`src/lib/multibuffer.ts`) what to write, and sends it
+  through `taskFileWrite`. A file whose excerpt no longer matches what is on
+  disk is a conflict: it gets a toast and is not written. The dirty dot clears
+  only when every write succeeded, so a conflict leaves the tab dirty and
+  Mod-s retries what is left. A successful write rebases that file's excerpts
+  (new start and end lines, new base text) and bumps `gitRevision`.
+- **Closing a dirty multibuffer asks**, with the same prompt as a dirty editor
+  tab (`lib/closeTab.ts`).
