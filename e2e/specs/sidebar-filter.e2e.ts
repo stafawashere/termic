@@ -42,14 +42,15 @@ const fixtureId = () => browser.execute(() =>
 const treeShows = (ids: string[]) =>
   browser.execute(list => list.filter(id => !!document.querySelector(`[data-sidebar-task-id="${id}"]`)), ids);
 
-/** A plain click on a project header: its fold toggles on pointerup over
- *  the same header (the header is also a drag handle, so it has no onClick). */
+/** A plain click on a project header: its fold toggles on the click that follows
+ *  the pointer pair (the header is also a drag handle). */
 const clickProjectHeader = (pid: string) => browser.execute(id => {
   const el = document.querySelector(`[data-project-id="${id}"] span.truncate`) as HTMLElement;
   const r = el.getBoundingClientRect();
   const init = { bubbles: true, cancelable: true, button: 0, pointerId: 1, clientX: r.left + 4, clientY: r.top + 4 };
   el.dispatchEvent(new PointerEvent("pointerdown", init));
   el.dispatchEvent(new PointerEvent("pointerup", init));
+  el.dispatchEvent(new MouseEvent("click", { ...init, detail: 1 }));
 }, pid);
 const storedFold = (pid: string) => browser.execute(id => window.__termic!.useApp.getState().collapsedProjects[id] ?? null, pid);
 const queryFolds = () => browser.execute(() => ({ ...window.__termic!.useUI.getState().sidebarQueryFolds })) as Promise<Record<string, boolean>>;

@@ -330,7 +330,7 @@ function StatusGroupBlock({ group, label, projectName, tasks, workPrefs, renderR
         role="button"
         tabIndex={0}
         aria-expanded={!collapsed}
-        onClick={toggle}
+        onClick={ev => { if (ev.detail <= 1) toggle(); }}
         onKeyDown={ev => {
           if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); toggle(); }
         }}

@@ -413,6 +413,7 @@ export function Sidebar({ compact: compactProp }: {
   // is still mounted. Also set after a completed group drag so the click
   // that follows pointerup doesn't collapse the folder that was just moved.
   const suppressGroupToggle = useRef(false);
+  const projectClickSuppressed = useRef(false);
 
   // ── Task drag-to-reorder ──────────────────────────────────────────────
   // Same document-level pointer pattern as project rows (see the long note
@@ -1650,7 +1651,15 @@ export function Sidebar({ compact: compactProp }: {
                     // Compact mode has no drag-to-reorder (the pointer
                     // handler below bails), so a plain click handles the
                     // collapse toggle the monogram represents.
-                    onClick={compact ? () => setTreeFold("project", p.id, !collapsed, compact) : undefined}
+                    onClick={compact ? () => setTreeFold("project", p.id, !collapsed, compact) : (e) => {
+                      // The toggle rides the click, not the pointerup, so a
+                      // double-click (click, click, dblclick) toggles once.
+                      if (projectClickSuppressed.current) { projectClickSuppressed.current = false; return; }
+                      if (e.detail > 1) return;
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button, input, a, [data-no-drag], [role="menu"], [role="dialog"]')) return;
+                      setTreeFold("project", p.id, !collapsed, compact);
+                    }}
                     // Project header is the drag handle. Pointer-down
                     // arms it (doesn't commit to "we're dragging" yet);
                     // a pointer-move past the threshold flips into
@@ -1686,17 +1695,11 @@ export function Sidebar({ compact: compactProp }: {
                         const armed = dragArmed.current;
                         const wasStarted = armed?.started ?? false;
                         endDrag(true);
-                        // Plain click (no drag past threshold) →
-                        // toggle collapse, matching the original
-                        // header onClick behavior we replaced.
-                        if (armed && !wasStarted && ev.target instanceof Node) {
-                          // Only fire collapse if pointerup is still
-                          // over the same project header — same as a
-                          // real click would behave.
-                          const header = (ev.target as HTMLElement).closest('[data-project-id]') as HTMLElement | null;
-                          if (header?.dataset.projectId === p.id) {
-                            setTreeFold("project", p.id, !collapsed, compact);
-                          }
+                        // The click that follows a completed drag must not
+                        // toggle the project that was just moved.
+                        if (wasStarted) {
+                          projectClickSuppressed.current = true;
+                          setTimeout(() => { projectClickSuppressed.current = false; }, 0);
                         }
                       };
                       dragListenersRef.current = { move: onDragPointerMove, up: onUp };
@@ -2372,8 +2375,9 @@ export function Sidebar({ compact: compactProp }: {
                         document.addEventListener("pointerup", onUp);
                         document.addEventListener("pointercancel", onUp);
                       }}
-                      onClick={() => {
+                      onClick={(ev) => {
                         if (suppressGroupToggle.current) { suppressGroupToggle.current = false; return; }
+                        if (ev.detail > 1) return;
                         toggleGroup();
                       }}
                       onKeyDown={(ev) => {
@@ -2958,6 +2962,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
   // Task rename
   const [taskRenaming, setTaskRenaming] = useState<string | null>(null);
   const taskRenameInputRef = useRef<HTMLInputElement | null>(null);
+  const clickToggledRef = useRef(false);
   // External rename trigger (⇧⌘P command palette → "Rename task"). The
   // palette can't reach into this row's local state, so it bumps a nonce on
   // the UI store; we start the inline rename when it targets us, then clear
@@ -3157,7 +3162,7 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
         data-sidebar-task-project-id={w.project_id}
         style={dragging ? { transform: `translateY(${dragTy}px)`, position: "relative", zIndex: 20 } : undefined}
         onPointerDown={onDragPointerDown ? (e) => onDragPointerDown(e, w) : undefined}
-        onClick={() => {
+        onClick={(e) => {
           // The click that trails a drop is not a selection.
           if (clickSuppressed?.current) { clickSuppressed.current = false; return; }
           setActive(w.id);
@@ -3175,8 +3180,22 @@ function TaskRow({ w, compact, dragging = false, dragTy = 0, onDragPointerDown, 
             // active task as a collapse toggle. The other modes
             // require the explicit chevron, which removed the "random
             // expand" feel users complained about.
-            if (isActive && expandMode === "click") setTaskCollapsed(w.id, !collapsed);
+            // The second click of a double-click is left to onDoubleClick.
+            if (e.detail <= 1) {
+              const togglesOnClick = isActive && expandMode === "click";
+              clickToggledRef.current = togglesOnClick;
+              if (togglesOnClick) setTaskCollapsed(w.id, !collapsed);
+            }
           }
+        }}
+        onDoubleClick={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest("button, input, a, [data-no-drag]")) return;
+          const hasTabs = terminalTabs.length > 0;
+          const alreadyToggled = clickToggledRef.current;
+          clickToggledRef.current = false;
+          if (taskRenaming !== null || !hasTabs || alreadyToggled) return;
+          setTaskCollapsed(w.id, !collapsed);
         }}
         // Right-click anywhere on the row opens the same actions menu as
         // the kebab button (which it anchors to).
