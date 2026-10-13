@@ -56,6 +56,18 @@ Do not drop `node_modules` from the default list to "fix" a slow create without 
 - Terminal text lighter than native: WebGL atlas rasterizes via Canvas 2D. Mitigation: `terminalFontWeight` pref, Medium (500) closes most of the gap.
 - `document.fonts.check()` lies in WKWebView — use canvas measurement against two baselines (monospace + serif) instead.
 
+## Editor feature invariants
+
+The Zed-like editor features (git change gutter, inlay hints, multibuffer) must cost nothing while the user types, scrolls or keeps many files open. The invariants are counts, not timings, per [perf-ci.md](perf-ci.md), and `src/components/task/editorSpeed.test.ts` pins them under fake timers with the outside calls injected:
+
+- A burst of N edits inside the debounce window sends one gutter request and one inlay request.
+- A hidden editor (`display:none` tab or pane) sends zero requests. Visibility comes from an IntersectionObserver (`src/lib/editor/viewVisibility.ts`), never polling. When the editor is shown again it sends one request, and only if the doc or `gitRevision` changed meanwhile.
+- Mount with `gitRevision` above 0 sends one gutter request. `EditorPane` skips the refresh effect when the view was built at the current revision.
+- Inlay decorations exist only for lines inside the requested range, even if the server answers with more.
+- The gutter request is the only whole-document `toString()` and runs at most once per debounce window. A source check fails if `inlayHints.ts`, `syntaxSelection.ts` or `zedKeymap.ts` gains one, or if `gitChangeGutterExt.ts` or `MultibufferPane.tsx` gains a second (the multibuffer one mirrors a single excerpt, not a file).
+
+Verified by removing the visibility gate from the gutter and watching the hidden-editor case go red.
+
 ## Measuring
 
 Two places, and the split is deliberate: **counts can gate a PR, timings

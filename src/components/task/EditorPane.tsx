@@ -199,6 +199,7 @@ export function EditorPane({ task, tab, active, onContent }: {
   // Git change gutter (prefs.editorGitGutter), reconfigured in place like blame.
   const gitGutterCompRef = useRef(new Compartment());
   const gitGutterOnRef = useRef<boolean | null>(null);
+  const gutterRevisionRef = useRef(0);
   // Soft wrap (prefs.editorWordWrap), reconfigured in place like blame.
   const wrapCompRef = useRef(new Compartment());
   const wrapOnRef = useRef<boolean | null>(null);
@@ -383,6 +384,7 @@ export function EditorPane({ task, tab, active, onContent }: {
         blameOnRef.current = usePrefs.getState().inlineBlame;
         gitGutterOnRef.current = usePrefs.getState().editorGitGutter;
         minimapOnRef.current = usePrefs.getState().editorMinimap;
+        gutterRevisionRef.current = useApp.getState().gitRevision[task.id] ?? 0;
         langIdRef.current = resolved.id;
         const lang = resolved.ext;
         // Persisted AFTER the guard and with nothing awaited behind it, so the
@@ -902,6 +904,9 @@ export function EditorPane({ task, tab, active, onContent }: {
 
   useEffect(() => {
     if (gitRevision === 0 || !editorGitGutter || !isTaskFile) return;
+    const alreadyCovered = gutterRevisionRef.current === gitRevision;
+    if (alreadyCovered) return;
+    gutterRevisionRef.current = gitRevision;
     viewRef.current?.dispatch({ effects: refreshGitGutter.of() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gitRevision, task.id, editorGitGutter, isTaskFile]);

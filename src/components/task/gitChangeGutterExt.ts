@@ -4,6 +4,8 @@ import { EditorView, GutterMarker, ViewPlugin, gutter } from "@codemirror/view";
 import type { ViewUpdate } from "@codemirror/view";
 import { taskGitLineChanges } from "@/lib/ipc";
 import type { LineChanges } from "@/lib/types";
+import { observeElementVisibility } from "@/lib/editor/viewVisibility";
+import type { ObserveVisibility } from "@/lib/editor/viewVisibility";
 
 export const GIT_GUTTER_DEBOUNCE_MS = 300;
 
@@ -81,27 +83,57 @@ export function gitGutterMarkers(state: EditorState): RangeSet<GutterMarker> {
   return state.field(markerField, false) ?? RangeSet.empty;
 }
 
-function requestPlugin(taskId: string, path: string) {
+/** The two outside calls the gutter makes, so a test can count them. */
+export interface GitGutterDeps {
+  fetchChanges: (taskId: string, path: string, content: string) => Promise<LineChanges>;
+  observeVisibility: ObserveVisibility;
+}
+
+const DEFAULT_DEPS: GitGutterDeps = {
+  fetchChanges: taskGitLineChanges,
+  observeVisibility: observeElementVisibility,
+};
+
+function requestPlugin(taskId: string, path: string, deps: GitGutterDeps) {
   return ViewPlugin.fromClass(class {
     private timer: number | null = null;
     private requestSeq = 0;
     private destroyed = false;
+    private isVisible = false;
+    private isStale = true;
+    private stopObserving: () => void;
 
     constructor(private view: EditorView) {
-      this.schedule(0);
+      this.stopObserving = deps.observeVisibility(view.dom, isVisible => this.setVisible(isVisible));
     }
 
     update(update: ViewUpdate) {
       const refreshRequested = update.transactions.some(tr => tr.effects.some(e => e.is(refreshGitGutter)));
 
-      if (refreshRequested) this.schedule(0);
-      else if (update.docChanged) this.schedule(GIT_GUTTER_DEBOUNCE_MS);
+      if (refreshRequested) this.markStale(0);
+      else if (update.docChanged) this.markStale(GIT_GUTTER_DEBOUNCE_MS);
     }
 
     destroy() {
       this.destroyed = true;
       this.requestSeq++;
+      this.stopObserving();
       if (this.timer !== null) window.clearTimeout(this.timer);
+    }
+
+    private setVisible(isVisible: boolean) {
+      this.isVisible = isVisible;
+
+      if (isVisible && this.isStale) this.schedule(0);
+      if (!isVisible && this.timer !== null) {
+        window.clearTimeout(this.timer);
+        this.timer = null;
+      }
+    }
+
+    private markStale(delay: number) {
+      this.isStale = true;
+      if (this.isVisible) this.schedule(delay);
     }
 
     private schedule(delay: number) {
@@ -115,10 +147,11 @@ function requestPlugin(taskId: string, path: string) {
     private request() {
       if (this.destroyed) return;
 
+      this.isStale = false;
       const sentDoc = this.view.state.doc;
       const seq = ++this.requestSeq;
 
-      taskGitLineChanges(taskId, path, sentDoc.toString())
+      deps.fetchChanges(taskId, path, sentDoc.toString())
         .then(changes => {
           const isSuperseded = seq !== this.requestSeq;
           if (this.destroyed || isSuperseded) return;
@@ -126,7 +159,7 @@ function requestPlugin(taskId: string, path: string) {
           const currentDoc = this.view.state.doc;
           const isSameDoc = currentDoc === sentDoc || currentDoc.eq(sentDoc);
           if (!isSameDoc) {
-            this.schedule(GIT_GUTTER_DEBOUNCE_MS);
+            this.markStale(GIT_GUTTER_DEBOUNCE_MS);
             return;
           }
 
@@ -137,13 +170,17 @@ function requestPlugin(taskId: string, path: string) {
   });
 }
 
-export function gitChangeGutterExtension(taskId: string, path: string): Extension {
+export function gitChangeGutterExtension(
+  taskId: string,
+  path: string,
+  deps: GitGutterDeps = DEFAULT_DEPS,
+): Extension {
   return [
     markerField,
     gutter({
       class: "cm-git-gutter",
       markers: view => view.state.field(markerField),
     }),
-    requestPlugin(taskId, path),
+    requestPlugin(taskId, path, deps),
   ];
 }
