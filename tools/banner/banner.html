@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>Termic+ banner</title>
+<!--
+  Source of docs/banner-light.png and docs/banner-dark.png. Colors are the
+  app's --color-bg, --color-fg, --color-fg-dim, --color-accent and
+  --color-bg-3 from src/index.css, light and dark. The wordmark cells are
+  copied from docs/termic-wordmark.svg. The .mark font-size is the drawn
+  wordmark height, so the phone legibility check measures what is seen.
+  Rerender with tools/banner/regenerate.sh (macOS only).
+-->
+<style>
+:root {
+  --banner-bg: #faf9f6;
+  --banner-ink: #1c1b1a;
+  --banner-muted: #55534f;
+  --banner-accent: #c25e3d;
+  --banner-rule: #ddd9d0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --banner-bg: #0c0c0c;
+    --banner-ink: #e8e6e2;
+    --banner-muted: #a8a6a2;
+    --banner-accent: #d97757;
+    --banner-rule: #282828;
+  }
+}
+
+html, body {
+  margin: 0;
+  background: transparent;
+}
+
+.banner {
+  position: relative;
+  width: 900px;
+  height: 300px;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--banner-bg);
+  border-bottom: 2px solid var(--banner-rule);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+}
+
+.mark {
+  font-size: 98px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.wordmark rect {
+  fill: var(--banner-ink);
+}
+
+.plus rect {
+  fill: var(--banner-accent);
+}
+
+.tagline {
+  margin: 0;
+  font-size: 36px;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--banner-muted);
+  letter-spacing: 0.01em;
+}
+</style>
+</head>
+<body>
+<div class="banner">
+  <div class="mark" data-text="Termic+" data-role="title" role="img" aria-label="Termic+">
+    <svg class="wordmark" viewBox="0 0 434 98" width="434" height="98"><rect x="8" y="8" width="10" height="10" rx="2"/><rect x="20" y="8" width="10" height="10" rx="2"/><rect x="32" y="8" width="10" height="10" rx="2"/><rect x="44" y="8" width="10" height="10" rx="2"/><rect x="56" y="8" width="10" height="10" rx="2"/><rect x="32" y="20" width="10" height="10" rx="2"/><rect x="32" y="32" width="10" height="10" rx="2"/><rect x="32" y="44" width="10" height="10" rx="2"/><rect x="32" y="56" width="10" height="10" rx="2"/><rect x="32" y="68" width="10" height="10" rx="2"/><rect x="32" y="80" width="10" height="10" rx="2"/><rect x="80" y="8" width="10" height="10" rx="2"/><rect x="92" y="8" width="10" height="10" rx="2"/><rect x="104" y="8" width="10" height="10" rx="2"/><rect x="116" y="8" width="10" height="10" rx="2"/><rect x="128" y="8" width="10" height="10" rx="2"/><rect x="80" y="20" width="10" height="10" rx="2"/><rect x="80" y="32" width="10" height="10" rx="2"/><rect x="80" y="44" width="10" height="10" rx="2"/><rect x="92" y="44" width="10" height="10" rx="2"/><rect x="104" y="44" width="10" height="10" rx="2"/><rect x="116" y="44" width="10" height="10" rx="2"/><rect x="80" y="56" width="10" height="10" rx="2"/><rect x="80" y="68" width="10" height="10" rx="2"/><rect x="80" y="80" width="10" height="10" rx="2"/><rect x="92" y="80" width="10" height="10" rx="2"/><rect x="104" y="80" width="10" height="10" rx="2"/><rect x="116" y="80" width="10" height="10" rx="2"/><rect x="128" y="80" width="10" height="10" rx="2"/><rect x="152" y="8" width="10" height="10" rx="2"/><rect x="164" y="8" width="10" height="10" rx="2"/><rect x="176" y="8" width="10" height="10" rx="2"/><rect x="188" y="8" width="10" height="10" rx="2"/><rect x="152" y="20" width="10" height="10" rx="2"/><rect x="200" y="20" width="10" height="10" rx="2"/><rect x="152" y="32" width="10" height="10" rx="2"/><rect x="200" y="32" width="10" height="10" rx="2"/><rect x="152" y="44" width="10" height="10" rx="2"/><rect x="164" y="44" width="10" height="10" rx="2"/><rect x="176" y="44" width="10" height="10" rx="2"/><rect x="188" y="44" width="10" height="10" rx="2"/><rect x="152" y="56" width="10" height="10" rx="2"/><rect x="176" y="56" width="10" height="10" rx="2"/><rect x="152" y="68" width="10" height="10" rx="2"/><rect x="188" y="68" width="10" height="10" rx="2"/><rect x="152" y="80" width="10" height="10" rx="2"/><rect x="200" y="80" width="10" height="10" rx="2"/><rect x="224" y="8" width="10" height="10" rx="2"/><rect x="272" y="8" width="10" height="10" rx="2"/><rect x="224" y="20" width="10" height="10" rx="2"/><rect x="236" y="20" width="10" height="10" rx="2"/><rect x="260" y="20" width="10" height="10" rx="2"/><rect x="272" y="20" width="10" height="10" rx="2"/><rect x="224" y="32" width="10" height="10" rx="2"/><rect x="248" y="32" width="10" height="10" rx="2"/><rect x="272" y="32" width="10" height="10" rx="2"/><rect x="224" y="44" width="10" height="10" rx="2"/><rect x="248" y="44" width="10" height="10" rx="2"/><rect x="272" y="44" width="10" height="10" rx="2"/><rect x="224" y="56" width="10" height="10" rx="2"/><rect x="272" y="56" width="10" height="10" rx="2"/><rect x="224" y="68" width="10" height="10" rx="2"/><rect x="272" y="68" width="10" height="10" rx="2"/><rect x="224" y="80" width="10" height="10" rx="2"/><rect x="272" y="80" width="10" height="10" rx="2"/><rect x="296" y="8" width="10" height="10" rx="2"/><rect x="308" y="8" width="10" height="10" rx="2"/><rect x="320" y="8" width="10" height="10" rx="2"/><rect x="332" y="8" width="10" height="10" rx="2"/><rect x="344" y="8" width="10" height="10" rx="2"/><rect x="320" y="20" width="10" height="10" rx="2"/><rect x="320" y="32" width="10" height="10" rx="2"/><rect x="320" y="44" width="10" height="10" rx="2"/><rect x="320" y="56" width="10" height="10" rx="2"/><rect x="320" y="68" width="10" height="10" rx="2"/><rect x="296" y="80" width="10" height="10" rx="2"/><rect x="308" y="80" width="10" height="10" rx="2"/><rect x="320" y="80" width="10" height="10" rx="2"/><rect x="332" y="80" width="10" height="10" rx="2"/><rect x="344" y="80" width="10" height="10" rx="2"/><rect x="380" y="8" width="10" height="10" rx="2"/><rect x="392" y="8" width="10" height="10" rx="2"/><rect x="404" y="8" width="10" height="10" rx="2"/><rect x="416" y="8" width="10" height="10" rx="2"/><rect x="368" y="20" width="10" height="10" rx="2"/><rect x="368" y="32" width="10" height="10" rx="2"/><rect x="368" y="44" width="10" height="10" rx="2"/><rect x="368" y="56" width="10" height="10" rx="2"/><rect x="368" y="68" width="10" height="10" rx="2"/><rect x="380" y="80" width="10" height="10" rx="2"/><rect x="392" y="80" width="10" height="10" rx="2"/><rect x="404" y="80" width="10" height="10" rx="2"/><rect x="416" y="80" width="10" height="10" rx="2"/></svg>
+    <svg class="plus" viewBox="0 0 62 62" width="62" height="62"><rect x="26" y="8" width="10" height="10" rx="2"/><rect x="26" y="20" width="10" height="10" rx="2"/><rect x="2" y="32" width="10" height="10" rx="2"/><rect x="14" y="32" width="10" height="10" rx="2"/><rect x="26" y="32" width="10" height="10" rx="2"/><rect x="38" y="32" width="10" height="10" rx="2"/><rect x="50" y="32" width="10" height="10" rx="2"/><rect x="26" y="44" width="10" height="10" rx="2"/><rect x="26" y="56" width="10" height="4" rx="1" opacity="0"/></svg>
+  </div>
+  <p class="tagline" data-text data-role="tagline">A better home for your agents</p>
+</div>
+</body>
+</html>
