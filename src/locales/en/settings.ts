@@ -631,6 +631,18 @@ export default {
         label: "File structure",
         hint: "What is in this file, filterable, without scrolling it.",
       },
+      renameSymbol: {
+        label: "Rename symbol",
+        hint: "In the editor. Renames the symbol under the cursor everywhere it is used, in files that are not open too.",
+      },
+      formatDocument: {
+        label: "Format document",
+        hint: "In the editor. Formats the file with the language server.",
+      },
+      codeActions: {
+        label: "Code actions",
+        hint: "In the editor. Quick fixes and refactorings the language server offers at the cursor.",
+      },
       navForward: { label: "Forward", hint: "Retrace a Back." },
       taskPrevArrow: {
         label: "Pane up / previous task",

@@ -109,7 +109,8 @@ readline's Alt+B / F / D).
 
 The five editor jumps (`go-to-definition` F12, `find-usages` ⇧F12,
 `go-to-implementation` ⌥⇧B, `go-to-type-definition` ⌥⇧T, `file-structure` ⌘F12)
-are ordinary `SHORTCUT_DEFS` entries, so they appear in the help sheet and in
+and the three refactoring commands (`rename-symbol` F2, `format-document` ⌥⇧F,
+`code-actions` ⌘.) are ordinary `SHORTCUT_DEFS` entries, so they appear in the help sheet and in
 Settings → Shortcuts like anything else. They were five literal key strings in
 a CodeMirror keymap: they worked for whoever already knew F12, could not be
 found, and could not be changed.

@@ -340,7 +340,7 @@ describe("code intelligence", () => {
     // case body, so any earlier throw left them in the shared fixture repo and
     // failed git.e2e's clean-tree assertion on the NEXT run.
     for (const rel of [
-      "navme.ts", "navback.ts", "helper.py", "lonely.ts", "Makefile", ".fake-lsp.json",
+      "navme.ts", "navback.ts", "helper.py", "lonely.ts", "Makefile", ".fake-lsp.json", "rename.ts",
     ]) {
       rmSync(path.join(root, rel), { force: true });
     }
@@ -1288,6 +1288,150 @@ describe("code intelligence", () => {
       timeout: 5_000,
       timeoutMsg: "the chip did not go back to the fuller name",
     });
+  });
+
+  // Refactoring from the keyboard: rename, format, code actions. The fixture
+  // answers each with something observable, and rename names a SECOND file
+  // (nested/rename.ts) that no editor ever opens, which is the case the
+  // client's own rename drops without a word.
+  const refactorSource = "export const answer = 42;\n";
+
+  const editorBuffer = (id: string) =>
+    browser.execute((tid) => {
+      const dom = document.querySelector(`[data-task-id="${tid}"] .cm-editor`) as
+        (HTMLElement & { __cmView?: any }) | null;
+      return dom!.__cmView.state.doc.toString() as string;
+    }, id);
+
+  /** Put the buffer back to `text` and the cursor at `at`, then focus it. */
+  const resetEditor = (id: string, text: string, at: number) =>
+    browser.execute((tid, body, pos) => {
+      const dom = document.querySelector(`[data-task-id="${tid}"] .cm-editor`) as
+        (HTMLElement & { __cmView?: any }) | null;
+      const view = dom!.__cmView;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: body },
+        selection: { anchor: pos },
+      });
+      view.contentDOM.focus();
+    }, id, text, at);
+
+  /** A real keydown on the editor's content, which is where the CodeMirror
+   *  keymap listens. `mod` is Cmd on a Mac and Ctrl elsewhere. */
+  const pressKey = (id: string, init: { key: string; keyCode: number; mod?: boolean; alt?: boolean; shift?: boolean }) =>
+    browser.execute((tid, spec) => {
+      const dom = document.querySelector(`[data-task-id="${tid}"] .cm-editor`) as HTMLElement;
+      const isMac = /^(mac|darwin)/i.test(navigator.platform);
+      dom.querySelector(".cm-content")!.dispatchEvent(new KeyboardEvent("keydown", {
+        key: spec.key, keyCode: spec.keyCode, altKey: !!spec.alt, shiftKey: !!spec.shift,
+        [isMac ? "metaKey" : "ctrlKey"]: !!spec.mod, bubbles: true, cancelable: true,
+      } as KeyboardEventInit));
+    }, id, init);
+
+  const waitBuffer = (id: string, check: (text: string) => boolean, why: string) =>
+    browser.waitUntil(async () => check(await editorBuffer(id)), {
+      timeout: 15_000, timeoutMsg: why,
+    });
+
+  const renameTo = async (id: string, name: string) => {
+    await pressKey(id, { key: "F2", keyCode: 113 });
+    await waitVisible(`[data-task-id="${id}"] .cm-lsp-rename-panel input[name=name]`, 10_000);
+    await browser.execute((tid, value) => {
+      const input = document.querySelector(
+        `[data-task-id="${tid}"] .cm-lsp-rename-panel input[name=name]`) as HTMLInputElement;
+      input.value = value;
+      input.form!.requestSubmit();
+    }, id, name);
+  };
+
+  const prepareRefactorFiles = async () => {
+    writeFileSync(path.join(root, "rename.ts"), refactorSource);
+    mkdirSync(path.join(root, "nested"), { recursive: true });
+    writeFileSync(path.join(root, "nested", "rename.ts"), "export const answer = 7;\n");
+    await openSettled(taskId, "rename.ts", "TypeScript");
+    await armGrant(root, taskId);
+    await waitVisible(`[data-task-id="${taskId}"] .cm-lintRange`, 30_000);
+  };
+
+  it("renames a symbol across files, writing the ones nothing has open", async () => {
+    await prepareRefactorFiles();
+    await resetEditor(taskId, refactorSource, 15);
+    await renameTo(taskId, "renamed");
+
+    await waitBuffer(taskId, text => text === "export const renamed = 42;\n",
+      "the open file did not take the rename");
+    await browser.waitUntil(
+      () => readFileSync(path.join(root, "nested", "rename.ts"), "utf8") === "export const renamed = 7;\n",
+      { timeout: 15_000, timeoutMsg: "the file with no editor was not written to disk" });
+
+    const dirty = await browser.execute((id) => {
+      const app = window.__termic!.useApp.getState();
+      const tab = (app.tabs[id] ?? []).find((t: any) => t.id === app.activeTab[id]);
+      return !!tab?.dirty;
+    }, taskId);
+    expect(dirty).toBe(true);
+    await snap("rename-across-files");
+  });
+
+  it("names the file when a rename cannot be written", async function () {
+    if (process.platform === "win32") this.skip();
+    await prepareRefactorFiles();
+    await resetEditor(taskId, refactorSource, 15);
+    writeFileSync(path.join(root, "nested", "rename.ts"), "export const answer = 7;\n");
+    await browser.execute(() => window.__termic!.useUI.setState({ toasts: [] }));
+    // The write is atomic (a temp file beside the target, then a swap), so it
+    // is the DIRECTORY that has to refuse.
+    chmodSync(path.join(root, "nested"), 0o555);
+    try {
+      await renameTo(taskId, "refused");
+      await browser.waitUntil(async () => await browser.execute(() =>
+        window.__termic!.useUI.getState().toasts.some((t: any) =>
+          t.kind === "error" && String(t.msg).includes("nested/rename.ts"))), {
+        timeout: 15_000, timeoutMsg: "a file that failed to write was not named in an error toast",
+      });
+    } finally {
+      chmodSync(path.join(root, "nested"), 0o755);
+    }
+    expect(readFileSync(path.join(root, "nested", "rename.ts"), "utf8")).toBe("export const answer = 7;\n");
+  });
+
+  it("formats the document through the server", async () => {
+    await prepareRefactorFiles();
+    await resetEditor(taskId, refactorSource, 15);
+    await pressKey(taskId, { key: "F", keyCode: 70, alt: true, shift: true });
+    await waitBuffer(taskId, text => text.startsWith("// formatted by fake-lsp\n"),
+      "Shift-Alt-F did not format the document");
+  });
+
+  it("lists code actions at the cursor, applies the chosen one, and closes on Escape", async () => {
+    await prepareRefactorFiles();
+    // Offset 1 sits inside the fixture's diagnostic (columns 0-3 of line 1),
+    // so the request has to carry it.
+    await resetEditor(taskId, refactorSource, 1);
+    await pressKey(taskId, { key: ".", keyCode: 190, mod: true });
+    await waitVisible(`[data-task-id="${taskId}"] .cm-lsp-actions-row`, 10_000);
+
+    const titles = await browser.execute((id) =>
+      [...document.querySelectorAll(`[data-task-id="${id}"] .cm-lsp-actions-title`)]
+        .map(el => (el as HTMLElement).textContent), taskId) as string[];
+    // The preferred action leads whatever order the server sent.
+    expect(titles).toEqual(["Fake quick fix", "Fake refactor"]);
+    await snap("code-actions-list");
+
+    await browser.waitUntil(() => {
+      const seen = JSON.parse(readFileSync(path.join(root, ".fake-lsp.json"), "utf8"));
+      return seen.codeActionContext?.diagnostics?.[0]?.message === "fake-lsp saw this file";
+    }, { timeout: 10_000, timeoutMsg: "the overlapping diagnostic did not reach the server" });
+
+    await pressKey(taskId, { key: "Escape", keyCode: 27 });
+    await waitGone(`[data-task-id="${taskId}"] .cm-lsp-actions-row`, 5_000);
+
+    await pressKey(taskId, { key: ".", keyCode: 190, mod: true });
+    await waitVisible(`[data-task-id="${taskId}"] .cm-lsp-actions-row`, 10_000);
+    await pressKey(taskId, { key: "Enter", keyCode: 13 });
+    await waitBuffer(taskId, text => text === "export const answer = 99;\n",
+      "Enter did not apply the chosen action's edit");
+    await waitGone(`[data-task-id="${taskId}"] .cm-lsp-actions-row`, 5_000);
   });
 
   it("stops the server when the grant is dropped", async () => {

@@ -138,6 +138,16 @@ export default {
   copySuffix: " (copy)",
 
   lsp: {
+    whatRename: "Rename",
+    whatCodeAction: "Code action",
+    editNotApplied: "{{what}} did not change {{file}}: {{reason}}",
+    reasonUnreadable: "could not read the file",
+    reasonFileOperation: "file operations are not supported",
+    reasonOutsideCheckout: "the file is outside every task checkout",
+    noCodeActionSupport: "This language server offers no code actions",
+    noCodeActions: "No code actions available here",
+    codeActionsFailed: "Code actions failed: {{error}}",
+    codeActionFailed: "Code action failed: {{error}}",
     downloadTitle: "Download {{label}}?",
     downloadConfirm: "Download",
     installFailed: "Could not install {{label}}: {{error}}",

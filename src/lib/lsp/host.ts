@@ -218,7 +218,28 @@ export function acquireClient(root: string, server: string): {
           // blocks (pylsp waits ~1s per linter per pass). Our Rust host
           // answers that request before the webview ever sees it, and
           // `$/progress` above renders the result.
-          clientCapabilities: { window: { workDoneProgress: true } },
+          //
+          // And code actions as full CodeActions with their edit inline. A
+          // server told nothing about them answers with bare Commands, and a
+          // command only does anything if the server can then call back into
+          // the editor, which termic does not support.
+          clientCapabilities: {
+            window: { workDoneProgress: true },
+            textDocument: {
+              codeAction: {
+                codeActionLiteralSupport: {
+                  codeActionKind: {
+                    valueSet: ["quickfix", "refactor", "refactor.extract", "refactor.inline",
+                      "refactor.rewrite", "source", "source.organizeImports", "source.fixAll"],
+                  },
+                },
+                isPreferredSupport: true,
+                disabledSupport: true,
+                dataSupport: true,
+                resolveSupport: { properties: ["edit"] },
+              },
+            },
+          },
         },
       ],
       // Tried before the extensions' handlers, so this replaces the built-in
