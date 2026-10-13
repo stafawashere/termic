@@ -238,6 +238,7 @@ export function acquireClient(root: string, server: string): {
                 dataSupport: true,
                 resolveSupport: { properties: ["edit"] },
               },
+              inlayHint: { dynamicRegistration: false },
             },
           },
         },
