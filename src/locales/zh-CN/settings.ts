@@ -450,6 +450,10 @@ export default {
       label: "内联 git blame",
       hint: "在代码之后显示光标所在行的最后修改者。点击可打开该提交的差异。",
     },
+    gitGutter: {
+      label: "Git 变更标记栏",
+      hint: "在编辑器边栏中标出相对于 HEAD 新增、修改和删除的行。命令面板中也有此开关。",
+    },
     intel: {
       desc: "跳转到定义、查找引用、文件大纲和悬停类型提示，使用与完整 IDE 相同的工具。",
       descErrors: " 类型错误也会被下划线标出。",

@@ -120,6 +120,7 @@ export default {
       splitDown: "Split pane down",
       setSyntax: "Set syntax…",
       toggleInlineBlame: "Toggle inline git blame",
+      toggleGitGutter: "Toggle Git Gutter",
       renameSymbol: "Rename symbol",
       formatDocument: "Format document",
       codeActions: "Code actions",

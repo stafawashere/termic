@@ -4636,3 +4636,31 @@ button.titlebar-title[aria-expanded="true"] {
     color: var(--sidebar-ink-strong);
   }
 }
+
+.cm-git-gutter {
+  width: 4px;
+  margin-right: 2px;
+}
+
+.cm-git-gutter .cm-gutterElement {
+  position: relative;
+  padding: 0;
+}
+
+.cm-git-gutter .cm-git-gutter-added {
+  background: var(--ui-git-added);
+}
+
+.cm-git-gutter .cm-git-gutter-modified {
+  background: var(--ui-git-modified);
+}
+
+.cm-git-gutter .cm-git-gutter-deleted::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -3px;
+  border-left: 5px solid var(--ui-git-deleted);
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+}

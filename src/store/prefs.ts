@@ -74,6 +74,7 @@ const LS_TERMINAL_SIZE = "terminalFontSize";
 const LS_EDITOR_SIZE   = "editorFontSize";
 const LS_LIGATURES     = "codeLigatures";
 const LS_INLINE_BLAME  = "inlineBlame";
+const LS_EDITOR_GIT_GUTTER = "editorGitGutter";
 const LS_EDITOR_WORD_WRAP = "editorWordWrap";
 const LS_EDITOR_KEYMAP = "editorKeymap";
 const LS_CODE_NAV      = "codeIntelligence";
@@ -786,6 +787,9 @@ interface PrefsState {
    *  Deliberately not a whole-file blame column either: see inlineBlameExt.ts
    *  for why every-line annotation is the expensive shape. */
   inlineBlame: boolean;
+  /** Mark lines added, modified or deleted against HEAD in the editor
+   *  gutter. ON by default; see gitChangeGutterExt.ts. */
+  editorGitGutter: boolean;
   /** Soft-wrap long lines in the editor instead of scrolling sideways. Off by
    *  default, like VS Code's `editor.wordWrap`. Display only: the file on disk
    *  is untouched. No toolbar control, on purpose: Settings and the command
@@ -1015,6 +1019,7 @@ interface PrefsState {
   nudgeUiScale:       (dir: 1 | -1) => void;
   setCodeLigatures:   (v: boolean) => void;
   setInlineBlame:     (v: boolean) => void;
+  setEditorGitGutter: (v: boolean) => void;
   setEditorWordWrap:  (v: boolean) => void;
   toggleEditorWordWrap: () => void;
   setEditorKeymap: (v: EditorKeymap) => void;
@@ -1029,6 +1034,7 @@ interface PrefsState {
   setAgentFooterShown: (agentId: string, part: AgentFooterPart, shown: boolean) => void;
   setConfirmBeforeCodeIntel: (v: boolean) => void;
   toggleInlineBlame:  () => void;
+  toggleEditorGitGutter: () => void;
   setShowAllInstalledFonts: (v: boolean) => void;
   /** Restore every Appearance-section pref (fonts, sizes, weight,
    *  letter-spacing, ligatures) to `APPEARANCE_DEFAULTS`. Theme is
@@ -1220,6 +1226,7 @@ export const APPEARANCE_DEFAULTS = {
   uiScale:               100,
   codeLigatures:         true,
   inlineBlame:           false,
+  editorGitGutter:       true,
   editorWordWrap:        false,
   editorKeymap:          "default" as EditorKeymap,
   codeIntelligence:        true,
@@ -1305,6 +1312,7 @@ function readStoredPrefs() {
   const initialUiScale      = clampUiScale(lsGetNum(LS_UI_SCALE, APPEARANCE_DEFAULTS.uiScale));
   const initialLigatures    = lsGetBool(LS_LIGATURES, APPEARANCE_DEFAULTS.codeLigatures);
   const initialInlineBlame  = lsGetBool(LS_INLINE_BLAME, APPEARANCE_DEFAULTS.inlineBlame);
+  const initialEditorGitGutter = lsGetBool(LS_EDITOR_GIT_GUTTER, APPEARANCE_DEFAULTS.editorGitGutter);
   const initialWordWrap     = lsGetBool(LS_EDITOR_WORD_WRAP, APPEARANCE_DEFAULTS.editorWordWrap);
   const initialEditorKeymap: EditorKeymap = lsGet(LS_EDITOR_KEYMAP, "default") === "zed" ? "zed" : "default";
   const initialCodeNav      = lsGetBool(LS_CODE_NAV, APPEARANCE_DEFAULTS.codeIntelligence);
@@ -1486,6 +1494,7 @@ function readStoredPrefs() {
     uiScale: initialUiScale,
     codeLigatures: initialLigatures,
     inlineBlame: initialInlineBlame,
+    editorGitGutter: initialEditorGitGutter,
     editorWordWrap: initialWordWrap,
     editorKeymap: initialEditorKeymap,
     codeIntelligence: initialCodeNav,
@@ -1638,6 +1647,11 @@ export const usePrefs = create<PrefsState>(set => ({
     try { localStorage.setItem(LS_INLINE_BLAME, v ? "1" : "0"); } catch {}
     set({ inlineBlame: v });
   },
+  setEditorGitGutter: (v) => {
+    if (usePrefs.getState().editorGitGutter === v) return;
+    try { localStorage.setItem(LS_EDITOR_GIT_GUTTER, v ? "1" : "0"); } catch {}
+    set({ editorGitGutter: v });
+  },
   setEditorWordWrap: (v) => {
     if (usePrefs.getState().editorWordWrap === v) return;
     try { localStorage.setItem(LS_EDITOR_WORD_WRAP, v ? "1" : "0"); } catch {}
@@ -1708,6 +1722,9 @@ export const usePrefs = create<PrefsState>(set => ({
   toggleInlineBlame: () => {
     usePrefs.getState().setInlineBlame(!usePrefs.getState().inlineBlame);
   },
+  toggleEditorGitGutter: () => {
+    usePrefs.getState().setEditorGitGutter(!usePrefs.getState().editorGitGutter);
+  },
   setShowAllInstalledFonts: (v) => {
     try { localStorage.setItem(LS_SHOW_ALL_FONTS, v ? "1" : "0"); } catch {}
     set({ showAllInstalledFonts: v });
@@ -1728,6 +1745,7 @@ export const usePrefs = create<PrefsState>(set => ({
     s.setUiScale(d.uiScale);
     s.setCodeLigatures(d.codeLigatures);
     s.setInlineBlame(d.inlineBlame);
+    s.setEditorGitGutter(d.editorGitGutter);
     s.setEditorWordWrap(d.editorWordWrap);
     s.setEditorKeymap(d.editorKeymap);
     s.setCodeIntelligence(d.codeIntelligence);

@@ -59,6 +59,7 @@ export const PREF_KEYS: readonly PrefKey[] = [
   { key: "editorKeymap", scoped: false, class: "sync" },
   { key: "codeLigatures", scoped: false, class: "sync" },
   { key: "inlineBlame", scoped: false, class: "sync" },
+  { key: "editorGitGutter", scoped: false, class: "sync" },
   { key: "showAllInstalledFonts", scoped: false, class: "sync" },
   { key: "splitPaneDim", scoped: false, class: "sync" },
   { key: "splitPaneDimAmount", scoped: false, class: "sync" },

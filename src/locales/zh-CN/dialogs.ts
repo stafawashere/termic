@@ -119,6 +119,7 @@ export default {
       splitDown: "向下分屏",
       setSyntax: "设置语法…",
       toggleInlineBlame: "切换行内 git blame",
+      toggleGitGutter: "切换 Git 变更标记栏",
       renameSymbol: "重命名符号",
       formatDocument: "格式化文档",
       codeActions: "代码操作",
