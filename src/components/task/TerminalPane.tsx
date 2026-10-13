@@ -69,11 +69,12 @@ import { SudoTouchIdBanner } from "@/components/task/SudoTouchIdBanner";
 import { TerminalFindBar } from "@/components/task/TerminalFindBar";
 import { isTerminalCloseCombo, isTerminalFindCombo } from "@/lib/terminalFind";
 import * as ipc from "@/lib/ipc";
+import { resolvePtyMount, replayRing, resetReplay } from "@/lib/ptyMount";
 import { maybeRebuildDockerImageForLaunch } from "@/lib/dockerDailyRebuild";
 import { commandShell, loginShell, loginShellArgs } from "@/lib/loginShell";
 import { TERMINAL_FONT_WEIGHT, TERMINAL_FONT_WEIGHT_BOLD, TERMINAL_LINE_HEIGHT } from "@/lib/terminalCell";
 import { usePrefs, useResolvedThemeFull, currentTerminalStack, currentTerminalTheme, currentColorFgBg, currentMinimumContrastRatio } from "@/store/prefs";
-import { spawnArgsForCli, spawnCommandForCli, tryToggleYoloLive, envForCli, agentDisplayName, cliSupportsIdSession, cliSupportsCaptureResume, postLaunchCaptureForCli, decideResume, decideSpawnOrAttach, spawnResumeShape, resumeIdArgsForCli, resumePickerArgsForCli, workDoneCapable, terminalLaunchCommand, isTerminalCli, classifyAgentTitle, compileSignals, hasPendingWork, notificationWantsAttention, PENDING_TAIL_ROWS, STICKY_DONE_MS, ATTENTION_ECHO_MS, builtinBaseId, BUILTIN_OUTPUT_SIGNALS, resolveAgent } from "@/lib/agents";
+import { spawnArgsForCli, spawnCommandForCli, tryToggleYoloLive, envForCli, agentDisplayName, cliSupportsIdSession, cliSupportsCaptureResume, postLaunchCaptureForCli, decideResume, spawnResumeShape, resumeIdArgsForCli, resumePickerArgsForCli, workDoneCapable, terminalLaunchCommand, isTerminalCli, classifyAgentTitle, compileSignals, hasPendingWork, notificationWantsAttention, PENDING_TAIL_ROWS, STICKY_DONE_MS, ATTENTION_ECHO_MS, builtinBaseId, BUILTIN_OUTPUT_SIGNALS, resolveAgent } from "@/lib/agents";
 import { recordTitle, noteSubmit, noteDone } from "@/lib/agentSignalLog";
 import { MessageQueueButton } from "./MessageQueueButton";
 import { ReviewCommentsBar } from "./ReviewCommentsBar";
@@ -1074,6 +1075,7 @@ const captureArmedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    resetReplay(replayingRef);
     const host = hostRef.current;
     if (!host) return;
 
@@ -2784,21 +2786,18 @@ const captureArmedRef = useRef(false);
         // reattached rather than respawned. Asked before anything below runs,
         // because none of it (resume, Docker refresh, spawn) applies to a
         // process that never stopped.
-        const respawn = hadPtyRef.current;
-        hadPtyRef.current = true;
-        const live = isAgent && !respawn
-          ? await ipc.ptyDaemonFind(task.id, tab.id).catch(() => null)
-          : null;
-        if (cancelled) return;
-        const mountPlan = decideSpawnOrAttach({ isAgent, respawn, live });
-        let attached: ipc.PtyAttachResult | null = null;
-        if (mountPlan.kind === "attach") {
-          attached = await ipc.ptyDaemonAttach(mountPlan.id, rows, cols).catch(e => {
+        const mount = await resolvePtyMount({
+          isAgent,
+          hadPty: hadPtyRef,
+          isCancelled: () => cancelled,
+          find: () => ipc.ptyDaemonFind(task.id, tab.id).catch(() => null),
+          attach: (id) => ipc.ptyDaemonAttach(id, rows, cols).catch(e => {
             dbg("attach", `failed, spawning instead: ${String(e)}`);
             return null;
-          });
-          if (cancelled) return;
-        }
+          }),
+        });
+        if (!mount) return;
+        const attached = mount.attached;
         // The per-tab resume decision (resumeOverride / useIdResume /
         // sessionUuid / resumeKnown / shouldResume) was resolved
         // synchronously ABOVE, before the rAF await, alongside isPrimaryTab
@@ -3145,8 +3144,7 @@ const captureArmedRef = useRef(false);
         // waits in Rust until `ptyAttached` below, so nothing interleaves.
         if (attached?.snapshot) {
           const ring = Uint8Array.from(atob(attached.snapshot), c => c.charCodeAt(0));
-          replayingRef.current = true;
-          term.write(ring, () => { replayingRef.current = false; });
+          replayRing(term, replayingRef, ring);
         }
         const unlistenData = await ipc.onPtyData(ptyId, (u8) => {
           term.write(u8);
@@ -3540,6 +3538,7 @@ const captureArmedRef = useRef(false);
 
     return () => {
       cancelled = true;
+      resetReplay(replayingRef);
       ro.disconnect();
       // This PTY's conversation is over (closed, or restarted into a new one),
       // so its context reading describes nothing any more.
