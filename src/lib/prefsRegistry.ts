@@ -112,6 +112,8 @@ export const PREF_KEYS: readonly PrefKey[] = [
   { key: "boardArchiveLimitMode", scoped: true, class: "sync" },
   { key: "boardArchiveLimit", scoped: true, class: "sync" },
   { key: "boardPinnedColumns", scoped: true, class: "sync" },
+  { key: "workspaces", scoped: true, class: "local", reason: "groups this machine's project ids, which differ per machine" },
+  { key: "activeWorkspace", scoped: true, class: "local", reason: "which workspace this window shows, UI state" },
   { key: "subagentsEnabled", scoped: true, class: "sync" },
   { key: "subagentTypeFilter", scoped: true, class: "sync" },
   { key: "subagentRetention", scoped: true, class: "sync" },
