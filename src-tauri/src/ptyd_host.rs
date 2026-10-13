@@ -45,7 +45,8 @@ struct Route {
     /// A fresh spawn's ring snapshot is output nobody has seen yet, so it goes
     /// down the pump like live output. A reattach's snapshot is handed to the
     /// webview to replay instead, and must not be emitted a second time.
-    snapshot_to_pump: bool,
+    /// Cleared on reconnect, when the tab has already shown that output.
+    snapshot_to_pump: AtomicBool,
 }
 
 static ROUTES: Mutex<Option<HashMap<String, Arc<Route>>>> = Mutex::new(None);
@@ -91,7 +92,7 @@ impl PtydEvents for AppEvents {
 
     fn snapshot(&self, id: &str, bytes: &[u8]) {
         let Some(route) = route(id) else { return };
-        if route.snapshot_to_pump {
+        if route.snapshot_to_pump.load(Ordering::Acquire) {
             route.out_bytes.fetch_add(bytes.len() as u64, Ordering::Relaxed);
             route.pump.push(bytes);
             if let Some(feed) = &route.feed {
@@ -135,11 +136,61 @@ impl PtydEvents for AppEvents {
     fn disconnected(&self) {
         dlog("[ptyd] connection lost");
         CLIENT.lock().take();
-        let ids: Vec<String> = ROUTES.lock().as_ref().map(|m| m.keys().cloned().collect()).unwrap_or_default();
-        for id in ids {
-            self.exit(&id, None);
+        // Losing the socket does not mean the daemon died. Telling every tab
+        // its agent exited would make the next mount spawn a second agent
+        // beside the one still running, so reconnect first and only exit the
+        // routes the daemon no longer holds.
+        let app = self.app.clone();
+        std::thread::spawn(move || reconnect(&app));
+    }
+}
+
+fn route_ids() -> Vec<String> {
+    ROUTES.lock().as_ref().map(|m| m.keys().cloned().collect()).unwrap_or_default()
+}
+
+/// Which adopted routes survive a reconnect: those the daemon still lists as
+/// alive. `None` rows means no daemon answered, so nothing survives.
+fn split_after_reconnect(route_ids: Vec<String>, rows: Option<&[Value]>) -> (Vec<String>, Vec<String>) {
+    let Some(rows) = rows else { return (Vec::new(), route_ids) };
+    let alive: HashSet<&str> = rows
+        .iter()
+        .filter(|row| row["alive"].as_bool() == Some(true))
+        .filter_map(|row| row["id"].as_str())
+        .collect();
+    route_ids.into_iter().partition(|id| alive.contains(id.as_str()))
+}
+
+fn reconnect(app: &AppHandle) {
+    let listed = connect_existing(app).and_then(|client| client.list().ok().map(|rows| (client, rows)));
+    let (keep, gone) = split_after_reconnect(route_ids(), listed.as_ref().map(|(_, rows)| rows.as_slice()));
+    let events = AppEvents { app: app.clone() };
+    for id in &gone {
+        events.exit(id, None);
+    }
+    let Some((client, _)) = listed else { return };
+    for id in keep {
+        if let Err(e) = resubscribe(app, &client, &id) {
+            dlog(&format!("[ptyd] resubscribe {id} failed: {e}"));
+            events.exit(&id, None);
         }
     }
+}
+
+/// Point an adopted PTY at the new connection. The tab already shows the
+/// ring, so the snapshot only seeds the feed; output the daemon sent while
+/// the socket was down is not replayed.
+fn resubscribe(app: &AppHandle, client: &Arc<PtydClient>, id: &str) -> Result<(), String> {
+    let Some(existing) = route(id) else { return Ok(()) };
+    existing.snapshot_to_pump.store(false, Ordering::Release);
+    if let Some(slot) = app.state::<PtyManager>().inner.lock().get_mut(id) {
+        let writer: Box<dyn Write + Send> = Box::new(DaemonWriter { client: client.clone(), id: id.to_string() });
+        *slot.writer.lock() = writer;
+        slot.daemon = Some(client.clone());
+    }
+    client.subscribe(id)?;
+    dlog(&format!("[ptyd] reattached {id} after reconnect"));
+    Ok(())
 }
 
 /// The live connection, without starting anything.
@@ -414,7 +465,7 @@ fn register(
             window,
             task_id: meta.task_id.clone(),
             pid,
-            snapshot_to_pump: fresh,
+            snapshot_to_pump: AtomicBool::new(fresh),
         }),
     );
     pump.spawn_flusher(sink, Duration::ZERO);
@@ -453,10 +504,17 @@ pub(crate) fn spawn(
     meta: &PtyMeta,
     window: Option<String>,
 ) -> Result<Option<Option<u32>>, String> {
-    let Some(client) = connected() else {
+    // Not `connected()`: right after a lost connection CLIENT is empty while
+    // the daemon still runs this tab's agent, and a local spawn here would be
+    // a second agent beside it.
+    let Some(client) = connect_existing(app) else {
         warm(app);
         return Ok(None);
     };
+    let listed = client.list().ok();
+    if let Some(running) = duplicate_of(listed.as_deref(), meta, was_killed) {
+        return Err(format!("this tab's agent is still running in the pty daemon ({running}); reopen the tab to attach"));
+    }
     let spec = spec_from(cmd, id, rows, cols, sudo_watch, meta);
     let pid = client.spawn(&spec)?;
     register(app, &client, id, pid, meta, window, true);
@@ -497,6 +555,18 @@ pub(crate) fn find(app: &AppHandle, task_id: &str, tab_id: &str) -> Option<LiveP
     let client = connect_existing(app)?;
     let rows = client.list().ok()?;
     live_for_tab(&rows, task_id, tab_id, was_killed)
+}
+
+/// The live daemon PTY a spawn with `meta` would duplicate, if any.
+fn duplicate_of(rows: Option<&[Value]>, meta: &PtyMeta, killed: impl Fn(&str) -> bool) -> Option<String> {
+    let rows = rows?;
+    let task_id = meta.role_task_id.as_deref()?;
+    let tab_id = meta.tab_id.as_deref()?;
+    let is_agent = meta.role_kind.as_deref() == Some("agent");
+    if !is_agent {
+        return None;
+    }
+    live_for_tab(rows, task_id, tab_id, killed).map(|live| live.id)
 }
 
 fn live_for_tab(rows: &[Value], task_id: &str, tab_id: &str, killed: impl Fn(&str) -> bool) -> Option<LivePty> {
@@ -568,13 +638,43 @@ pub(crate) fn kill(client: Arc<PtydClient>, id: String) {
     });
 }
 
-/// Kill every PTY the daemon holds (the quit prompt's "Stop agents").
+/// Kill every PTY the daemon holds: quitting with "Keep agents running" off.
 pub(crate) fn kill_all(app: &AppHandle) {
     let Some(client) = connect_existing(app) else { return };
     let rows = client.list().unwrap_or_default();
     for row in rows {
         if let Some(id) = row["id"].as_str() {
+            mark_killed(id);
             let _ = client.kill(id);
+        }
+    }
+}
+
+/// Whether quitting takes the daemon's agents down with the app.
+pub(crate) fn stop_agents_at_quit(keep_agents_running: bool) -> bool {
+    !keep_agents_running
+}
+
+/// Live daemon PTYs no tab in this app has adopted.
+fn orphans(rows: &[Value], adopted: impl Fn(&str) -> bool) -> Vec<String> {
+    rows.iter()
+        .filter(|row| row["alive"].as_bool() == Some(true))
+        .filter_map(|row| row["id"].as_str())
+        .filter(|id| !adopted(id))
+        .map(String::from)
+        .collect()
+}
+
+/// "Keep agents running" was just turned off. Agents nobody is watching are
+/// killed now; the ones open in a tab keep their turn and die at quit, which
+/// now reads the setting as off.
+pub(crate) fn stop_orphans(app: &AppHandle) {
+    let Some(client) = connect_existing(app) else { return };
+    let rows = client.list().unwrap_or_default();
+    for id in orphans(&rows, |id| route(id).is_some()) {
+        mark_killed(&id);
+        if let Err(e) = client.kill(&id) {
+            dlog(&format!("[ptyd] kill {id} failed: {e}"));
         }
     }
 }
@@ -635,6 +735,56 @@ mod tests {
         assert_eq!(live_for_tab(&rows, "t", "a", |_| false).map(|l| l.id), Some("p".to_string()));
         assert!(live_for_tab(&rows, "t", "a", |id| id == "p").is_none());
         assert!(live_for_tab(&rows, "t", "b", |_| false).is_none());
+    }
+
+    fn agent_meta(task: &str, tab: &str) -> PtyMeta {
+        PtyMeta {
+            role_task_id: Some(task.into()),
+            tab_id: Some(tab.into()),
+            role_kind: Some("agent".into()),
+            ..PtyMeta::default()
+        }
+    }
+
+    #[test]
+    fn a_spawn_beside_a_live_daemon_agent_for_the_same_tab_is_refused() {
+        let meta = json!({ "role_task_id": "t", "tab_id": "a", "role_kind": "agent" });
+        let rows = vec![json!({ "id": "p", "pid": 7, "alive": true, "meta": meta })];
+        assert_eq!(duplicate_of(Some(&rows), &agent_meta("t", "a"), |_| false), Some("p".to_string()));
+        assert!(duplicate_of(Some(&rows), &agent_meta("t", "b"), |_| false).is_none());
+        assert!(duplicate_of(Some(&rows), &agent_meta("t", "a"), |id| id == "p").is_none());
+        assert!(duplicate_of(None, &agent_meta("t", "a"), |_| false).is_none());
+    }
+
+    #[test]
+    fn a_reconnect_keeps_the_routes_the_daemon_still_runs() {
+        let ids = vec!["p".to_string(), "q".to_string(), "r".to_string()];
+        let rows = vec![
+            json!({ "id": "p", "alive": true, "meta": {} }),
+            json!({ "id": "q", "alive": false, "meta": {} }),
+        ];
+        let (keep, gone) = split_after_reconnect(ids.clone(), Some(&rows));
+        assert_eq!(keep, vec!["p".to_string()]);
+        assert_eq!(gone, vec!["q".to_string(), "r".to_string()]);
+        let (keep, gone) = split_after_reconnect(ids.clone(), None);
+        assert!(keep.is_empty());
+        assert_eq!(gone, ids);
+    }
+
+    #[test]
+    fn daemon_agents_stop_at_quit_only_with_the_setting_off() {
+        assert!(stop_agents_at_quit(false));
+        assert!(!stop_agents_at_quit(true));
+    }
+
+    #[test]
+    fn turning_the_setting_off_stops_only_unadopted_agents() {
+        let rows = vec![
+            json!({ "id": "open", "alive": true, "meta": {} }),
+            json!({ "id": "orphan", "alive": true, "meta": {} }),
+            json!({ "id": "done", "alive": false, "meta": {} }),
+        ];
+        assert_eq!(orphans(&rows, |id| id == "open"), vec!["orphan".to_string()]);
     }
 
     #[test]

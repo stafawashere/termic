@@ -30,9 +30,9 @@ describe("termic e2e pipeline", () => {
     // Self-establish the starting view: a prior spec/run may have left a task
     // active, so click Dashboard rather than assuming the app launched on it.
     await clickByText("Dashboard");
-    await waitForText("HOME FOR YOUR CLI CODING AGENTS");
+    await waitForText("A BETTER HOME FOR YOUR AGENTS");
     await clickByText("History");
-    await waitForTextGone("HOME FOR YOUR CLI CODING AGENTS");
+    await waitForTextGone("A BETTER HOME FOR YOUR AGENTS");
     await snap("history.png");
   });
 });
