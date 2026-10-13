@@ -4418,7 +4418,14 @@ fn pty_daemon_warm(app: AppHandle) {
 /// daemon.
 #[tauri::command]
 async fn pty_daemon_find(app: AppHandle, task_id: String, tab_id: String) -> Result<Option<ptyd_host::LivePty>, String> {
-    tauri::async_runtime::spawn_blocking(move || ptyd_host::find(&app, &task_id, &tab_id))
+    tauri::async_runtime::spawn_blocking(move || {
+        // With the setting off a tab spawns, even when an earlier session
+        // left an agent running in the daemon.
+        if !load_settings_inner().pty_daemon_enabled {
+            return None;
+        }
+        ptyd_host::find(&app, &task_id, &tab_id)
+    })
         .await
         .map_err(|e| e.to_string())
 }
