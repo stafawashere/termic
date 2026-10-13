@@ -32,7 +32,9 @@ import { useUpdate } from "@/store/update";
 import { fuzzyMatch, Highlighted } from "@/lib/fuzzy";
 import { bindingGlyphs, type ShortcutId, bindingText } from "@/lib/shortcuts";
 import { confirmAndArchive } from "@/lib/archiveTask";
-import { taskSetYolo, openPath, procmonOpenWindow, themesDir } from "@/lib/ipc";
+import { taskSetYolo, openPath, procmonOpenWindow, themesDir, fileReadExternal } from "@/lib/ipc";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { convertZedTheme, ZedImportError } from "@/lib/zedTheme";
 import { profileOpen } from "@/lib/ipc";
 import { copyIdOf, isCustomId, themeSource } from "@/lib/customTheme";
 import { effectiveLanguageId, languageLabel } from "@/lib/languages";
@@ -205,6 +207,31 @@ export function CommandPalette() {
     return t?.type === "edit" || t?.type === "scratch" ? t : null;
   });
   const proj = useMemo(() => (task ? projects.find(p => p.id === task.project_id) ?? null : null), [projects, task]);
+
+  const importZedThemeFile = async () => {
+    const pushToast = useUI.getState().pushToast;
+    try {
+      const picked = await openDialog({
+        multiple: false,
+        filters: [{ name: "Zed theme", extensions: ["json"] }],
+      });
+      const path = typeof picked === "string" ? picked : null;
+      if (!path) return;
+
+      const themes = convertZedTheme(await fileReadExternal(path));
+      usePrefs.getState().addZedEditorThemes(themes);
+
+      const message = themes.length === 1
+        ? t("commandPalette.zedThemeImportedOne", { name: themes[0].name })
+        : t("commandPalette.zedThemeImportedMany", { count: themes.length });
+      pushToast(message, "success");
+    } catch (e) {
+      const reason = e instanceof ZedImportError
+        ? t(`commandPalette.zedThemeError.${e.code}`)
+        : String(e);
+      pushToast(t("commandPalette.zedThemeImportFailed", { error: reason }), "error");
+    }
+  };
 
   // Roll the live theme preview back and leave the submenu.
   const cancelThemePreview = () => {
@@ -599,6 +626,11 @@ export function CommandPalette() {
       suffix: editorKeymap === "zed" ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: Keyboard,
       keywords: "editor keymap zed keybindings multi cursor preset",
       run: act(() => usePrefs.getState().toggleZedKeymap()),
+    });
+    cmds.push({
+      id: "import-zed-theme", section: "View", label: t("commandPalette.cmd.importZedTheme"),
+      icon: Palette, keywords: "editor syntax theme zed import json color",
+      run: act(() => { void importZedThemeFile(); }),
     });
     cmds.push({
       id: "change-theme", section: "View", label: t("commandPalette.cmd.changeTheme"),

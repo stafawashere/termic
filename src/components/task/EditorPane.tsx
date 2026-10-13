@@ -280,13 +280,14 @@ export function EditorPane({ task, tab, active, onContent }: {
   const themeMode      = usePrefs(s => s.themeMode);
   const appIsLight     = resolveTheme(themeMode) === "light";
   const editorThemeId  = appIsLight ? editorThemeIdLight : editorThemeIdDark;
+  const zedEditorThemes = usePrefs(s => s.zedEditorThemes);
 
   // Everything in the theme compartment: the chosen syntax theme plus the
   // surface overrides (font-size / ligatures fold in here too). All
   // reconfigure live — no EditorView rebuild, so cursor + undo survive.
   function buildTheme(sizePx: number, ligatures: boolean, themeId: string): Extension[] {
     return [
-      resolveEditorTheme(themeId, appIsLight),
+      resolveEditorTheme(themeId, appIsLight, zedEditorThemes),
       editorSurfaceTheme(sizePx, ligatures),
     ];
   }
@@ -1003,7 +1004,7 @@ export function EditorPane({ task, tab, active, onContent }: {
       ),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editorFontSize, codeLigatures, editorThemeId, appIsLight]);
+  }, [editorFontSize, codeLigatures, editorThemeId, appIsLight, zedEditorThemes]);
 
   // Absolute path the two OS actions on the notice act on. A `scratch` pad
   // has no file behind it (and cannot fail either read check anyway), so it

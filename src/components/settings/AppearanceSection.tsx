@@ -6,12 +6,13 @@ import { CodeIntelServers } from "./CodeIntelServers";
 import { useApp } from "@/store/app";
 import { usePrefs, scheduledNavVisible, resolveTheme, BUNDLED_FONT_ID, MONO_FONT_OPTIONS, APPEARANCE_DEFAULTS, availableMonoFonts, availableMonoFontsAsync, sortFontOptions, stackFor } from "@/store/prefs";
 import type { EditorKeymap, TerminalRendererKind } from "@/store/prefs";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { codeIntelName } from "@/lib/lsp/featureName";
-import { EDITOR_THEMES, resolveEditorTheme, editorSurfaceTheme } from "@/lib/editorTheme";
+import { editorThemeOptions, resolveEditorTheme, editorSurfaceTheme } from "@/lib/editorTheme";
+import type { ZedAppearance } from "@/lib/zedTheme";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Tip } from "@/components/ui/Tooltip";
@@ -274,7 +275,7 @@ export function AppearanceSection() {
         label={t("appearance.themeDark.label")}
         hint={t("appearance.themeDark.hint")}
         control={
-          <ThemeSelect value={editorThemeIdDark} onChange={setEditorThemeIdDark} />
+          <ThemeSelect value={editorThemeIdDark} onChange={setEditorThemeIdDark} appearance="dark" />
         }
       />
 
@@ -282,7 +283,7 @@ export function AppearanceSection() {
         label={t("appearance.themeLight.label")}
         hint={t("appearance.themeLight.hint")}
         control={
-          <ThemeSelect value={editorThemeIdLight} onChange={setEditorThemeIdLight} />
+          <ThemeSelect value={editorThemeIdLight} onChange={setEditorThemeIdLight} appearance="light" />
         }
       />
 
@@ -782,14 +783,17 @@ function RendererPicker({ value, onChange }: {
   );
 }
 
-function ThemeSelect({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+function ThemeSelect({ value, onChange, appearance }: { value: string; onChange: (id: string) => void; appearance: ZedAppearance }) {
+  const zedEditorThemes = usePrefs(s => s.zedEditorThemes);
+  const options = useMemo(() => editorThemeOptions(zedEditorThemes, appearance), [zedEditorThemes, appearance]);
+
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] pl-3 pr-8 py-1.5 text-[13.5px] text-[var(--color-fg)] outline-none focus:border-[var(--color-accent)] min-w-[180px]"
     >
-      {EDITOR_THEMES.map(t => (
+      {options.map(t => (
         <option key={t.id} value={t.id}>{t.label}</option>
       ))}
     </select>
@@ -913,6 +917,7 @@ function CodePreview() {
   const themeMode = usePrefs(s => s.themeMode);
   const appIsLight = resolveTheme(themeMode) === "light";
   const themeId = appIsLight ? themeIdLight : themeIdDark;
+  const zedEditorThemes = usePrefs(s => s.zedEditorThemes);
   const hostRef  = useRef<HTMLDivElement>(null);
   const viewRef  = useRef<EditorView | null>(null);
   const themeComp = useRef(new Compartment());
@@ -945,7 +950,7 @@ function CodePreview() {
           EditorView.editable.of(false),
           EditorView.theme({ "&.cm-editor": { outline: "none" } }),
           themeComp.current.of([
-            resolveEditorTheme(themeId, appIsLight),
+            resolveEditorTheme(themeId, appIsLight, zedEditorThemes),
             editorSurfaceTheme(size, ligatures),
           ]),
         ],
@@ -963,11 +968,11 @@ function CodePreview() {
     if (!v) return;
     v.dispatch({
       effects: themeComp.current.reconfigure([
-        resolveEditorTheme(themeId, appIsLight),
+        resolveEditorTheme(themeId, appIsLight, zedEditorThemes),
         editorSurfaceTheme(size, ligatures),
       ]),
     });
-  }, [themeId, size, ligatures, appIsLight]);
+  }, [themeId, size, ligatures, appIsLight, zedEditorThemes]);
 
   return (
     <div ref={hostRef} className="rounded-lg border border-[var(--color-border-soft)] overflow-hidden bg-[var(--color-bg)]" />
