@@ -1295,12 +1295,18 @@ open task or not, until you answer in that terminal or the agent's turn ends
 moves to whatever bucket its other evidence gives it. The board reads the same
 field, so it agrees; the section has no rule of its own.
 
-Rows keep TREE order: `visualProjectOrder`, then each project's rows as the
-tree lays them out (`layoutTaskList`, so a task group is one block at its
-first member's position). The section walks projects rather than tasks, so a
-task whose project left the profile is skipped exactly as the tree skips it,
-and a row never shuffles inside its bucket; it moves only when its bucket
-changes. The per-project task filter (#324) does not apply here; the
+Rows run newest activity first (`src/lib/recencyOrder.ts`), ties in TREE
+order: `visualProjectOrder`, then each project's rows as the tree lays them
+out (`layoutTaskList`, so a task group is one block, keyed by its newest
+member). Activity is `activityAt` in the app store, stamped when a turn ends
+(the `working` to not-working edge) or the user opens the task, never by PTY
+output, so a row moves only on one of those or when its bucket changes. A
+task with no stamp orders by its creation time. The tree orders the same
+way, except that a task the user dragged (`order` set) keeps its manual slot
+ahead of the rest. Subagent rows list the newest start first, a workflow run
+counting as one block at its newest agent. The section walks projects rather
+than tasks, so a task whose project left the profile is skipped exactly as
+the tree skips it. The per-project task filter (#324) does not apply here; the
 sidebar's filter bar does (see "The sidebar's filter bar").
 
 **Task groups** draw the way the tree draws them: a caption in the group's

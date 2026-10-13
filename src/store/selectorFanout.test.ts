@@ -22,7 +22,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-// Same mocks as app.test.ts — importing the store pulls in the ipc layer.
+// Same mocks as app.test.ts, because importing the store pulls in the ipc layer.
 vi.mock("@/lib/ipc", () => ({
   ptyWrite: vi.fn(),
   ptyKill: vi.fn().mockResolvedValue(undefined),
@@ -58,7 +58,7 @@ import type { AppState } from "@/store/app";
 import type { SubagentSummary, Tab, Task, TerminalTab } from "@/lib/types";
 
 /** Mounted subscribers to simulate. A busy window is a handful of panes, not
- *  2500 — but the budget should hold with two orders of magnitude of slack. */
+ *  2500, but the budget should hold with two orders of magnitude of slack. */
 const SUBSCRIBERS = 500;
 /** Unrelated writes. A sidebar drag at 120 Hz for ~8 seconds. */
 const WRITES = 1000;
@@ -149,7 +149,7 @@ describe("selector fan-out budget (bear trap 5)", () => {
 
   it("detects fan-out when a selector is not tight (positive control)", () => {
     // Proves the harness can fail. A selector that reads the whole `tabs`
-    // record is stable here, but one that derives a fresh array is not — this
+    // record is stable here, but one that derives a fresh array is not, this
     // is precisely the mistake bear trap 5 describes.
     useApp.setState({ tabs: { a: [tab("a-1")] } });
     const loose = [(s: AppState) => Object.keys(s.tabs).map(k => k)];
@@ -298,7 +298,7 @@ describe("selector fan-out budget (bear trap 5)", () => {
   it("a ⌃⇥ walk step invalidates no tab-strip selector", () => {
     // The walk is live: every tap of Tab swaps what is on screen, so its cost
     // is paid while the user is holding a key down. `previewPlace` writes only
-    // the pointers that decide what is visible, which is why it exists —
+    // the pointers that decide what is visible, which is why it exists,
     // `setActiveTabId` rebuilds `tabs[taskId]` through .map() on every call and
     // hands back a fresh array even when no flag changed, so every mounted tab
     // bar in the window would re-render on each step.
@@ -1241,7 +1241,7 @@ describe("workflow runs (bear traps 5, 8)", () => {
   it("the run is drawn as one collapsed segment of its tab's key", () => {
     const key = createSubagentStructureSelector(runTabId)(useSubagents.getState());
 
-    expect(key.endsWith(`run:${RUN};`)).toBe(true);
+    expect(key.startsWith(`run:${RUN};`)).toBe(true);
     expect(key).not.toContain(runAgentId(0));
     expect(createWorkflowRunCountsSelector(runTabId, RUN)(useSubagents.getState())).toBe(`${RUN_AGENTS}/${RUN_AGENTS}/0`);
   });

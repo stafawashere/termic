@@ -12,6 +12,7 @@
 import type { Project, Task, TaskGroup } from "./types";
 import { visualProjectOrder } from "./projectGroups";
 import { crossProjectStrays, layoutTaskList } from "./taskGroups";
+import { compareRecency, sortByRecency, taskRecencyKey, type RecencyKey } from "./recencyOrder";
 import {
   boardColumnFromFacts,
   type BoardPrInfo,
@@ -126,10 +127,11 @@ export interface StatusBucketGroup {
 }
 
 /** The section's contents: non-empty buckets in display order, each holding
- *  its items in TREE order: the sidebar's visual project order (which the
- *  keyboard walks too), then each project's rows as the tree lays them out.
- *  An item never shuffles inside its bucket; it moves only when its bucket
- *  changes.
+ *  its items newest activity first (lib/recencyOrder.ts), ties in TREE order:
+ *  the sidebar's visual project order (which the keyboard walks too), then
+ *  each project's rows as the tree lays them out. An item moves only when its
+ *  bucket changes or `activityAt` is stamped (a turn ending, the user opening
+ *  it), never on PTY output.
  *
  *  A task group stays ONE unit, as it is in the tree: drawn whole, in the
  *  bucket of its most urgent member (display order is urgency order). Every
@@ -147,6 +149,7 @@ export function statusBuckets(
   facts: Readonly<Record<string, BoardTaskFacts>>,
   prByTask: Readonly<Record<string, { lookup: BoardPrInfo | null } | undefined>>,
   prefs: WorkStatePrefs,
+  activityAt: Readonly<Record<string, number>> = {},
 ): StatusBucketGroup[] {
   const byProject = new Map<string, Task[]>();
   for (const w of tasks) {
@@ -188,8 +191,15 @@ export function statusBuckets(
       if (most) place(most, { kind: "group", group: seg.group, tasks: seg.tasks }, seg.tasks.length);
     }
   }
+  const itemKey = (item: StatusItem): RecencyKey => {
+    const keys = statusItemTasks(item).map(w => taskRecencyKey(w, activityAt));
+    return keys.reduce<RecencyKey>((best, key) => (compareRecency(key, best) < 0 ? key : best), null);
+  };
   return STATUS_BUCKETS
-    .map(bucket => ({ bucket, ...buckets.get(bucket)! }))
+    .map(bucket => {
+      const { items, count } = buckets.get(bucket)!;
+      return { bucket, items: sortByRecency(items, itemKey), count };
+    })
     .filter(g => g.items.length > 0);
 }
 

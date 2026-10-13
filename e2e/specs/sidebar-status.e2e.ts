@@ -136,6 +136,8 @@ describe("sidebar status section", () => {
   let groupMember = "";
   let multi = "";
   let labelled = "";
+  let recentOld = "";
+  let recentNew = "";
   let folderName = "";
   let widthWas = 0;
   let hoverRevealWas = false;
@@ -179,7 +181,7 @@ describe("sidebar status section", () => {
       }
     }, projectId, folderName, widthWas);
     await resetPrefs();
-    for (const id of [fresh, blocked, reviewed, groupLead, groupMember, multi, labelled]) if (id) await archiveTask(id);
+    for (const id of [fresh, blocked, reviewed, groupLead, groupMember, multi, labelled, recentOld, recentNew]) if (id) await archiveTask(id);
   });
 
   it("is off by default, and the list options menu turns it on above the project tree", async () => {
@@ -844,6 +846,61 @@ describe("sidebar status section", () => {
     expect(await present(`${TOGGLE_ROW} svg`)).toBe(false);
     await click(TOGGLE_ROW);
     await waitVisible(SECTION);
+  });
+
+  it("orders rows newest activity first, moving one only when a turn ends or the user opens it", async () => {
+    const treeIds = () => browser.execute(
+      () => [...document.querySelectorAll<HTMLElement>("[data-sidebar-task-id]")]
+        .map(el => el.dataset.sidebarTaskId as string));
+    const above = async (upper: string, lower: string) => {
+      const ids = await treeIds();
+      return ids.indexOf(upper) >= 0 && ids.indexOf(lower) >= 0 && ids.indexOf(upper) < ids.indexOf(lower);
+    };
+    const finishTurn = (id: string, working: boolean) => browser.execute((tid, w) => {
+      const app = window.__termic!.useApp.getState();
+      const tab = (app.tabs[tid] ?? []).find((t: any) => t.type === "terminal");
+      app.setWorkState(tid, tab.id, w ? "working" : "done");
+    }, id, working);
+
+    await browser.execute(pid => window.__termic!.useApp.getState().setProjectCollapsed(pid, false), projectId);
+    recentOld = await openTask("recency-old", false);
+    recentNew = await openTask("recency-new", false);
+
+    // Opening counts: each task is opened in turn, and the last one opened sits on top.
+    await ensureActiveTask(recentOld);
+    await waitForAgentReady(recentOld);
+    await ensureActiveTask(recentNew);
+    await waitForAgentReady(recentNew);
+    await browser.waitUntil(() => above(recentNew, recentOld), {
+      timeout: 5_000, timeoutMsg: "the task opened last did not sit above the one opened before it",
+    });
+    expect(await above(recentNew, fresh)).toBe(true);
+
+    // A turn that has started but not ended moves nothing.
+    await finishTurn(recentOld, true);
+    await browser.waitUntil(async () => (await sidebarBadge(recentOld)) === "working", {
+      timeout: 5_000, timeoutMsg: "the started turn never drew its working badge",
+    });
+    expect(await above(recentNew, recentOld)).toBe(true);
+
+    // The turn ending moves the older task to the top.
+    await finishTurn(recentOld, false);
+    await browser.waitUntil(() => above(recentOld, recentNew), {
+      timeout: 5_000, timeoutMsg: "a finished turn did not move its task to the top",
+    });
+
+    // The status section lists the same two in the same order.
+    await finishTurn(recentNew, true);
+    await finishTurn(recentNew, false);
+    await browser.waitUntil(() => above(recentNew, recentOld), { timeout: 5_000 });
+    await setBucketOpen("settled", true);
+    const sectionIds = await browser.execute(
+      () => [...document.querySelectorAll<HTMLElement>('[data-testid="status-section"] [data-status-task-id]')]
+        .map(el => el.dataset.statusTaskId as string));
+    expect(sectionIds.indexOf(recentNew)).toBeGreaterThanOrEqual(0);
+    expect(sectionIds.indexOf(recentOld)).toBeGreaterThanOrEqual(0);
+    expect(sectionIds.indexOf(recentNew)).toBeLessThan(sectionIds.indexOf(recentOld));
+    await snap("sidebar-recency-order.png");
   });
 
   it("the icon rail does not carry it, and the hover overlay does", async () => {

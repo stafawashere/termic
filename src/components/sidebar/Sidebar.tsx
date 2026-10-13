@@ -64,6 +64,7 @@ import { useTaskQuery } from "@/hooks/useTaskQuery";
 import { useAutoExpand } from "@/components/sidebar/useAutoExpand";
 import { setTreeFold, treeFoldKey, type TreeFold } from "@/lib/treeFold";
 import { SpawnedFromMark, SpawnLinksOverlay } from "./SpawnLinks";
+import { orderTasksByRecency } from "@/lib/recencyOrder";
 import { crossProjectStrays, flattenSegments, groupColorCss as taskGroupColorCss, groupLabel, layoutTaskList, liveGroups, nextGroupColor } from "@/lib/taskGroups";
 import { taskNeedsAttention, taskWorkDone, taskWorking, taskDelegated } from "@/lib/taskWorkState";
 import { delegatedTitle } from "@/lib/delegatedWork";
@@ -151,6 +152,7 @@ export function Sidebar({ compact: compactProp }: {
   const sidebarWidth = useApp(s => s.sidebarWidth);
   const setSidebarWidth = useApp(s => s.setSidebarWidth);
   const tasks = useApp(s => s.tasks);
+  const activityAt = useApp(s => s.activityAt);
   const activeTask = useApp(s => s.activeTaskId);
   const setActive = useApp(s => s.setActiveTask);
   const setView = useApp(s => s.setView);
@@ -1587,7 +1589,7 @@ export function Sidebar({ compact: compactProp }: {
           // `depth`: 0 for a loose project, 1 inside a folder or the Inactive
           // fold. Everything under the row indents from it on the 18px grid.
           const renderProject = (p: typeof projects[number], depth = 0) => {
-            const taskList = tasks.filter(w => w.project_id === p.id && !w.archived);
+            const taskList = orderTasksByRecency(tasks.filter(w => w.project_id === p.id && !w.archived), activityAt);
             const pendingForProject = pendingTaskList.filter(t => t.projectId === p.id);
             // Empty projects default to collapsed (no point pinning a blank
             // expanded row). User overrides stick: explicit true / false
@@ -2116,11 +2118,9 @@ export function Sidebar({ compact: compactProp }: {
                   </div>
                 )}
 
-                {/* Store order IS display order. Rust sorts the task list by
-                    manual `order` then `created` (so a project nobody has
-                    dragged still reads oldest-first, and new tasks append at
-                    the bottom), and a live drag splices the same array — an
-                    extra sort here would fight the drag. */}
+                {/* Rust sorts the task list by manual `order` then `created`;
+                    taskList above re-orders the never-dragged tasks newest
+                    activity first (lib/recencyOrder.ts). */}
                 {!collapsed && layoutTaskList(visibleTasks, groupFor).map(seg => {
                   const row = (w: Task) => (
                     <TaskRowSlot

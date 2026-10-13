@@ -93,6 +93,7 @@ function StatusBucketMark({ bucket }: { bucket: StatusBucket }) {
 function useStatusGroups(matchIds: ReadonlySet<string> | null) {
   const projects = useApp(s => s.projects);
   const tasks = useApp(s => s.tasks);
+  const activityAt = useApp(s => s.activityAt);
   const facts = useStatusTabFacts();
   const settledHighlight = usePrefs(s => s.settledHighlight);
   const workingIndicator = usePrefs(s => s.workingIndicator);
@@ -114,10 +115,10 @@ function useStatusGroups(matchIds: ReadonlySet<string> | null) {
     [tasks, matchIds],
   );
   const groups = useMemo(
-    () => statusBuckets(projects, listed, facts, usePr.getState().byTask, workPrefs),
+    () => statusBuckets(projects, listed, facts, usePr.getState().byTask, workPrefs, activityAt),
     // prKey stands in for the snapshot read above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [projects, listed, facts, workPrefs, prKey],
+    [projects, listed, facts, workPrefs, prKey, activityAt],
   );
   const total = useMemo(() => groups.reduce((acc, g) => acc + g.count, 0), [groups]);
 

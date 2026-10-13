@@ -339,7 +339,7 @@ describe("subagent rows", () => {
 
     const geometry = await rowGeometry();
     const typed = geometry.rows.filter(row => ids.includes(row.id));
-    expect(typed.map(row => [row.id, row.icon])).toEqual(byType.map(([agentId, , icon]) => [agentId, icon]));
+    expect(typed.map(row => [row.id, row.icon])).toEqual(byType.map(([agentId, , icon]) => [agentId, icon]).reverse());
     expect(typed.every(row => row.iconHidden === "true")).toBe(true);
 
     const first = typed[0];
@@ -393,6 +393,32 @@ describe("subagent rows", () => {
     await snap("subagent-rows-nested-depth-3.png");
   });
 
+  it("lists sibling agents newest first, a later start landing above the earlier ones", async function () {
+    this.timeout(60_000);
+    const siblings = ["e2esib1", "e2esib2", "e2esib3"];
+    for (const agentId of siblings) {
+      await start(agentId);
+      await waitRowState(agentId, "running");
+    }
+
+    const drawnOrder = async () => (await rows()).map(row => row.id).filter(id => siblings.includes(id));
+    expect(await drawnOrder()).toEqual([...siblings].reverse());
+
+    // A stop is not activity: finishing the oldest leaves it where it was.
+    await stop("e2esib1");
+    await browser.waitUntil(async () => (await rowState("e2esib1")) !== "running", {
+      timeout: 10_000, timeoutMsg: "the stopped agent's row never left running",
+    });
+    expect(await drawnOrder()).toEqual([...siblings].reverse());
+
+    // A later start goes on top.
+    await start("e2esib4");
+    await waitRowState("e2esib4", "running");
+    expect((await rows()).map(row => row.id).filter(id => id.startsWith("e2esib")))
+      .toEqual(["e2esib4", "e2esib3", "e2esib2", "e2esib1"]);
+    await snap("subagent-rows-newest-first.png");
+  });
+
   it("a parent's chevron folds its subtree, and collapsing the task hides every row", async function () {
     this.timeout(30_000);
     const fold = `${rowSelector("e2ed1")} [data-testid="subagent-fold"]`;
@@ -443,7 +469,7 @@ describe("subagent rows", () => {
       return [parent, other, child].every(id => ids.includes(id));
     }, { timeout: 10_000, timeoutMsg: "the three rows never appeared" });
     const flat = (await rows()).filter(row => [parent, other, child].includes(row.id));
-    expect(flat.map(row => row.id)).toEqual([parent, other, child]);
+    expect(flat.map(row => row.id)).toEqual([child, other, parent]);
     expect(flat.every(row => row.depth === "1")).toBe(true);
 
     await browser.execute((sel) => {
@@ -486,7 +512,7 @@ describe("subagent rows", () => {
     expect(sample.swapped).toBe(0);
 
     const moved = (await rows()).filter(row => [parent, other, child].includes(row.id));
-    expect(moved.map(row => row.id)).toEqual([parent, child, other]);
+    expect(moved.map(row => row.id)).toEqual([other, parent, child]);
   });
 
   it("draws a workflow agent inside its run node, never as a loose row", async function () {
