@@ -11,11 +11,15 @@
 //  - **Nothing is asked until typing and scrolling stop.** A request per
 //    keystroke is a request per keystroke the server has to answer about a
 //    document that is already out of date.
+//  - **Nothing is asked while the editor is hidden**; it asks once when the
+//    editor is shown again.
 
 import { ViewPlugin, Decoration, WidgetType, EditorView, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import type { Text } from "@codemirror/state";
 import { LSPPlugin } from "@codemirror/lsp-client";
 import type { LspRange } from "./applyWorkspaceEdit";
+import { observeElementVisibility } from "@/lib/editor/viewVisibility";
+import type { ObserveVisibility } from "@/lib/editor/viewVisibility";
 
 export const DEBOUNCE_MS = 250;
 export const VIEWPORT_PADDING_LINES = 20;
@@ -134,12 +138,16 @@ class HintWidget extends WidgetType {
   }
 }
 
-function buildDecorations(doc: Text, hints: LspInlayHint[]): DecorationSet {
+export function buildDecorations(doc: Text, hints: LspInlayHint[], range: LspRange): DecorationSet {
   const widgets = [];
 
   for (const hint of hints) {
     const text = hintText(hint.label);
     if (!text) continue;
+
+    const isBeforeRange = hint.position.line < range.start.line;
+    const isAfterRange = hint.position.line > range.end.line;
+    if (isBeforeRange || isAfterRange) continue;
 
     const line = doc.line(Math.max(1, Math.min(hint.position.line + 1, doc.lines)));
     const pos = Math.min(line.from + hint.position.character, line.to);
@@ -158,80 +166,103 @@ function visibleSpan(view: EditorView) {
   return { from: ranges[0].from, to: ranges[ranges.length - 1].to };
 }
 
-export const inlayHints = ViewPlugin.fromClass(class {
-  decorations: DecorationSet = Decoration.none;
-  timer: number | null = null;
-  disposed = false;
-  generation = 0;
+export function createInlayHints(observeVisibility: ObserveVisibility = observeElementVisibility) {
+  return ViewPlugin.fromClass(class {
+    decorations: DecorationSet = Decoration.none;
+    timer: number | null = null;
+    disposed = false;
+    generation = 0;
+    isVisible = false;
+    isStale = true;
+    stopObserving: () => void;
 
-  constructor(readonly view: EditorView) {
-    this.schedule();
-  }
-
-  update(update: ViewUpdate) {
-    if (update.docChanged) this.decorations = this.decorations.map(update.changes);
-
-    const shouldRefresh = update.docChanged || update.viewportChanged;
-    if (shouldRefresh) this.schedule();
-  }
-
-  destroy() {
-    this.disposed = true;
-    if (this.timer !== null) window.clearTimeout(this.timer);
-  }
-
-  schedule() {
-    if (this.timer !== null) window.clearTimeout(this.timer);
-    // A timer, not requestAnimationFrame: rAF is frozen while the window is
-    // occluded (docs/gotchas.md).
-    this.timer = window.setTimeout(() => { void this.run(); }, DEBOUNCE_MS);
-  }
-
-  async run() {
-    const plugin = LSPPlugin.get(this.view);
-    if (!plugin) return;
-
-    const client = plugin.client;
-    try {
-      await client.initializing;
-    } catch {
-      return;
+    constructor(readonly view: EditorView) {
+      this.stopObserving = observeVisibility(view.dom, isVisible => this.setVisible(isVisible));
     }
-    if (this.disposed) return;
 
-    const span = visibleSpan(this.view);
-    if (!span) return;
+    setVisible(isVisible: boolean) {
+      this.isVisible = isVisible;
 
-    const doc = this.view.state.doc;
-    const range = paddedRange(doc, span.from, span.to);
-    const generation = ++this.generation;
-
-    let hints: LspInlayHint[] | null = null;
-    try {
-      hints = await requestInlayHints(client, plugin.uri, range);
-    } catch {
-      // -32801 ContentModified: the next debounce covers it.
-      return;
+      if (isVisible && this.isStale) this.schedule();
+      if (!isVisible && this.timer !== null) {
+        window.clearTimeout(this.timer);
+        this.timer = null;
+      }
     }
-    if (this.disposed || !hints) return;
 
-    const isSuperseded = generation !== this.generation;
-    const currentSpan = visibleSpan(this.view);
-    if (isSuperseded || !currentSpan) return;
+    update(update: ViewUpdate) {
+      if (update.docChanged) this.decorations = this.decorations.map(update.changes);
 
-    const currentDoc = this.view.state.doc;
-    const visibleNow = {
-      start: { line: currentDoc.lineAt(currentSpan.from).number - 1, character: 0 },
-      end: { line: currentDoc.lineAt(currentSpan.to).number - 1, character: 0 },
-    };
-    if (isStale({ doc, range }, { doc: currentDoc, range: visibleNow })) return;
+      const shouldRefresh = update.docChanged || update.viewportChanged;
+      if (shouldRefresh) {
+        this.isStale = true;
+        if (this.isVisible) this.schedule();
+      }
+    }
 
-    this.decorations = buildDecorations(currentDoc, hints);
-    this.view.dispatch({});
-  }
-}, {
-  decorations: plugin => plugin.decorations,
-});
+    destroy() {
+      this.disposed = true;
+      this.stopObserving();
+      if (this.timer !== null) window.clearTimeout(this.timer);
+    }
+
+    schedule() {
+      if (this.timer !== null) window.clearTimeout(this.timer);
+      // A timer, not requestAnimationFrame: rAF is frozen while the window is
+      // occluded (docs/gotchas.md).
+      this.timer = window.setTimeout(() => { void this.run(); }, DEBOUNCE_MS);
+    }
+
+    async run() {
+      const plugin = LSPPlugin.get(this.view);
+      if (!plugin) return;
+
+      this.isStale = false;
+
+      const client = plugin.client;
+      try {
+        await client.initializing;
+      } catch {
+        return;
+      }
+      if (this.disposed) return;
+
+      const span = visibleSpan(this.view);
+      if (!span) return;
+
+      const doc = this.view.state.doc;
+      const range = paddedRange(doc, span.from, span.to);
+      const generation = ++this.generation;
+
+      let hints: LspInlayHint[] | null = null;
+      try {
+        hints = await requestInlayHints(client, plugin.uri, range);
+      } catch {
+        // -32801 ContentModified: the next debounce covers it.
+        return;
+      }
+      if (this.disposed || !hints) return;
+
+      const isSuperseded = generation !== this.generation;
+      const currentSpan = visibleSpan(this.view);
+      if (isSuperseded || !currentSpan) return;
+
+      const currentDoc = this.view.state.doc;
+      const visibleNow = {
+        start: { line: currentDoc.lineAt(currentSpan.from).number - 1, character: 0 },
+        end: { line: currentDoc.lineAt(currentSpan.to).number - 1, character: 0 },
+      };
+      if (isStale({ doc, range }, { doc: currentDoc, range: visibleNow })) return;
+
+      this.decorations = buildDecorations(currentDoc, hints, range);
+      this.view.dispatch({});
+    }
+  }, {
+    decorations: plugin => plugin.decorations,
+  });
+}
+
+export const inlayHints = createInlayHints();
 
 export const inlayHintsTheme = EditorView.baseTheme({
   ".cm-lsp-inlay": {
