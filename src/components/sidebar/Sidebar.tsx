@@ -61,6 +61,7 @@ import { selectActiveProjectIds, useWorkspaces } from "@/store/workspaces";
 import { RollupMarks } from "./RollupMarks";
 import { BoardFilterBar } from "@/components/views/BoardFilterBar";
 import { useTaskQuery } from "@/hooks/useTaskQuery";
+import { useAutoExpand } from "@/components/sidebar/useAutoExpand";
 import { setTreeFold, treeFoldKey, type TreeFold } from "@/lib/treeFold";
 import { SpawnedFromMark, SpawnLinksOverlay } from "./SpawnLinks";
 import { crossProjectStrays, flattenSegments, groupColorCss as taskGroupColorCss, groupLabel, layoutTaskList, liveGroups, nextGroupColor } from "@/lib/taskGroups";
@@ -120,6 +121,7 @@ export function Sidebar({ compact: compactProp }: {
   const compactStore = useApp(s => s.compactSidebar);
   const compact = compactProp ?? compactStore;
   const openSettings = useApp(s => s.openSettings);
+  useAutoExpand();
   // Whether the compact rail's list has more below the fold. Written only when
   // it FLIPS, so scrolling costs no re-render of the sidebar per frame.
   const projectsScrollRef = useRef<HTMLDivElement | null>(null);

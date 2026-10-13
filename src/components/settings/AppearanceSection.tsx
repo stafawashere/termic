@@ -457,6 +457,8 @@ function SidebarSection() {
   const { t } = useTranslation("settings");
   const taskExpandMode = usePrefs(s => s.taskExpandMode);
   const setTaskExpandMode = usePrefs(s => s.setTaskExpandMode);
+  const autoExpandActiveAgents = usePrefs(s => s.autoExpandActiveAgents);
+  const setAutoExpandActiveAgents = usePrefs(s => s.setAutoExpandActiveAgents);
   const taskLocationIcon = usePrefs(s => s.taskLocationIcon);
   const setTaskLocationIcon = usePrefs(s => s.setTaskLocationIcon);
   const taskPrBadge = usePrefs(s => s.taskPrBadge);
@@ -500,6 +502,14 @@ function SidebarSection() {
             </Tip>
           ))}
         </div>
+      </div>
+      <div data-testid="auto-expand-active-setting">
+        <Toggle
+          label={t("appearance.autoExpandActive.label")}
+          hint={t("appearance.autoExpandActive.hint")}
+          value={autoExpandActiveAgents}
+          onChange={setAutoExpandActiveAgents}
+        />
       </div>
       {/* Also a submenu in the sidebar's Project list options menu; both
           write the same pref. */}

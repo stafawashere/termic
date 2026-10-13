@@ -555,6 +555,105 @@ describe("subagent rows", () => {
     expect(selection).toEqual({ header: false, tabRow: true, subagents: 0 });
   });
 
+  describe("auto-expand on spawn", () => {
+    const groupToggle = () => `[data-sidebar-task-row="${taskId}"] [data-testid="subagent-group-toggle"]`;
+
+    const groupOpen = () => browser.execute(
+      (sel) => document.querySelector(sel)?.getAttribute("aria-expanded") ?? null, groupToggle());
+
+    /** The hand-made fold of the tab's group, or null when nobody made one.
+     *  Read off the store, which the spawn writes to synchronously. */
+    const foldEntry = () => browser.execute((task) => {
+      const tab = (window.__termic!.useApp.getState().tabs[task] ?? [])[0];
+      return window.__termic!.useSubagentFold.getState().groupByTab[tab.id]?.collapsed ?? null;
+    }, taskId);
+
+    async function waitStoreAgent(agentId: string): Promise<void> {
+      await browser.waitUntil(() => storeHasAgent(agentId), {
+        timeout: 10_000,
+        interval: 50,
+        timeoutMsg: `the store never learned of ${agentId}`,
+      });
+    }
+
+    async function waitGroup(open: boolean, why: string): Promise<void> {
+      await browser.waitUntil(async () => (await groupOpen()) === String(open), {
+        timeout: 10_000,
+        interval: 50,
+        timeoutMsg: `${why}: the group's aria-expanded was ${await groupOpen()}, wanted ${open}`,
+      });
+    }
+
+    before(async () => {
+      await browser.execute(() => {
+        const t = window.__termic!;
+        t.useSubagentFold.setState({ groupByTab: {} });
+        t.usePrefs.getState().setSubagentAutoCollapse("always");
+        t.usePrefs.getState().setAutoExpandSubagents(false);
+      });
+    });
+
+    after(async () => {
+      await browser.execute(() => {
+        const t = window.__termic!;
+        t.useSubagentFold.setState({ groupByTab: {} });
+        t.usePrefs.getState().setSubagentAutoCollapse("never");
+        t.usePrefs.getState().setAutoExpandSubagents(false);
+      });
+    });
+
+    it("the switch in Settings turns the pref on and stores it", async function () {
+      this.timeout(30_000);
+      await browser.execute(() => window.__termic!.useApp.getState().openSettings("tasks"));
+      const switchSel = '[data-testid="subagent-setting-auto-expand"] button[role="switch"]';
+      await waitVisible(switchSel);
+      expect(await $(switchSel).getAttribute("aria-checked")).toBe("false");
+
+      await clickPresent(switchSel);
+      await browser.waitUntil(
+        () => browser.execute(() => window.__termic!.usePrefs.getState().autoExpandSubagents),
+        { timeout: 5_000, timeoutMsg: "the switch never turned the pref on" },
+      );
+      expect(await browser.execute(() => localStorage.getItem("autoExpandSubagents"))).toBe("1");
+
+      await clickPresent(switchSel);
+      await browser.waitUntil(
+        () => browser.execute(() => !window.__termic!.usePrefs.getState().autoExpandSubagents),
+        { timeout: 5_000, timeoutMsg: "the switch never turned the pref back off" },
+      );
+      await browser.execute(() => window.__termic!.useApp.getState().closeSettings());
+    });
+
+    it("leaves a folded group folded when the pref is off", async function () {
+      this.timeout(30_000);
+      await start("e2eexp1");
+      await waitStoreAgent("e2eexp1");
+      expect(await foldEntry()).toBeNull();
+      await waitGroup(false, "a spawn with the pref off");
+    });
+
+    it("opens the folded group when a subagent spawns and the pref is on", async function () {
+      this.timeout(30_000);
+      await browser.execute(() => window.__termic!.usePrefs.getState().setAutoExpandSubagents(true));
+
+      await start("e2eexp2");
+      await waitGroup(true, "a spawn with the pref on");
+      expect((await rows()).some(row => row.id === "e2eexp2")).toBe(true);
+      await snap("subagent-group-auto-expanded.png");
+    });
+
+    it("never reopens a group the user folded afterwards", async function () {
+      this.timeout(30_000);
+      await clickPresent(groupToggle());
+      await waitGroup(false, "the manual fold");
+
+      await start("e2eexp3");
+      await waitStoreAgent("e2eexp3");
+      expect(await foldEntry()).toBe(true);
+      await waitGroup(false, "a spawn after a manual fold");
+    });
+  });
+
   it("an agent still running when the parent exits flips to interrupted", async function () {
     this.timeout(30_000);
     const agentId = "e2eint1";
