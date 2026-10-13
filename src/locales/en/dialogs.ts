@@ -138,6 +138,7 @@ export default {
       toggleWordWrap: "Toggle word wrap",
       toggleReindentToThree: "Toggle reindent to 3 spaces on open",
       toggleIndentGuides: "Toggle indent guides",
+      toggleAutosave: "Toggle autosave",
       toggleMinimap: "Toggle minimap",
       toggleZedKeymap: "Toggle Zed keymap",
       importZedTheme: "Import Zed theme…",

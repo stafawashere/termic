@@ -75,6 +75,8 @@ export function AppearanceSection() {
   const setEditorIndentGuides = usePrefs(s => s.setEditorIndentGuides);
   const editorReindentToThree = usePrefs(s => s.editorReindentToThree);
   const setEditorReindentToThree = usePrefs(s => s.setEditorReindentToThree);
+  const editorAutosave = usePrefs(s => s.editorAutosave);
+  const setEditorAutosave = usePrefs(s => s.setEditorAutosave);
   const editorMinimap = usePrefs(s => s.editorMinimap);
   const setEditorMinimap = usePrefs(s => s.setEditorMinimap);
   const editorKeymap = usePrefs(s => s.editorKeymap);
@@ -135,6 +137,7 @@ export function AppearanceSection() {
     editorWordWrap        === APPEARANCE_DEFAULTS.editorWordWrap &&
     editorIndentGuides    === APPEARANCE_DEFAULTS.editorIndentGuides &&
     editorReindentToThree === APPEARANCE_DEFAULTS.editorReindentToThree &&
+    editorAutosave        === APPEARANCE_DEFAULTS.editorAutosave &&
     editorMinimap         === APPEARANCE_DEFAULTS.editorMinimap &&
     editorKeymap          === APPEARANCE_DEFAULTS.editorKeymap &&
     codeIntelligence        === APPEARANCE_DEFAULTS.codeIntelligence &&
@@ -335,6 +338,13 @@ export function AppearanceSection() {
         hint={t("appearance.reindentToThree.hint")}
         value={editorReindentToThree}
         onChange={setEditorReindentToThree}
+      />
+
+      <Toggle
+        label={t("appearance.autosave.label")}
+        hint={t("appearance.autosave.hint")}
+        value={editorAutosave}
+        onChange={setEditorAutosave}
       />
 
       <Toggle

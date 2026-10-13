@@ -449,6 +449,10 @@ export default {
       label: "Indent guides",
       hint: "Draw vertical lines at each indent level and highlight the block around the cursor. Also in the command palette.",
     },
+    autosave: {
+      label: "Autosave",
+      hint: "Save a changed file one second after you stop typing, and when you leave the editor or close its tab. Off by default. Also in the command palette.",
+    },
     minimap: {
       label: "Minimap",
       hint: "Show a canvas overview of the file beside the editor. Off by default. Also in the command palette.",

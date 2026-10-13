@@ -14,7 +14,7 @@ import {
   FolderCog, RefreshCw, ScrollText, CalendarClock, Bug, SlidersHorizontal, Bot, BookText,
   Check, ChevronLeft, ListTodo, Bell, SquareTerminal, FolderPlus, History, Square,
   Play, Swords, Megaphone, Columns2, Rows2, Clock, UserPen, GitPullRequest, Activity, Code2,
-  NotepadText, AlignLeft, Lightbulb, Waypoints, CircleDot, UsersRound, WrapText, Map as MapIcon, ListFilter, ListX, FolderOpen, type LucideIcon } from "lucide-react";
+  NotepadText, AlignLeft, Lightbulb, Waypoints, CircleDot, UsersRound, WrapText, Map as MapIcon, ListFilter, ListX, FolderOpen, Save, type LucideIcon } from "lucide-react";
 import { useUI } from "@/store/ui";
 import { useProfiles } from "@/store/profiles";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -134,6 +134,7 @@ export function CommandPalette() {
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
   const editorIndentGuides = usePrefs(s => s.editorIndentGuides);
   const editorReindentToThree = usePrefs(s => s.editorReindentToThree);
+  const editorAutosave = usePrefs(s => s.editorAutosave);
   const editorMinimap = usePrefs(s => s.editorMinimap);
   const editorKeymap = usePrefs(s => s.editorKeymap);
   const useBranchAsTaskName = usePrefs(s => s.useBranchAsTaskName);
@@ -644,6 +645,12 @@ export function CommandPalette() {
       run: act(() => usePrefs.getState().toggleEditorReindentToThree()),
     });
     cmds.push({
+      id: "toggle-autosave", section: "View", label: t("commandPalette.cmd.toggleAutosave"),
+      suffix: editorAutosave ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: Save,
+      keywords: "editor autosave auto save write file automatically",
+      run: act(() => usePrefs.getState().toggleEditorAutosave()),
+    });
+    cmds.push({
       id: "toggle-minimap", section: "View", label: t("commandPalette.cmd.toggleMinimap"),
       suffix: editorMinimap ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: MapIcon,
       keywords: "editor minimap overview scroll canvas",
@@ -759,7 +766,7 @@ export function CommandPalette() {
     }
 
     return cmds;
-  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorGitGutter, editorWordWrap, editorIndentGuides, editorReindentToThree, editorMinimap, editorKeymap, useBranchAsTaskName, activeEditTab, sidebarFiltered, open, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorGitGutter, editorWordWrap, editorIndentGuides, editorReindentToThree, editorAutosave, editorMinimap, editorKeymap, useBranchAsTaskName, activeEditTab, sidebarFiltered, open, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Recents, re-read on every open so an hour spent with the palette closed
   // expires them (the list is only ever consulted at build time). Empty query

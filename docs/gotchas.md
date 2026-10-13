@@ -1360,3 +1360,5 @@ move the editor's viewport, and the selection is empty 600ms later, every
 time; blur first and it survives, every time. So a spec that builds a
 selection outside the editor blurs the active element first
 (`selectInParagraph`), which is the part of the gesture it was skipping.
+
+- **An editor that reloads its own save as someone else's edit.** The watcher reports every write to an open file, this editor's included. `EditorPane` records the document text it is writing in `inFlightWriteRef` for the length of the write, and after the write the saved text becomes the merge base, so an echo equals either the in-flight text or the base and is dropped. Anything that makes a save bypass `saveDoc` (a new write path) must set both, or the echo of a write races the dirty flag and raises a conflict against the user's own text. Keep the in-flight text cleared when the write ends: left set, a later external write that happens to equal an old save is ignored forever.

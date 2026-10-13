@@ -137,6 +137,7 @@ export default {
       toggleWordWrap: "切换自动换行",
       toggleReindentToThree: "切换打开时重新缩进为 3 个空格",
       toggleIndentGuides: "切换缩进参考线",
+      toggleAutosave: "切换自动保存",
       toggleMinimap: "切换缩略图",
       toggleZedKeymap: "切换 Zed 快捷键",
       importZedTheme: "导入 Zed 主题…",
