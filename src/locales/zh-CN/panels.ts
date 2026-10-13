@@ -30,6 +30,14 @@ export default {
     revealIn: "在 {{manager}} 中显示",
   },
 
+  multibuffer: {
+    empty: "没有可显示的片段",
+    openTip: "在第 {{line}} 行打开 {{path}}",
+    savedOne: "已保存 1 个文件",
+    savedMany: "已保存 {{count}} 个文件",
+    conflictToast: "{{path}} 已在磁盘上更改，未保存",
+  },
+
   diff: {
     staleNotice: "此文件在你打开后已被修改。",
     unifiedTip: "统一视图（内联）",

@@ -404,7 +404,7 @@ export interface AppState {
    *  (wired into its tab strip) or the main pane. Used by the Run pop-out
    *  (GH #54) so the run terminal lands where the user is looking.
    *  `opts.focus` — see `addTab`. */
-  addTabToActivePane: (taskId: string, tab: TerminalTab, opts?: { focus?: boolean }) => void;
+  addTabToActivePane: (taskId: string, tab: Tab, opts?: { focus?: boolean }) => void;
   /** Move `tabId` to `toIndex` — its final position in the list AFTER the
    *  tab is pulled out (i.e. an index into the other tabs, 0..length-1).
    *  No-op if the order is unchanged. */

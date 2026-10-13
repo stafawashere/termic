@@ -31,6 +31,14 @@ export default {
     revealIn: "Reveal in {{manager}}",
   },
 
+  multibuffer: {
+    empty: "No excerpts to show",
+    openTip: "Open {{path}} at line {{line}}",
+    savedOne: "Saved 1 file",
+    savedMany: "Saved {{count}} files",
+    conflictToast: "{{path}} changed on disk, not saved",
+  },
+
   diff: {
     staleNotice: "This file changed since you opened it.",
     unifiedTip: "Unified (inline)",

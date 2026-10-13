@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useTranslation, Trans } from "react-i18next";
-import { Search, X, Zap } from "lucide-react";
+import { Rows3, Search, X, Zap } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { IS_LINUX } from "@/lib/platform";
 import { openWebUrl } from "@/lib/previewBrowser";
@@ -21,10 +21,11 @@ import { useUI } from "@/store/ui";
 import { useApp } from "@/store/app";
 import { usePrefs } from "@/store/prefs";
 import {
-  taskGrepStart, taskGrepCancel, taskFindBackend,
+  taskGrepStart, taskGrepCancel, taskFindBackend, taskFileRead,
   onGrepResult, onGrepDone, type FindBackend, type GrepHit, type GrepOpts,
 } from "@/lib/ipc";
 import { hitRanges } from "@/lib/findMatches";
+import { buildExcerpts } from "@/lib/multibuffer";
 import { fileIconUrl } from "@/lib/explorer/iconResolver";
 import { cn } from "@/lib/utils";
 
@@ -325,6 +326,36 @@ export function FindInFilesDialog() {
     close();
   }
 
+  async function openAsMultibuffer() {
+    if (!taskId || rows.length === 0) return;
+
+    const hits = rows.flatMap(row => (row.kind === "hit" ? [row.hit] : []));
+    const paths = [...new Set(hits.map(hit => hit.path))];
+    const fileTexts: Record<string, string> = {};
+
+    await Promise.all(paths.map(async path => {
+      try {
+        fileTexts[path] = await taskFileRead(taskId, path);
+      } catch {
+        // a file that vanished since the search is left out
+      }
+    }));
+
+    const excerpts = buildExcerpts(hits, fileTexts);
+    if (excerpts.length === 0) {
+      useUI.getState().pushToast(t("findInFiles.multibufferEmpty"), "error");
+      return;
+    }
+
+    useApp.getState().addTabToActivePane(taskId, {
+      id: crypto.randomUUID(),
+      type: "multibuffer",
+      title: t("findInFiles.multibufferTitle", { query: query.trim() }),
+      excerpts,
+    });
+    close();
+  }
+
   function moveActive(delta: number) {
     if (!rows.length) return;
     let i = activeIdx + delta;
@@ -340,6 +371,10 @@ export function FindInFilesDialog() {
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown")      { e.preventDefault(); moveActive(1); }
     else if (e.key === "ArrowUp")   { e.preventDefault(); moveActive(-1); }
+    else if (e.key === "Enter" && e.altKey) {
+      e.preventDefault();
+      void openAsMultibuffer();
+    }
     else if (e.key === "Enter")     {
       e.preventDefault();
       const r = rows[activeIdx];
@@ -467,6 +502,20 @@ export function FindInFilesDialog() {
             )}
           >
             <span className="truncate">{statusLeft()}</span>
+            {!searching && totalHits > 0 && (
+              <button
+                type="button"
+                data-testid="fif-open-multibuffer"
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => void openAsMultibuffer()}
+                title={t("findInFiles.openMultibufferTitle", { keys: "⌥↵" })}
+                data-no-drag
+                className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[12px] text-[var(--color-fg-dim)] hover:bg-[var(--sidebar-row-hover)] hover:text-[var(--color-fg)]"
+              >
+                <Rows3 className="h-3.5 w-3.5" />
+                {t("findInFiles.openMultibuffer")}
+              </button>
+            )}
             {searching && (
               <span className="flex shrink-0 items-center gap-1">
                 {t("findInFiles.searching")}

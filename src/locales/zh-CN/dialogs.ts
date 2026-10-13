@@ -291,6 +291,10 @@ export default {
     noMatches: "无匹配项",
     searching: "搜索中…",
     cancelSearchTitle: "取消搜索（Esc）",
+    openMultibuffer: "以多缓冲区打开",
+    openMultibufferTitle: "将所有匹配项在一个可编辑标签页中打开（{{keys}}）",
+    multibufferTitle: "多缓冲区：{{query}}",
+    multibufferEmpty: "无法读取任何匹配的文件",
   },
   newProfile: {
     title: "新建配置",
