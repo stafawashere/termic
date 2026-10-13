@@ -78,9 +78,9 @@ describe("memory", () => {
     const perCycleHelpers: number[] = [];
     for (let i = 0; i < CYCLES; i++) {
       await clickByText("Dashboard");
-      await waitForText("HOME FOR YOUR CLI CODING AGENTS");
+      await waitForText("A BETTER HOME FOR YOUR AGENTS");
       await clickByText("History");
-      await waitForTextGone("HOME FOR YOUR CLI CODING AGENTS");
+      await waitForTextGone("A BETTER HOME FOR YOUR AGENTS");
       const s = sampleRss(pid);
       if (s.totalMiB !== null) perCycle.push(s.totalMiB);
       if (s.appMiB !== null) perCycleApp.push(s.appMiB);
