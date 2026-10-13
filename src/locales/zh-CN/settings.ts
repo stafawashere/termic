@@ -436,6 +436,12 @@ export default {
       label: "自动换行",
       hint: "长行按编辑器宽度折行，而不是横向滚动。命令面板中也有此开关。",
     },
+    keymap: {
+      label: "编辑器快捷键",
+      hint: "Termic 沿用 CodeMirror 的按键。Zed 会加入 Zed 的 macOS 编辑器按键：选择下一个匹配项、在上方和下方添加光标、扩大和缩小选区、移动和复制行。命令面板中也有此开关。",
+      default: "Termic",
+      zed: "Zed",
+    },
     blame: {
       label: "内联 git blame",
       hint: "在代码之后显示光标所在行的最后修改者。点击可打开该提交的差异。",
@@ -623,6 +629,18 @@ export default {
       fileStructure: {
         label: "文件大纲",
         hint: "这个文件里有什么，可以筛选，不必滚动全文。",
+      },
+      renameSymbol: {
+        label: "重命名符号",
+        hint: "在编辑器中。重命名光标处的符号及其所有引用，未打开的文件也会一并修改。",
+      },
+      formatDocument: {
+        label: "格式化文档",
+        hint: "在编辑器中。使用语言服务器格式化当前文件。",
+      },
+      codeActions: {
+        label: "代码操作",
+        hint: "在编辑器中。显示语言服务器在光标处提供的快速修复和重构。",
       },
       navForward: { label: "前进", hint: "重走一次「后退」。" },
       taskPrevArrow: {

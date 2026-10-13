@@ -5,7 +5,7 @@
 import { CodeIntelServers } from "./CodeIntelServers";
 import { useApp } from "@/store/app";
 import { usePrefs, scheduledNavVisible, resolveTheme, BUNDLED_FONT_ID, MONO_FONT_OPTIONS, APPEARANCE_DEFAULTS, availableMonoFonts, availableMonoFontsAsync, sortFontOptions, stackFor } from "@/store/prefs";
-import type { TerminalRendererKind } from "@/store/prefs";
+import type { EditorKeymap, TerminalRendererKind } from "@/store/prefs";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -69,6 +69,8 @@ export function AppearanceSection() {
   const inlineBlame = usePrefs(s => s.inlineBlame);
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
   const setEditorWordWrap = usePrefs(s => s.setEditorWordWrap);
+  const editorKeymap = usePrefs(s => s.editorKeymap);
+  const setEditorKeymap = usePrefs(s => s.setEditorKeymap);
   const codeIntelligence = usePrefs(s => s.codeIntelligence);
   const codeIntelDiagnostics = usePrefs(s => s.codeIntelDiagnostics);
   const setCodeIntelDiagnostics = usePrefs(s => s.setCodeIntelDiagnostics);
@@ -121,6 +123,7 @@ export function AppearanceSection() {
     codeLigatures         === APPEARANCE_DEFAULTS.codeLigatures &&
     inlineBlame           === APPEARANCE_DEFAULTS.inlineBlame &&
     editorWordWrap        === APPEARANCE_DEFAULTS.editorWordWrap &&
+    editorKeymap          === APPEARANCE_DEFAULTS.editorKeymap &&
     codeIntelligence        === APPEARANCE_DEFAULTS.codeIntelligence &&
     codeIntelDiagnostics    === APPEARANCE_DEFAULTS.codeIntelDiagnostics &&
     showAllInstalledFonts === APPEARANCE_DEFAULTS.showAllInstalledFonts;
@@ -305,6 +308,22 @@ export function AppearanceSection() {
         hint={t("appearance.wordWrap.hint")}
         value={editorWordWrap}
         onChange={setEditorWordWrap}
+      />
+
+      <Field
+        label={t("appearance.keymap.label")}
+        hint={t("appearance.keymap.hint")}
+        control={
+          <select
+            data-testid="editor-keymap-select"
+            value={editorKeymap}
+            onChange={(e) => setEditorKeymap(e.target.value as EditorKeymap)}
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] pl-3 pr-8 py-1.5 text-[13.5px] text-[var(--color-fg)] outline-none focus:border-[var(--color-accent)] min-w-[180px]"
+          >
+            <option value="default">{t("appearance.keymap.default")}</option>
+            <option value="zed">{t("appearance.keymap.zed")}</option>
+          </select>
+        }
       />
 
       <Toggle

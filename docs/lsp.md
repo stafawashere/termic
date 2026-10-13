@@ -588,6 +588,37 @@ measurement that motivated it), and the 40.4s above happened with that warm-up
 in place. It runs in the wdio process, not the app's, which may be the reason it
 did not help, or may not be: see above on not asserting the cause.
 
+## Rename, format and code actions
+
+Three commands act on the file in the editor, all through the server: rename
+symbol (`rename-symbol`, F2), format document (`format-document`, Shift-Alt-F)
+and code actions (`code-actions`, Cmd-.). They are `SHORTCUT_DEFS` entries in
+the Code navigation group, bound in `navKeymap` like the jumps, and they are in
+the command palette (Task section) only while an editor with code intelligence
+armed is on screen. `lib/editor/activeEditor.ts` is how the palette finds that
+editor: only editors that have a server register, so a non-null answer is also
+the arming check.
+
+- **Rename and format are the client's** (`renameSymbol`, `formatDocument`),
+  on our keys rather than its `renameKeymap` and `formatKeymap`.
+- **The client's rename drops files with no editor.** It applies only the
+  `changes` form and skips every URI it has no open file for, which for a
+  rename is most of them. `TermicWorkspace` wraps `client.request` for
+  `textDocument/rename`, writes the unopened files to disk through
+  `taskFileWrite` (`lib/lsp/applyWorkspaceEdit.ts`), and hands the client only
+  the open files, in the form it understands. Open files change in the buffer,
+  so the tab goes dirty and nothing is saved behind the reader's back. A file
+  that cannot be written produces an error toast naming it.
+- **Code actions are ours** (`lib/lsp/codeActions.ts`); the client has none.
+  The request carries the diagnostics touching the selection, taken from the
+  server's own pushes where there are any because quick fixes are keyed on
+  their `code` and `data`. The handshake advertises `codeActionLiteralSupport`
+  so servers answer with full actions instead of bare commands.
+- **After a rename, a server that watches files on its own hears about it, and
+  one that relies on `workspace/didChangeWatchedFiles` does not.** termic does
+  not send that notification, so the unopened files change on disk and the
+  server's index catches up when it next reads them.
+
 ## What is deliberately not built
 
 The plan this file replaced (`docs/plans/lsp.md`, deleted when the work
@@ -600,9 +631,10 @@ than gaps:
   a catalog row. Parked on purpose. Nobody has asked, detection is something we
   would rather own than delegate, and the escape hatch below covers the
   complaint people actually have. See [ideas/lsp-tuning.md](ideas/lsp-tuning.md).
-- **Rename.** Editing across files from an editor that is a reading surface,
-  next to an agent that is already editing those files, is a collision waiting
-  to happen. Navigation is the product (rule 16).
+- **Server-initiated edits.** `workspace/applyEdit` is answered `null` by the
+  Rust host (rule 3), so a code action that is only a `command` which the server
+  carries out by calling back into the editor does nothing. Actions that carry
+  their `edit` inline, which the client asks servers for, work.
 - **An RSS-aware cap** that evicts the least recently used server. The
   lifecycle bounds servers a different way (one per checkout per language,
   refcounted, reaped three minutes after the last editor closes), and the cost

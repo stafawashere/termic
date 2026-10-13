@@ -310,6 +310,7 @@ describe("footer strip", () => {
 
       await report(91);
       await waitForAttr(`${taskFooter(taskId)} [data-usage-window="5h"]`, "data-usage-fill", "91");
+      // Same 300ms width animation as above.
       await browser.pause(400);
       const high = await readWindow();
       const errInk = await browser.execute(() => {

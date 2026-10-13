@@ -14,7 +14,7 @@ import {
   FolderCog, RefreshCw, ScrollText, CalendarClock, Bug, SlidersHorizontal, Bot, BookText,
   Check, ChevronLeft, ListTodo, Bell, SquareTerminal, FolderPlus, History, Square,
   Play, Swords, Megaphone, Columns2, Rows2, Clock, UserPen, GitPullRequest, Activity, Code2,
-  NotepadText, Waypoints, CircleDot, UsersRound, WrapText, ListFilter, ListX, FolderOpen, type LucideIcon } from "lucide-react";
+  NotepadText, AlignLeft, Lightbulb, Waypoints, CircleDot, UsersRound, WrapText, ListFilter, ListX, FolderOpen, type LucideIcon } from "lucide-react";
 import { useUI } from "@/store/ui";
 import { useProfiles } from "@/store/profiles";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -40,6 +40,7 @@ import { effectiveSandboxMode, isSandboxEnforced } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { taskLabel } from "@/lib/taskLabel";
 import { setTreeFold } from "@/lib/treeFold";
+import { getActiveEditor } from "@/lib/editor/activeEditor";
 
 // New-issue page for the project repo. Opened via the OS browser (open_path).
 const ISSUE_URL = "https://github.com/simion/termic/issues/new";
@@ -128,6 +129,7 @@ export function CommandPalette() {
   const binds = usePrefs(s => s.shortcuts);
   const inlineBlame = usePrefs(s => s.inlineBlame);
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
+  const editorKeymap = usePrefs(s => s.editorKeymap);
   const useBranchAsTaskName = usePrefs(s => s.useBranchAsTaskName);
   // Only whether there is one: the Clear row comes and goes with it.
   const sidebarFiltered = useUI(s => s.sidebarQuery.trim() !== "");
@@ -556,6 +558,29 @@ export function CommandPalette() {
         keywords: "language highlighting grammar mode colour color file type markdown json",
         run: act(() => useUI.getState().openSyntaxPalette(task.id, activeEditTab.id)),
       });
+
+      // Only an editor with code intelligence armed registers itself as the
+      // active one, so finding one here is also the arming check.
+      const codeEditor = open && activeEditTab.type === "edit" ? getActiveEditor() : null;
+      if (codeEditor) {
+        const runInEditor = (command: "rename-symbol" | "format-document" | "code-actions") =>
+          act(() => { void import("@/lib/lsp/editorExtension").then(m => m.runEditorCommand(codeEditor, command)); });
+        cmds.push({
+          id: "rename-symbol", section: "Task", label: t("commandPalette.cmd.renameSymbol"),
+          icon: Pencil, shortcutId: "rename-symbol", keywords: "refactor language server lsp identifier name",
+          run: runInEditor("rename-symbol"),
+        });
+        cmds.push({
+          id: "format-document", section: "Task", label: t("commandPalette.cmd.formatDocument"),
+          icon: AlignLeft, shortcutId: "format-document", keywords: "prettier indent style language server lsp",
+          run: runInEditor("format-document"),
+        });
+        cmds.push({
+          id: "code-actions", section: "Task", label: t("commandPalette.cmd.codeActions"),
+          icon: Lightbulb, shortcutId: "code-actions", keywords: "quick fix refactor import language server lsp",
+          run: runInEditor("code-actions"),
+        });
+      }
     }
     cmds.push({
       id: "toggle-inline-blame", section: "View", label: t("commandPalette.cmd.toggleInlineBlame"),
@@ -568,6 +593,12 @@ export function CommandPalette() {
       suffix: editorWordWrap ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: WrapText,
       keywords: "editor soft wrap long lines wordwrap horizontal scroll",
       run: act(() => usePrefs.getState().toggleEditorWordWrap()),
+    });
+    cmds.push({
+      id: "toggle-zed-keymap", section: "View", label: t("commandPalette.cmd.toggleZedKeymap"),
+      suffix: editorKeymap === "zed" ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: Keyboard,
+      keywords: "editor keymap zed keybindings multi cursor preset",
+      run: act(() => usePrefs.getState().toggleZedKeymap()),
     });
     cmds.push({
       id: "change-theme", section: "View", label: t("commandPalette.cmd.changeTheme"),
@@ -668,7 +699,7 @@ export function CommandPalette() {
     }
 
     return cmds;
-  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorWordWrap, useBranchAsTaskName, activeEditTab, sidebarFiltered, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorWordWrap, editorKeymap, useBranchAsTaskName, activeEditTab, sidebarFiltered, open, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Recents, re-read on every open so an hour spent with the palette closed
   // expires them (the list is only ever consulted at build time). Empty query

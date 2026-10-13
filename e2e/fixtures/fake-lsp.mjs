@@ -77,6 +77,9 @@ function handle(msg) {
           referencesProvider: true,
           documentSymbolProvider: true,
           workspaceSymbolProvider: true,
+          renameProvider: true,
+          documentFormattingProvider: true,
+          codeActionProvider: { resolveProvider: false },
         },
         serverInfo: { name: "fake-lsp", version: "1" },
       },
@@ -216,6 +219,68 @@ function handle(msg) {
       jsonrpc: "2.0",
       id: msg.id,
       result: { contents: { kind: "markdown", value: "**fake-lsp** knows this symbol" } },
+    });
+    return;
+  }
+  if (msg.method === "textDocument/rename") {
+    // The word is always columns 13-19 of line 1, like the definition above.
+    // The answer names a SECOND file the editor never opened (the same path
+    // under nested/), which is the case the client's own rename drops without
+    // a word: one file in the answer has a buffer, the other only exists on
+    // disk. The second file is spelled in the `documentChanges` form so both
+    // shapes cross the wire in one reply.
+    const here = msg.params.textDocument.uri;
+    const twin = here.replace(/\/([^/]+)$/, "/nested/$1");
+    const range = { start: { line: 0, character: 13 }, end: { line: 0, character: 19 } };
+    send({
+      jsonrpc: "2.0",
+      id: msg.id,
+      result: {
+        changes: { [here]: [{ range, newText: msg.params.newName }] },
+        documentChanges: [{
+          textDocument: { uri: twin, version: null },
+          edits: [{ range, newText: msg.params.newName }],
+        }],
+      },
+    });
+    return;
+  }
+  if (msg.method === "textDocument/formatting") {
+    send({
+      jsonrpc: "2.0",
+      id: msg.id,
+      result: [{
+        range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+        newText: "// formatted by fake-lsp\n",
+      }],
+    });
+    return;
+  }
+  if (msg.method === "textDocument/codeAction") {
+    seen.codeActionContext = msg.params?.context ?? null;
+    record();
+    const uri = msg.params.textDocument.uri;
+    send({
+      jsonrpc: "2.0",
+      id: msg.id,
+      result: [
+        {
+          title: "Fake refactor",
+          kind: "refactor",
+          command: { title: "Fake refactor", command: "fake.noop", arguments: [] },
+        },
+        {
+          title: "Fake quick fix",
+          kind: "quickfix",
+          isPreferred: true,
+          edit: {
+            changes: { [uri]: [{
+              range: { start: { line: 0, character: 22 }, end: { line: 0, character: 24 } },
+              newText: "99",
+            }] },
+          },
+        },
+      ],
     });
     return;
   }

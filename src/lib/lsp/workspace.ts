@@ -18,12 +18,22 @@ import { setDiagnostics } from "@codemirror/lint";
 import { EditorView } from "@codemirror/view";
 import { Workspace, type WorkspaceFile, LSPPlugin, type LSPClient } from "@codemirror/lsp-client";
 import type { LSPClient as Client } from "@codemirror/lsp-client";
-import { taskFileRead, fileReadExternal } from "@/lib/ipc";
+import { taskFileRead, taskFileWrite, fileReadExternal } from "@/lib/ipc";
 import { useApp } from "@/store/app";
+import { useUI } from "@/store/ui";
+import { i18n } from "@/lib/i18n";
 import { applyDiagnostics } from "./diagnosticsSink";
 import { attribution, severityOf } from "./diagnosticMap";
 import { useCodeIntel, checkoutRoot, grantKey } from "@/store/codeIntel";
 import { pathToFileUri, fileUriToPath, relUnder, baseName } from "@/lib/osPath";
+import {
+  applyWorkspaceEdit,
+  editsByUri,
+  type ApplyResult,
+  type EditTargets,
+  type LspTextEdit,
+  type LspWorkspaceEdit,
+} from "./applyWorkspaceEdit";
 
 /** Encode an absolute path as a `file://` URI, matching the Rust side. */
 export function pathToUri(abs: string): string {
@@ -88,6 +98,120 @@ export class TermicWorkspace extends Workspace {
 
   constructor(client: LSPClient, readonly root: string, readonly server: string) {
     super(client);
+    this.routeRenameThroughUs(client);
+  }
+
+  /**
+   * The client's rename applies only the `changes` form, and only to files an
+   * editor has open: every other file in the answer is dropped without a word,
+   * which for a rename is most of them. So the response is intercepted on its
+   * way back. Files with no editor are written to disk here, and what is
+   * handed on to the client is the open files alone, in the form it understands.
+   */
+  private routeRenameThroughUs(client: LSPClient) {
+    const hasRequest = typeof client.request === "function";
+    if (!hasRequest) return;
+
+    const request = client.request.bind(client) as (method: string, params: unknown) => Promise<any>;
+    (client as { request: unknown }).request = (method: string, params: unknown) => {
+      const pending = request(method, params);
+      if (method !== "textDocument/rename") return pending;
+      return pending.then((response: LspWorkspaceEdit | null) => this.applyClosedRenames(response));
+    };
+  }
+
+  private async applyClosedRenames(response: LspWorkspaceEdit | null) {
+    if (!response) return response;
+
+    const { byUri } = editsByUri(response);
+    const openChanges: Record<string, LspTextEdit[]> = {};
+    const closedChanges: Record<string, LspTextEdit[]> = {};
+    for (const [uri, edits] of byUri) {
+      // A file the workspace knows but no editor shows would be handed to the
+      // client and dropped there, so it goes down the disk path with the rest.
+      const hasEditor = !!this.getFile(uri)?.getView();
+      const target = hasEditor ? openChanges : closedChanges;
+      target[uri] = edits;
+    }
+
+    const fileOperations = (response.documentChanges ?? []).filter(change => !("textDocument" in change));
+    const result = await applyWorkspaceEdit(
+      { changes: closedChanges, documentChanges: fileOperations },
+      this.editTargets(),
+    );
+    this.reportFailures(i18n.t("backend:lsp.whatRename"), result);
+
+    return { changes: openChanges };
+  }
+
+  /** Apply a server's edit to every file it names and tell the user about any
+   *  file that could not be changed. */
+  async applyEdit(edit: LspWorkspaceEdit, what: string): Promise<ApplyResult> {
+    const result = await applyWorkspaceEdit(edit, this.editTargets());
+    this.reportFailures(what, result);
+    return result;
+  }
+
+  /** The raw diagnostics the server last pushed for a file, as it sent them:
+   *  a code action request needs the `code` and `data` fields, which the
+   *  editor's own copy no longer carries. */
+  diagnosticsFor(uri: string): any[] {
+    return this.lastDiagnostics.get(uri)?.diagnostics ?? [];
+  }
+
+  private reportFailures(what: string, result: ApplyResult) {
+    for (const failure of result.failed) {
+      const abs = uriToPath(failure.uri);
+      const shown = abs ? relUnder(abs, this.root) ?? abs : failure.uri;
+      const reasonKeys: Record<string, string> = { "file-operation": "reasonFileOperation", unreadable: "reasonUnreadable" };
+      const reasonKey = reasonKeys[failure.reason];
+      const reason = reasonKey ? i18n.t(`backend:lsp.${reasonKey}`) : failure.reason;
+      useUI.getState().pushToast(
+        i18n.t("backend:lsp.editNotApplied", { what, file: shown, reason }),
+        "error",
+      );
+    }
+  }
+
+  private editTargets(): EditTargets {
+    return {
+      applyOpen: (uri, edits) => {
+        const view = this.getFile(uri)?.getView();
+        const plugin = view ? LSPPlugin.get(view) : null;
+        if (!view || !plugin) return false;
+
+        const doc = plugin.syncedDoc;
+        const mapped = plugin.unsyncedChanges;
+        view.dispatch({
+          changes: edits.map(edit => ({
+            from: mapped.mapPos(plugin.fromPosition(edit.range.start, doc)),
+            to: mapped.mapPos(plugin.fromPosition(edit.range.end, doc)),
+            insert: edit.newText,
+          })),
+          userEvent: "refactor",
+        });
+        return true;
+      },
+      read: async uri => {
+        const abs = uriToPath(uri);
+        return abs ? readAnyFile(abs) : null;
+      },
+      write: async (uri, text) => {
+        const abs = uriToPath(uri);
+        const app = useApp.getState();
+        const active = app.tasks.find(t => t.id === app.activeTaskId);
+        const isInActiveTask = !!active && abs !== null && relUnder(abs, active.path) !== null;
+        const owner = isInActiveTask
+          ? active
+          : app.tasks.find(t => abs !== null && relUnder(abs, t.path) !== null);
+        const rel = abs && owner ? relUnder(abs, owner.path) : null;
+        const hasOwner = !!owner && rel !== null;
+        if (!hasOwner) throw new Error(i18n.t("backend:lsp.reasonOutsideCheckout"));
+
+        await taskFileWrite(owner.id, rel, text);
+        this.loaded.delete(uri);
+      },
+    };
   }
 
   /** Files read from disk to answer a question about them, keyed by uri.

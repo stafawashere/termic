@@ -46,6 +46,11 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
     why: "a settle window against IPC still in flight from the case before, plus "
       + "two 'the task did not change' negatives after a shortcut",
   },
+  "footers.e2e.ts": {
+    count: 2,
+    why: "the usage meter animates its width over 300ms, and both readings measure "
+      + "the fill after it lands",
+  },
   "settings.e2e.ts": {
     count: 1,
     why: "AgentsSection writes its copy 500ms after an edit and the timer outlives "

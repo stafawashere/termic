@@ -2295,6 +2295,11 @@ features read them:
 Appearance and the palette's "Toggle word wrap". No toolbar control, by
 choice. It is its own compartment in `EditorPane`, reconfigured in place.
 
+**Editor keymap** (`prefs.editorKeymap`, `"default"` | `"zed"`) is a select in
+Settings > Appearance and the palette's "Toggle Zed keymap". The Zed preset is
+its own `Prec.high` compartment in `EditorPane`; see
+[shortcuts.md](shortcuts.md#zed-preset-prefseditorkeymap).
+
 ## HTML preview
 
 `.html` / `.htm` files, in the task or external, get the same source /

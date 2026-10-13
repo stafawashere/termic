@@ -221,7 +221,8 @@ describe("the code-navigation group", () => {
     expect(inGroup.sort()).toEqual([
       "file-structure", "find-usages", "go-to-definition",
       "go-to-implementation", "go-to-type-definition",
-    ]);
+      "rename-symbol", "format-document", "code-actions",
+    ].sort());
     expect(SHORTCUT_DEFS.find(d => d.id === "nav-back")?.group).toBe("Navigation");
   });
 });

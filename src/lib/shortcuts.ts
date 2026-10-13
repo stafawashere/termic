@@ -72,7 +72,10 @@ export type ShortcutId =
   | "find-usages"
   | "go-to-implementation"
   | "go-to-type-definition"
-  | "file-structure";
+  | "file-structure"
+  | "rename-symbol"
+  | "format-document"
+  | "code-actions";
 
 export type ShortcutGroup =
   | "Navigation" | "Code navigation" | "Tabs" | "Terminal" | "Git" | "General";
@@ -125,6 +128,14 @@ export const SHORTCUT_DEFS: ShortcutDef[] = [
     defaultBinding: B("t", { alt: true, shift: true }) },
   { id: "file-structure", group: "Code navigation",
     defaultBinding: B("F12", { cmd: true }) },
+  // The refactoring trio. VS Code's keys for rename and format, and the
+  // quick-fix chord every editor with a lightbulb has settled on.
+  { id: "rename-symbol", group: "Code navigation",
+    defaultBinding: B("F2") },
+  { id: "format-document", group: "Code navigation",
+    defaultBinding: B("f", { alt: true, shift: true }) },
+  { id: "code-actions", group: "Code navigation",
+    defaultBinding: B(".", { cmd: true }) },
   { id: "nav-forward", group: "Navigation",
     defaultBinding: B("]", { cmd: true }) },
   { id: "task-prev-arrow", group: "Navigation",

@@ -16,7 +16,7 @@ use parking_lot::Mutex;
 use portable_pty::CommandBuilder;
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -49,6 +49,19 @@ struct Route {
 }
 
 static ROUTES: Mutex<Option<HashMap<String, Arc<Route>>>> = Mutex::new(None);
+
+/// Daemon PTYs this app asked to kill. A kill is asynchronous, so the daemon
+/// can still list one as alive for a moment, and a tab remounting in that
+/// moment must spawn rather than attach to a process on its way out.
+static KILLED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+
+fn mark_killed(id: &str) {
+    KILLED.lock().get_or_insert_with(HashSet::new).insert(id.to_string());
+}
+
+fn was_killed(id: &str) -> bool {
+    KILLED.lock().as_ref().is_some_and(|ids| ids.contains(id))
+}
 
 fn route(id: &str) -> Option<Arc<Route>> {
     ROUTES.lock().as_ref().and_then(|m| m.get(id).cloned())
@@ -483,8 +496,13 @@ fn live_from(row: &Value) -> Option<(LivePty, PtyMeta)> {
 pub(crate) fn find(app: &AppHandle, task_id: &str, tab_id: &str) -> Option<LivePty> {
     let client = connect_existing(app)?;
     let rows = client.list().ok()?;
+    live_for_tab(&rows, task_id, tab_id, was_killed)
+}
+
+fn live_for_tab(rows: &[Value], task_id: &str, tab_id: &str, killed: impl Fn(&str) -> bool) -> Option<LivePty> {
     rows.iter()
         .filter_map(live_from)
+        .filter(|(live, _)| !killed(&live.id))
         .find(|(_, meta)| meta.is_tab(task_id, tab_id))
         .map(|(live, _)| live)
 }
@@ -542,6 +560,7 @@ pub(crate) fn resize(client: &PtydClient, id: &str, rows: u16, cols: u16) -> Res
 
 /// Kill a daemon PTY. Its exit arrives through the connection like any other.
 pub(crate) fn kill(client: Arc<PtydClient>, id: String) {
+    mark_killed(&id);
     std::thread::spawn(move || {
         if let Err(e) = client.kill(&id) {
             dlog(&format!("[ptyd] kill {id} failed: {e}"));
@@ -607,6 +626,15 @@ mod tests {
         let dead = json!({ "id": "q", "pid": 8, "alive": false, "exit_code": 0, "meta": meta });
         assert_eq!(live_from(&alive).map(|(l, _)| l.id), Some("p".to_string()));
         assert!(live_from(&dead).is_none());
+    }
+
+    #[test]
+    fn a_pty_being_killed_is_not_offered_for_attach() {
+        let meta = json!({ "role_task_id": "t", "tab_id": "a", "role_kind": "agent" });
+        let rows = vec![json!({ "id": "p", "pid": 7, "alive": true, "meta": meta })];
+        assert_eq!(live_for_tab(&rows, "t", "a", |_| false).map(|l| l.id), Some("p".to_string()));
+        assert!(live_for_tab(&rows, "t", "a", |id| id == "p").is_none());
+        assert!(live_for_tab(&rows, "t", "b", |_| false).is_none());
     }
 
     #[test]

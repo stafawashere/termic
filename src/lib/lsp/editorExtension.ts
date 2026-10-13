@@ -16,9 +16,11 @@
 // same pair the user's own tab close would produce. Nothing else has to know.
 
 import type { Extension } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, ViewPlugin, keymap } from "@codemirror/view";
 import {
   LSPPlugin,
+  renameSymbol,
+  formatDocument,
   serverCompletion,
   hoverTooltips,
   signatureHelp,
@@ -29,6 +31,8 @@ import { modClickNavigation, showUsages, goToRelated, goToDefinitionOrUsages } f
 import { goBack, goForward } from "./navigate";
 import { fileStructure, showFileStructure } from "./fileStructure";
 import { usagesPopup } from "./usagesPopup";
+import { codeActionsPopup, showCodeActions } from "./codeActions";
+import { clearActiveEditor, setActiveEditor } from "@/lib/editor/activeEditor";
 import { lspLanguageId, lspServerFor } from "./languages";
 import { bindingToCmKey } from "@/lib/shortcuts";
 import { usePrefs } from "@/store/prefs";
@@ -44,7 +48,8 @@ function navKeymap() {
   const binds = usePrefs.getState().shortcuts;
   const entry = (
     id: "go-to-definition" | "find-usages" | "go-to-implementation"
-      | "go-to-type-definition" | "file-structure",
+      | "go-to-type-definition" | "file-structure" | "rename-symbol"
+      | "format-document" | "code-actions",
     run: (view: EditorView) => void,
   ) => {
     const b = binds[id];
@@ -75,8 +80,39 @@ function navKeymap() {
     // What is in this file, filterable. Opening an unfamiliar 2,500-line file
     // and scrolling to find out is the slowest thing a reader does.
     ...entry("file-structure", v => void showFileStructure(v)),
+    // The client's commands, on OUR keys: its own `renameKeymap` and
+    // `formatKeymap` would hard-code F2 and Shift-Alt-F where the rest of this
+    // list is rebindable. Rename's reach into files with no editor is handled
+    // in workspace.ts, which the client's version silently skips.
+    ...entry("rename-symbol", v => void renameSymbol(v)),
+    ...entry("format-document", v => void formatDocument(v)),
+    ...entry("code-actions", v => void showCodeActions(v)),
   ];
 }
+
+export type EditorCommand = "rename-symbol" | "format-document" | "code-actions";
+
+/** What the command palette runs: the same commands the keys do, on a view it
+ *  was handed. Loaded on demand, so the palette's chunk never pulls in the
+ *  language-server client. */
+export function runEditorCommand(view: EditorView, command: EditorCommand): void {
+  view.focus();
+  if (command === "rename-symbol") renameSymbol(view);
+  else if (command === "format-document") formatDocument(view);
+  else void showCodeActions(view);
+}
+
+/** Tells the palette which editor to act on. Registered here rather than in
+ *  EditorPane because only an editor with a server behind it has anything for
+ *  those commands to do. */
+const trackActiveEditor = ViewPlugin.define(view => {
+  if (view.hasFocus) setActiveEditor(view);
+  return { destroy: () => clearActiveEditor(view) };
+}, {
+  eventHandlers: {
+    focus(_event, view) { setActiveEditor(view); },
+  },
+});
 
 export interface CodeIntelTarget {
   /** The checkout whose index answers: the worktree, or the main repo. */
@@ -144,6 +180,8 @@ export async function codeIntelExtension(
     // editor: your eye is already on the symbol, and a docked panel makes
     // every lookup a round trip across the pane.
     usagesPopup,
+    codeActionsPopup,
+    trackActiveEditor,
     fileStructure,
     // A server that dies (crash, OOM, a `cargo` that ate the machine) must not
     // leave the editor looking like it is still thinking. The plugin surfaces

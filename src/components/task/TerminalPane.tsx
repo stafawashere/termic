@@ -69,6 +69,7 @@ import { SudoTouchIdBanner } from "@/components/task/SudoTouchIdBanner";
 import { TerminalFindBar } from "@/components/task/TerminalFindBar";
 import { isTerminalCloseCombo, isTerminalFindCombo } from "@/lib/terminalFind";
 import * as ipc from "@/lib/ipc";
+import { resolvePtyMount, replayRing, resetReplay } from "@/lib/ptyMount";
 import { maybeRebuildDockerImageForLaunch } from "@/lib/dockerDailyRebuild";
 import { commandShell, loginShell, loginShellArgs } from "@/lib/loginShell";
 import { TERMINAL_FONT_WEIGHT, TERMINAL_FONT_WEIGHT_BOLD, TERMINAL_LINE_HEIGHT } from "@/lib/terminalCell";
@@ -293,6 +294,13 @@ export function TerminalPane({ task, tab, active }: Props) {
   // Whether firstOutputAt has been stamped for the CURRENT PTY, so the
   // data handler patches it once rather than per chunk.
   const firstOutputPatchedRef = useRef(false);
+  // Whether this tab has had a PTY in this app session. Only a tab that has
+  // not may attach to an agent the PTY daemon kept running across a restart.
+  const hadPtyRef = useRef(false);
+  // True while a reattach writes the daemon's ring into xterm. The ring holds
+  // OSC titles, bells and hook sequences the user already saw before the
+  // restart, and replaying them must not ring again.
+  const replayingRef = useRef(false);
   const lastOutputTrailerRef = useRef<number | null>(null);
   // Scrollback line count over time. Real work GROWS the scrollback
   // (agent prints lines that scroll off). Status-bar ticks ("Cooking
@@ -1067,6 +1075,7 @@ const captureArmedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    resetReplay(replayingRef);
     const host = hostRef.current;
     if (!host) return;
 
@@ -1820,7 +1829,7 @@ const captureArmedRef = useRef(false);
     };
 
     const goAttention = (reason: string, message?: string) => {
-      if (!workDoneEnabled) return;
+      if (!workDoneEnabled || replayingRef.current) return;
       cancelSettle(reason);
       localBusy = false;
       // Mark workState=done so the visual indicator is consistent — the
@@ -1968,7 +1977,7 @@ const captureArmedRef = useRef(false);
     //     wait emits a byte-identical notification to a real permission
     //     prompt, so the body alone cannot separate them).
     const notifyAttention = (reason: string, body: string, trusted = false) => {
-      if (isRunTab || !workDoneEnabled) return;
+      if (isRunTab || !workDoneEnabled || replayingRef.current) return;
       const text = body.trim();
       if (!text) return;
       // `trusted` = termic's own agent hook, not something the agent chose to
@@ -2133,7 +2142,7 @@ const captureArmedRef = useRef(false);
     // Still gated on having typed (a splash-screen bell on a tab you never used
     // is not for you) and on not being mid-work.
     term.onBell(() => {
-      if (!workDoneEnabled || isRunTab) return;
+      if (!workDoneEnabled || isRunTab || replayingRef.current) return;
       const cur = useApp.getState().tabs[task.id]?.find(t => t.id === tab.id) as TerminalTab | undefined;
       if (!cur || !cur.lastInputAt || cur.workState === "working") return;
       dbg("bel", `lastInputAt=${cur.lastInputAt} workState=${cur.workState}`);
@@ -2146,6 +2155,7 @@ const captureArmedRef = useRef(false);
     // xterm's parser strips the leading "9;" before calling the handler,
     // so `data` here is the rest. Empty/no-leading-"4;" = notification.
     term.parser.registerOscHandler(9, (data) => {
+      if (replayingRef.current) return true;
       const parts = data.split(";");
       if (parts[0] === "4") {
         // OSC 9;4;<state>[;<pct>] — ConEmu progress protocol.
@@ -2198,6 +2208,7 @@ const captureArmedRef = useRef(false);
     // Some custom agents emit this instead of OSC 9. Same meaning, same
     // handling.
     term.parser.registerOscHandler(777, (data) => {
+      if (replayingRef.current) return true;
       const parts = data.split(";");
       if (parts[0] !== "notify") return false;
       // Read before it is set: the ready branch below needs to know whether
@@ -2579,6 +2590,7 @@ const captureArmedRef = useRef(false);
     };
     hookDelegatedRef.current = hookDelegated;
     term.parser.registerOscHandler(133, (data) => {
+      if (replayingRef.current) return true;
       const sub = (data.split(";")[0] || "").toUpperCase();
       // termic's hooks no longer speak 133, so for an agent that HAS them,
       // every 133 is the agent's own: pi marks each message block on every
@@ -2770,6 +2782,22 @@ const captureArmedRef = useRef(false);
       const rows = Math.max(10, term.rows || 30);
 
       try {
+        // An agent the PTY daemon kept running across an app restart is
+        // reattached rather than respawned. Asked before anything below runs,
+        // because none of it (resume, Docker refresh, spawn) applies to a
+        // process that never stopped.
+        const mount = await resolvePtyMount({
+          isAgent,
+          hadPty: hadPtyRef,
+          isCancelled: () => cancelled,
+          find: () => ipc.ptyDaemonFind(task.id, tab.id).catch(() => null),
+          attach: (id) => ipc.ptyDaemonAttach(id, rows, cols).catch(e => {
+            dbg("attach", `failed, spawning instead: ${String(e)}`);
+            return null;
+          }),
+        });
+        if (!mount) return;
+        const attached = mount.attached;
         // The per-tab resume decision (resumeOverride / useIdResume /
         // sessionUuid / resumeKnown / shouldResume) was resolved
         // synchronously ABOVE, before the rAF await, alongside isPrimaryTab
@@ -2867,9 +2895,11 @@ const captureArmedRef = useRef(false);
         // miss (it's a --no-cache rebuild, same as "Update agents") -
         // re-check cancelled after, the tab may have been closed/navigated
         // away from while this awaited.
-        if (isAgent) await maybeRebuildDockerImageForLaunch(task);
+        if (isAgent && !attached) await maybeRebuildDockerImageForLaunch(task);
         if (cancelled) return;
-        const spawn = await ipc.ptySpawn({
+        const spawn: ipc.SpawnResult = attached
+          ? { id: attached.id, account: attached.account, sandbox: { active: false, proxy_active: false, warning: "" } }
+          : await ipc.ptySpawn({
           cwd: task.path,
           cmd: spawnCmd,
           args: spawnArgs,
@@ -2947,15 +2977,27 @@ const captureArmedRef = useRef(false);
           rows, cols,
         });
         const ptyId = spawn.id;
-        if (cancelled) { ipc.ptyKill(ptyId).catch(() => {}); return; }
+        // An attached agent outlives this pane by design: the next mount
+        // attaches again.
+        if (cancelled) { if (!attached) ipc.ptyKill(ptyId).catch(() => {}); return; }
         ptyRef.current = ptyId;
         spawnAccountRef.current = spawn.account ?? null;
-        // firstOutputAt starts null: this PTY has not painted yet.
-        firstOutputPatchedRef.current = false;
+        // firstOutputAt starts null: this PTY has not painted yet. An
+        // attached one painted before the restart and its ring is about to
+        // be replayed, so it has.
+        firstOutputPatchedRef.current = !!attached;
         patchTab(task.id, tab.id, {
-          ptyId, lastOutputAt: Date.now(), firstOutputAt: null,
+          ptyId, lastOutputAt: Date.now(), firstOutputAt: attached ? Date.now() : null,
           liveAccount: spawn.account ?? null,
         });
+        if (attached) {
+          // Nothing was resumed, so there is no resume to fail.
+          lastSpawnWasResumeRef.current = false;
+          hasHistoryLocalRef.current = true;
+          logWorkState("attach",
+            `task=${JSON.stringify(task.name)} cli=${tab.cli} ptyId=${ptyId}`
+            + ` pid=${attached.pid ?? "none"} truncated=${attached.truncated}`);
+        }
         const resumedClaudeSession = resumeKnown && !!sessionUuid && isClaudeCli(tab.cli);
         if (resumedClaudeSession) void rebuildSubagentsForTab(task.id, tab.id, sessionUuid);
         // Per-PTY debug logger — active only when localStorage.ptyDebug === "1".
@@ -3018,7 +3060,7 @@ const captureArmedRef = useRef(false);
         setSandboxWarning(spawn.sandbox.warning || null);
         // Fire-and-forget analytics. Real resume gating lives on the
         // has_resumable_history flag below, not here.
-        ipc.taskRecordSpawn(task.id).catch(() => {});
+        if (!attached) ipc.taskRecordSpawn(task.id).catch(() => {});
         // Launching a task is exactly the moment its PR/MR status is worth
         // knowing, not something to wait on the user opening the Git tab
         // for - only the primary agent tab counts as "the task launched",
@@ -3035,7 +3077,7 @@ const captureArmedRef = useRef(false);
         // future spawns (even after termic restart) will pass resume
         // args. Cleared in the exit handler if we never reach the
         // timeout (the rapid-exit branch fires first).
-        window.setTimeout(() => {
+        if (!attached) window.setTimeout(() => {
           // Past the window a failed resume dies in: stop collecting its tail.
           resumeTailOpenRef.current = false;
           if (cancelled || ptyRef.current !== ptyId) return;
@@ -3094,10 +3136,16 @@ const captureArmedRef = useRef(false);
           ? makeCtrlSniffer((kind, payload) => dbg(`raw-${kind}`, payload))
           : null;
         // Cleared to "" once sent, so a respawn of this tab never retypes it.
-        let sudoInputPending = !!sudoInstallInput;
+        let sudoInputPending = !!sudoInstallInput && !attached;
         const tailDecoder = new TextDecoder();
         resumeTailRef.current = "";
         resumeTailOpenRef.current = lastSpawnWasResumeRef.current;
+        // The ring goes in before the live listener exists, and live output
+        // waits in Rust until `ptyAttached` below, so nothing interleaves.
+        if (attached?.snapshot) {
+          const ring = Uint8Array.from(atob(attached.snapshot), c => c.charCodeAt(0));
+          replayRing(term, replayingRef, ring);
+        }
         const unlistenData = await ipc.onPtyData(ptyId, (u8) => {
           term.write(u8);
           if (resumeTailOpenRef.current) {
@@ -3490,6 +3538,7 @@ const captureArmedRef = useRef(false);
 
     return () => {
       cancelled = true;
+      resetReplay(replayingRef);
       ro.disconnect();
       // This PTY's conversation is over (closed, or restarted into a new one),
       // so its context reading describes nothing any more.

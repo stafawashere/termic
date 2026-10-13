@@ -75,6 +75,9 @@ const DEF_KEY: Record<ShortcutId, string> = {
   "go-to-implementation": "goToImplementation",
   "go-to-type-definition": "goToTypeDefinition",
   "file-structure": "fileStructure",
+  "rename-symbol": "renameSymbol",
+  "format-document": "formatDocument",
+  "code-actions": "codeActions",
 };
 
 /** Same, for the two gestures that are not a chord

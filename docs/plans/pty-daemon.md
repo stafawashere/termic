@@ -6,14 +6,18 @@ rebuild, an update, a crash) no longer kills running agents. The next
 launch reattaches to them, replays the scrollback and streams live, and
 the agent never notices the gap.
 
-## Today
+## Shipped
 
-Every PTY is a child of the app. `RunEvent::Exit` calls
-`cleanup_children` (lib.rs:26126), which runs `docker::cleanup_all()`
-and SIGKILLs every `child_pid` in the `PtyManager`. `TerminalPane.tsx`
-always spawns on mount (around 2872); there is no attach path. On
-relaunch the conversation comes back through `--resume <id>`, but any
-in-flight turn is lost.
+The core, the daemon, app routing and the frontend reattach. Agent PTYs run in the daemon behind
+Settings > Tasks > "Keep agents running" (off by default), and an agent
+tab's first mount in an app session reattaches to its live daemon PTY
+(`decideSpawnOrAttach`, `pty_daemon_find`, `pty_daemon_attach`; see
+docs/ipc.md). The ring is replayed with attention silenced (docs/gotchas.md).
+Covered by `e2e/specs/pty-daemon.e2e.ts`.
+
+What is left: a sandboxed or Docker task's agent still spawns in the app
+(`daemon_can_host` in `pty_spawn`), because its proxy and container live
+there (phase 4), and Windows and Linux packaging (phase 6).
 
 ## What a live agent depends on
 
@@ -54,37 +58,12 @@ in-flight turn is lost.
   zero wakeups (bear trap 9). The app forwarder blocks on a socket read
   and calls `emit_to_window`.
 
-## Frontend
-
-On mount, before `decideResume`, ask the daemon whether the tab's PTY
-is alive. If it is, attach: listen on `pty://id` and `pty-exit://id`,
-call `pty_attach(id, windowLabel, cols, rows)`, write the ring snapshot
-into xterm, resize, and send `pty_attached`. Do not stamp
-`firstOutputAt` or arm the resume-failure tail. The replay re-emits OSC
-titles and hook sequences, so a `replaying` flag suppresses attention
-and notifications until the snapshot is written. The unmount kill
-stays for an explicit tab close.
-
 ## Phases
 
-1. Extract the PTY core behind a `Sink` trait, no behaviour change.
-   Update the source guard at lib.rs:27240; unit test chunk-then-exit
-   ordering.
-2. Daemon binary and protocol. Cargo tests: framing round-trip;
-   spawn, subscribe, ring, exit; disconnect, write, resubscribe gets
-   ring plus live; idle PTY emits nothing; idle exit; handshake
-   mismatch.
-3. App uses the daemon behind a setting. `pty_*` commands become RPCs;
-   `cleanup_children` skips daemon PTYs. Vitest the spawn/attach
-   decision as a pure function next to `decideResume`.
-4. Proxy, sandbox bundle and Docker cleanup move into the daemon.
+1. Proxy, sandbox bundle and Docker cleanup move into the daemon.
    Cargo test that a sandboxed PTY's proxy survives a client
    disconnect.
-5. Frontend attach and replay guard. Vitest that replay stamps no
-   attention. E2E: a task runs a `date` loop, the app quits and
-   relaunches on the same `TERMIC_DATA_DIR`, the pane shows output from
-   both sides of the gap and the pid is unchanged.
-6. Windows and Linux. `make install` kills by exe path
+2. Windows and Linux. `make install` kills by exe path
    (Makefile:349) and must spare the daemon, and NSIS cannot overwrite
    a running exe, so the daemon runs from a copy. An AppImage mount
    disappears on exit, so the daemon spawns from the extracted path.

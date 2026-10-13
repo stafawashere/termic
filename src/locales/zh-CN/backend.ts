@@ -134,6 +134,16 @@ export default {
   copySuffix: "（副本）",
 
   lsp: {
+    whatRename: "重命名",
+    whatCodeAction: "代码操作",
+    editNotApplied: "{{what}}未能修改 {{file}}：{{reason}}",
+    reasonUnreadable: "无法读取该文件",
+    reasonFileOperation: "不支持文件操作",
+    reasonOutsideCheckout: "该文件不在任何任务的检出目录内",
+    noCodeActionSupport: "此语言服务器不提供代码操作",
+    noCodeActions: "此处没有可用的代码操作",
+    codeActionsFailed: "获取代码操作失败：{{error}}",
+    codeActionFailed: "执行代码操作失败：{{error}}",
     downloadTitle: "下载 {{label}}？",
     downloadConfirm: "下载",
     installFailed: "无法安装 {{label}}：{{error}}",

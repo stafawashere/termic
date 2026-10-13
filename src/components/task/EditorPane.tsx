@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { EditTab, ScratchTab, ExternalTab, Task } from "@/lib/types";
-import { EditorState, Compartment, Annotation, type Extension } from "@codemirror/state";
+import { EditorState, Compartment, Annotation, Prec, type Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, keymap, tooltips } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
 import { basicSetup } from "codemirror";
@@ -38,6 +38,8 @@ import { scratchTargetId } from "@/lib/scratchTabs";
 import { useApp } from "@/store/app";
 import { useUI } from "@/store/ui";
 import { usePrefs, resolveTheme } from "@/store/prefs";
+import type { EditorKeymap } from "@/store/prefs";
+import { zedKeymapExtension, zedKeymapOwnsKey } from "@/lib/editor/zedKeymap";
 import { resolveEditorTheme, editorSurfaceTheme } from "@/lib/editorTheme";
 import { deriveScratchTitle } from "@/lib/scratchTitle";
 import { createLangSwitch } from "@/lib/langSwitch";
@@ -195,6 +197,11 @@ export function EditorPane({ task, tab, active, onContent }: {
   // Soft wrap (prefs.editorWordWrap), reconfigured in place like blame.
   const wrapCompRef = useRef(new Compartment());
   const wrapOnRef = useRef<boolean | null>(null);
+  // Key preset (prefs.editorKeymap). Holds nothing under "default", so that
+  // editor's keymaps are exactly basicSetup's; "zed" layers the Zed bindings
+  // above them.
+  const keymapCompRef = useRef(new Compartment());
+  const keymapRef = useRef<EditorKeymap | null>(null);
   // Which value the compartment currently holds, so the toggle effect can skip
   // the run React fires on mount (the view was just built with this value, and
   // reconfiguring would tear the plugins down and rebuild them for nothing).
@@ -263,6 +270,7 @@ export function EditorPane({ task, tab, active, onContent }: {
   const codeLigatures  = usePrefs(s => s.codeLigatures);
   const inlineBlame    = usePrefs(s => s.inlineBlame);
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
+  const editorKeymap   = usePrefs(s => s.editorKeymap);
   // Syntax theme (atomone, tokyo-night, …), independently configurable per
   // app mode (#40): a dark-optimized theme can look wrong on a light app
   // surface, and vice versa. "auto" within each still follows the app
@@ -578,6 +586,9 @@ export function EditorPane({ task, tab, active, onContent }: {
               }),
               blameCompRef.current.of(buildBlame(blameOnRef.current ?? false)),
               wrapCompRef.current.of((wrapOnRef.current = usePrefs.getState().editorWordWrap) ? EditorView.lineWrapping : []),
+              Prec.high(keymapCompRef.current.of(
+                (keymapRef.current = usePrefs.getState().editorKeymap) === "zed" ? zedKeymapExtension() : [],
+              )),
               langCompRef.current.of(lang ? [lang] : []),
               // ⌘-click always answers, even with no server running: it
               // offers to turn code intelligence on for a language something
@@ -734,6 +745,7 @@ export function EditorPane({ task, tab, active, onContent }: {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!bindingMatches(e, sendRefBinding)) return;
+      if (zedKeymapOwnsKey(usePrefs.getState().editorKeymap, e.target)) return;
       const v = viewRef.current;
       if (!v) return;
       const focused = (document.activeElement as HTMLElement | null)?.closest?.(".cm-editor");
@@ -863,6 +875,15 @@ export function EditorPane({ task, tab, active, onContent }: {
     wrapOnRef.current = editorWordWrap;
     v.dispatch({ effects: wrapCompRef.current.reconfigure(editorWordWrap ? EditorView.lineWrapping : []) });
   }, [editorWordWrap]);
+
+  // Switching key preset reconfigures the compartment, so the cursor and undo
+  // history survive. The ref skips the mount run, as with word wrap.
+  useEffect(() => {
+    const v = viewRef.current;
+    if (!v || keymapRef.current === editorKeymap) return;
+    keymapRef.current = editorKeymap;
+    v.dispatch({ effects: keymapCompRef.current.reconfigure(editorKeymap === "zed" ? zedKeymapExtension() : []) });
+  }, [editorKeymap]);
 
   // What this buffer is highlighted as, and the one place a language is
   // decided (a manual Set-syntax pick beats the derived answer). Declared
