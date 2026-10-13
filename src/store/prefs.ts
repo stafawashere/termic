@@ -79,6 +79,8 @@ const LS_INLINE_BLAME  = "inlineBlame";
 const LS_EDITOR_GIT_GUTTER = "editorGitGutter";
 const LS_EDITOR_WORD_WRAP = "editorWordWrap";
 const LS_EDITOR_INDENT_GUIDES = "editorIndentGuides";
+const LS_EDITOR_REINDENT_TO_THREE = "editorReindentToThree";
+const LS_EDITOR_AUTOSAVE = "editorAutosave";
 const LS_EDITOR_MINIMAP = "editorMinimap";
 const LS_EDITOR_KEYMAP = "editorKeymap";
 const LS_CODE_NAV      = "codeIntelligence";
@@ -804,6 +806,13 @@ interface PrefsState {
   editorWordWrap: boolean;
   /** Vertical indent guides in the editor. ON by default. */
   editorIndentGuides: boolean;
+  /** Reindent files that are not indented with 3 spaces when they open. OFF
+   *  by default. Touches the buffer only; the file changes when saved. */
+  editorReindentToThree: boolean;
+  /** Write a dirty file 1000 ms after the last edit, on blur and on tab close,
+   *  through the same path as Mod-s. OFF by default: saving is the user's act
+   *  unless they opt in. */
+  editorAutosave: boolean;
   /** Canvas minimap in the editor's right gutter. OFF by default; the
    *  minimap package is only fetched once this is on. */
   editorMinimap: boolean;
@@ -1038,6 +1047,10 @@ interface PrefsState {
   toggleEditorWordWrap: () => void;
   setEditorIndentGuides: (v: boolean) => void;
   toggleEditorIndentGuides: () => void;
+  setEditorReindentToThree: (v: boolean) => void;
+  toggleEditorReindentToThree: () => void;
+  setEditorAutosave: (v: boolean) => void;
+  toggleEditorAutosave: () => void;
   setEditorMinimap: (v: boolean) => void;
   toggleEditorMinimap: () => void;
   setEditorKeymap: (v: EditorKeymap) => void;
@@ -1252,6 +1265,8 @@ export const APPEARANCE_DEFAULTS = {
   editorGitGutter:       true,
   editorWordWrap:        false,
   editorIndentGuides:    true,
+  editorReindentToThree: false,
+  editorAutosave:        false,
   editorMinimap:         false,
   editorKeymap:          "default" as EditorKeymap,
   codeIntelligence:        true,
@@ -1341,6 +1356,8 @@ function readStoredPrefs() {
   const initialEditorGitGutter = lsGetBool(LS_EDITOR_GIT_GUTTER, APPEARANCE_DEFAULTS.editorGitGutter);
   const initialWordWrap     = lsGetBool(LS_EDITOR_WORD_WRAP, APPEARANCE_DEFAULTS.editorWordWrap);
   const initialIndentGuides = lsGetBool(LS_EDITOR_INDENT_GUIDES, APPEARANCE_DEFAULTS.editorIndentGuides);
+  const initialReindentToThree = lsGetBool(LS_EDITOR_REINDENT_TO_THREE, APPEARANCE_DEFAULTS.editorReindentToThree);
+  const initialAutosave      = lsGetBool(LS_EDITOR_AUTOSAVE, APPEARANCE_DEFAULTS.editorAutosave);
   const initialMinimap       = lsGetBool(LS_EDITOR_MINIMAP, APPEARANCE_DEFAULTS.editorMinimap);
   const initialEditorKeymap: EditorKeymap = lsGet(LS_EDITOR_KEYMAP, "default") === "zed" ? "zed" : "default";
   const initialCodeNav      = lsGetBool(LS_CODE_NAV, APPEARANCE_DEFAULTS.codeIntelligence);
@@ -1526,6 +1543,8 @@ function readStoredPrefs() {
     editorGitGutter: initialEditorGitGutter,
     editorWordWrap: initialWordWrap,
     editorIndentGuides: initialIndentGuides,
+    editorReindentToThree: initialReindentToThree,
+    editorAutosave: initialAutosave,
     editorMinimap: initialMinimap,
     editorKeymap: initialEditorKeymap,
     codeIntelligence: initialCodeNav,
@@ -1706,6 +1725,22 @@ export const usePrefs = create<PrefsState>(set => ({
   toggleEditorIndentGuides: () => {
     usePrefs.getState().setEditorIndentGuides(!usePrefs.getState().editorIndentGuides);
   },
+  setEditorReindentToThree: (v) => {
+    if (usePrefs.getState().editorReindentToThree === v) return;
+    try { localStorage.setItem(LS_EDITOR_REINDENT_TO_THREE, v ? "1" : "0"); } catch {}
+    set({ editorReindentToThree: v });
+  },
+  toggleEditorReindentToThree: () => {
+    usePrefs.getState().setEditorReindentToThree(!usePrefs.getState().editorReindentToThree);
+  },
+  setEditorAutosave: (v) => {
+    if (usePrefs.getState().editorAutosave === v) return;
+    try { localStorage.setItem(LS_EDITOR_AUTOSAVE, v ? "1" : "0"); } catch {}
+    set({ editorAutosave: v });
+  },
+  toggleEditorAutosave: () => {
+    usePrefs.getState().setEditorAutosave(!usePrefs.getState().editorAutosave);
+  },
   setEditorMinimap: (v) => {
     if (usePrefs.getState().editorMinimap === v) return;
     try { localStorage.setItem(LS_EDITOR_MINIMAP, v ? "1" : "0"); } catch {}
@@ -1802,6 +1837,8 @@ export const usePrefs = create<PrefsState>(set => ({
     s.setEditorGitGutter(d.editorGitGutter);
     s.setEditorWordWrap(d.editorWordWrap);
     s.setEditorIndentGuides(d.editorIndentGuides);
+    s.setEditorReindentToThree(d.editorReindentToThree);
+    s.setEditorAutosave(d.editorAutosave);
     s.setEditorMinimap(d.editorMinimap);
     s.setEditorKeymap(d.editorKeymap);
     s.setCodeIntelligence(d.codeIntelligence);

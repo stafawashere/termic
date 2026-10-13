@@ -37,6 +37,7 @@ pub mod agent_hooks;
 pub mod agent_usage;
 pub mod subagent_transcripts;
 pub mod subagent_watch;
+pub mod file_watch;
 pub mod codex_trust;
 mod sandbox;
 mod proxy;
@@ -10781,6 +10782,7 @@ fn task_archive_sync(id: String, delete_branch: bool, skip_scripts: bool) -> Res
     // polling thread will keep trying to sync a worktree that no longer exists.
     spotlight_stop_for_ws(&id);
     subagent_watch::release_task(&id);
+    file_watch::release_task(&id);
 
     let mut list = load_tasks_all();
     let w = list.iter_mut().find(|w| w.id == id).ok_or("task not found")?;
@@ -10996,6 +10998,7 @@ async fn task_delete(state: State<'_, PtyManager>, id: String) -> Result<(), Str
     tauri::async_runtime::spawn_blocking(move || {
         stop_every_task_pty(&ptys, &id2);
         subagent_watch::release_task(&id2);
+        file_watch::release_task(&id2);
         // An archived task whose worktree is already gone (every row the
         // History page empties) has nothing left to tear down. Archiving it
         // again ran its archive script a second time and walked git's
@@ -25747,6 +25750,8 @@ pub fn run() {
             subagent_watch::subagent_watch_open,
             subagent_watch::subagent_watch_close,
             subagent_watch::subagent_watch_poke,
+            file_watch::editor_watch_file,
+            file_watch::editor_unwatch_file,
             perf_boot_elapsed_ms,
             deep_link_take_pending,
             agent_accounts, account_add, account_remove, account_set_default, account_set_auto_switch,

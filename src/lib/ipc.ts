@@ -444,6 +444,20 @@ export function onSubagentWatch(
   return listen<SubagentTailEvent>(`subagent-watch://${sessionId}/${agentId}`, ev => cb(ev.payload));
 }
 
+/** Start (or share) a change watch on one file open in the editor. Resolved
+ *  against the task checkout like `taskFileRead`; rejects outside it. */
+export const editorWatchFile = (id: string, path: string) =>
+  invoke<void>("editor_watch_file", { id, path });
+
+export const editorUnwatchFile = (id: string, path: string) =>
+  invoke<void>("editor_unwatch_file", { id, path });
+
+export interface EditorFileChanged { taskId: string; path: string }
+
+export function onEditorFileChanged(cb: (event: EditorFileChanged) => void): Promise<UnlistenFn> {
+  return listen<EditorFileChanged>("editor-file-changed", ev => cb(ev.payload));
+}
+
 /** Per-task deny counters surfaced in the TerminalPane footer
  *  chip. Currently only `network` (the proxy bumps it on every CONNECT
  *  / HTTP request that fails the host allowlist). Cheap to poll. */

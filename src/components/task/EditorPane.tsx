@@ -17,11 +17,12 @@ import { basicSetup } from "codemirror";
 import { search } from "@codemirror/search";
 import { lintGutter, setDiagnostics } from "@codemirror/lint";
 import { indentUnit } from "@codemirror/language";
-import { taskFileRead, fileReadExternal, taskFileWrite, scratchRead, scratchWrite, scratchSetMeta, revealPath, scratchFileRead, scratchFileWrite } from "@/lib/ipc";
+import { taskFileRead, fileReadExternal, taskFileWrite, scratchRead, scratchWrite, scratchSetMeta, revealPath, scratchFileRead, scratchFileWrite, editorWatchFile, editorUnwatchFile, onEditorFileChanged } from "@/lib/ipc";
 import { langForId, langForPath } from "@/lib/languageExts";
 import { PLAIN_TEXT, effectiveLanguageId, normalizeLanguageId } from "@/lib/languages";
 import { detectSyntaxFromContent } from "@/lib/detectSyntax";
 import { detectIndent, type IndentStyle } from "@/lib/detectIndent";
+import { planReindent } from "@/lib/editor/reindent";
 import { useCodeIntel, checkoutRoot, grantKey } from "@/store/codeIntel";
 import { lspServerFor } from "@/lib/lsp/languages";
 import { classifyEditorLoadError, isUnviewable, type EditorLoadError } from "@/lib/editorError";
@@ -49,6 +50,9 @@ import { forceParsing } from "@codemirror/language";
 import { navHint } from "@/lib/lsp/navHint";
 import { gotoLocation as revealLine } from "@/lib/gotoLocation";
 import { isPureCrlf } from "@/lib/lineEndings";
+import { threeWayMerge } from "@/lib/editor/threeWayMerge";
+import { createReadTicket, decideDiskAction, guardWriteAgainstStaleReads, isMissingFileError, minimalChange, toDocSpace } from "@/lib/editor/externalReload";
+import { ConflictCompare } from "./ConflictCompare";
 
 /** How long after the last keystroke a scratchpad's buffer is flushed to the
  *  scratch store and its title re-derived. Both ride the TYPING path, so both
@@ -123,6 +127,13 @@ function indentExtension(style: IndentStyle): Extension {
 // Marks a doc-replacing transaction as an external reload (file changed on
 // disk), not a user edit — so the updateListener skips flipping the dirty dot.
 const ExternalReload = Annotation.define<boolean>();
+
+const THREE_SPACES: IndentStyle = { useTabs: false, size: 3, unit: "   " };
+const AUTOSAVE_DELAY_MS = 1000;
+
+/** Why the buffer and the file on disk can no longer be treated as the same
+ *  document: the file went away, or became something this editor cannot read. */
+type DiskNote = { kind: "deleted" } | { kind: "unviewable"; message: string };
 
 export function EditorPane({ task, tab, active, onContent }: {
   task: Task;
@@ -220,12 +231,55 @@ export function EditorPane({ task, tab, active, onContent }: {
   // the run React fires on mount (the view was just built with this value, and
   // reconfiguring would tear the plugins down and rebuild them for nothing).
   const blameOnRef = useRef<boolean | null>(null);
+  // What the file held when this editor last loaded or saved it, in document
+  // space. The common ancestor of the three way merge when disk and buffer both
+  // moved.
+  const baseTextRef = useRef("");
+  // The text this editor is writing right now, so the watcher's echo of its own
+  // save is not mistaken for someone else's edit. Cleared when the write ends.
+  const inFlightWriteRef = useRef<string | null>(null);
+  const readTicketRef = useRef(createReadTicket());
+  const autosaveTimerRef = useRef<number | null>(null);
+  const autosaveScheduleRef = useRef<(() => void) | null>(null);
+  const autosaveFlushRef = useRef<(() => void) | null>(null);
+  // Mirrors of the banner state for the closures built once in the mount
+  // effect, which would otherwise read a stale render.
+  const conflictRef = useRef<{ disk: string } | null>(null);
+  const diskNoteRef = useRef<DiskNote | null>(null);
+  const [conflict, setConflictState] = useState<{ disk: string } | null>(null);
+  const [diskNote, setDiskNoteState] = useState<DiskNote | null>(null);
+  const [showCompare, setShowCompare] = useState(false);
+  const setConflict = useCallback((next: { disk: string } | null) => {
+    conflictRef.current = next;
+    setConflictState(next);
+    if (!next) setShowCompare(false);
+  }, []);
+  const setDiskNote = useCallback((next: DiskNote | null) => {
+    diskNoteRef.current = next;
+    setDiskNoteState(next);
+  }, []);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<EditorLoadError | null>(null);
   // Mirrors the tab's `dirty` flag so the CodeMirror updateListener
   // only touches the store on the clean→dirty edge, not every
   // keystroke (patchTab re-renders the whole TabBar).
   const dirtyRef = useRef(false);
+  // One undoable, dirty-marking transaction, deliberately NOT annotated as an
+  // external reload. Returns whether it changed the buffer.
+  const reindentView = (view: EditorView, languageId: string): boolean => {
+    const isEnabled = usePrefs.getState().editorReindentToThree;
+    const isEditTab = tab.type === "edit";
+    if (!isEnabled || !isEditTab) return false;
+
+    const plan = planReindent(view.state, languageId);
+    if (!plan) return false;
+
+    view.dispatch({
+      changes: plan.edits,
+      effects: indentCompRef.current.reconfigure(indentExtension(THREE_SPACES)),
+    });
+    return true;
+  };
   // Scratchpad flush state (GH #244). The last content and title actually
   // written, so the debounced flush can bail when nothing changed; the
   // pending timer; and the unmount flush, rebound by every mount.
@@ -323,6 +377,9 @@ export function EditorPane({ task, tab, active, onContent }: {
     // next file's content.
     setErr(null);
     setLoading(true);
+    setConflict(null);
+    setDiskNote(null);
+    inFlightWriteRef.current = null;
     // Where the time goes when a file opens, behind localStorage.editorDebug
     // === "1" (same convention as ptyDebug). Every stage of the open is
     // awaited before the view exists, so a window where the TEXT is on screen
@@ -464,11 +521,12 @@ export function EditorPane({ task, tab, active, onContent }: {
         };
         lastFlushedRef.current = content;
         lastTitleRef.current = null;
+        baseTextRef.current = toDocSpace(content);
 
-        // ⌘S → write the buffer to disk. termic NEVER auto-saves; this
-        // is the only path that clears `dirty`. Returns true so
+        // Writes the buffer to disk. Mod-s calls it, and so does autosave when
+        // the pref is on; nothing else clears `dirty`. Returns true so
         // CodeMirror treats the key as handled and preventDefault's it.
-        const saveDoc = (v: EditorView): boolean => {
+        const saveDoc = (v: EditorView, silent = false): boolean => {
           if (tab.type === "scratch" && tab.path) {
             const scope = tab.scope ?? "global";
             const name = tab.path.split("/").pop() || tab.path;
@@ -502,11 +560,22 @@ export function EditorPane({ task, tab, active, onContent }: {
             return true;
           }
           const name = tab.path.split("/").pop() || tab.path;
-          taskFileWrite(task.id, tab.path, v.state.doc.toString())
+          // sliceDoc keeps a CRLF file CRLF; doc.toString() would write LF.
+          const diskText = v.state.sliceDoc();
+          const docText = v.state.doc.toString();
+          inFlightWriteRef.current = docText;
+          guardWriteAgainstStaleReads(readTicketRef.current, () => taskFileWrite(task.id, tab.path, diskText))
             .then(() => {
-              dirtyRef.current = false;
-              useApp.getState().patchTab(task.id, tab.id, { dirty: false });
-              useUI.getState().pushToast(t("editor.savedToast", { name }), "success");
+              baseTextRef.current = docText;
+              setConflict(null);
+              setDiskNote(null);
+              const typedSince = v.state.doc.toString() !== docText;
+              if (typedSince) autosaveScheduleRef.current?.();
+              else {
+                dirtyRef.current = false;
+                useApp.getState().patchTab(task.id, tab.id, { dirty: false });
+              }
+              if (!silent) useUI.getState().pushToast(t("editor.savedToast", { name }), "success");
               // Git-only tick (NOT bumpFsRevision: that would make every
               // open editor — this one included — re-read from disk, and a
               // keystroke landing between the write and that re-read would
@@ -516,13 +585,44 @@ export function EditorPane({ task, tab, active, onContent }: {
               useApp.getState().bumpGitRevision(task.id);
               // The file on disk is what `git blame` reads, and it just
               // changed: drop the snapshot and let the extension re-fetch.
-              if (usePrefs.getState().inlineBlame) {
+              const isStillMounted = viewRef.current === v;
+              if (usePrefs.getState().inlineBlame && isStillMounted) {
                 invalidateBlame(task.id, tab.path);
                 v.dispatch({ effects: refreshBlame.of() });
               }
             })
-            .catch(e => useUI.getState().pushToast(t("editor.saveFailed", { error: e }), "error"));
+            .catch(e => useUI.getState().pushToast(t("editor.saveFailed", { error: e }), "error"))
+            .finally(() => { inFlightWriteRef.current = null; });
           return true;
+        };
+
+        const clearAutosaveTimer = () => {
+          if (autosaveTimerRef.current === null) return;
+          window.clearTimeout(autosaveTimerRef.current);
+          autosaveTimerRef.current = null;
+        };
+        const canAutosave = () => {
+          const isOn = usePrefs.getState().editorAutosave;
+          const isEditTab = tab.type === "edit";
+          const hasUnsavedEdits = dirtyRef.current;
+          const hasConflict = conflictRef.current !== null;
+          const hasDiskNote = diskNoteRef.current !== null;
+          return isOn && isEditTab && hasUnsavedEdits && !hasConflict && !hasDiskNote;
+        };
+        const flushAutosave = () => {
+          clearAutosaveTimer();
+          const v = viewRef.current;
+          if (!v || !canAutosave()) return;
+          saveDoc(v, true);
+        };
+        autosaveFlushRef.current = flushAutosave;
+        autosaveScheduleRef.current = () => {
+          clearAutosaveTimer();
+          if (!canAutosave()) return;
+          autosaveTimerRef.current = window.setTimeout(() => {
+            autosaveTimerRef.current = null;
+            flushAutosave();
+          }, AUTOSAVE_DELAY_MS);
         };
 
         const view = new EditorView({
@@ -533,7 +633,7 @@ export function EditorPane({ task, tab, active, onContent }: {
               // wins over anything basicSetup's keymaps bind.
               // Tab indents (and Shift-Tab dedents) instead of moving DOM
               // focus to the next button. High precedence so it wins.
-              keymap.of([{ key: "Mod-s", preventDefault: true, run: saveDoc }, indentWithTab]),
+              keymap.of([{ key: "Mod-s", preventDefault: true, run: v => saveDoc(v) }, indentWithTab]),
               // Keep a CRLF file CRLF on save (lib/lineEndings.ts).
               ...(isPureCrlf(content) ? [EditorState.lineSeparator.of("\r\n")] : []),
               // basicSetup: line numbers, fold gutter, history, indentOnInput,
@@ -603,11 +703,20 @@ export function EditorPane({ task, tab, active, onContent }: {
                   // A programmatic reload (file changed on disk) carries the
                   // ExternalReload annotation — don't treat it as a user edit,
                   // or the tab would sprout a phantom "modified" dot.
-                  if (!u.transactions.some(t => t.annotation(ExternalReload)))
+                  const isExternalReload = u.transactions.some(t => t.annotation(ExternalReload));
+                  if (!isExternalReload) {
                     markDirty();
+                    autosaveScheduleRef.current?.();
+                  }
                   if (isScratch) scheduleScratchFlush(u.view);
                   onContentRef.current?.(u.view);
                 }
+              }),
+              EditorView.domEventHandlers({
+                blur: () => {
+                  autosaveFlushRef.current?.();
+                  return false;
+                },
               }),
               blameCompRef.current.of(buildBlame(blameOnRef.current ?? false)),
               gitGutterCompRef.current.of(buildGitGutter(gitGutterOnRef.current ?? false)),
@@ -632,6 +741,7 @@ export function EditorPane({ task, tab, active, onContent }: {
           parent: hostRef.current,
         });
         viewRef.current = view;
+        reindentView(view, resolved.id);
         elog("view created");
         if (minimapOnRef.current) applyMinimap(true);
         if (tab.type === "scratch" && !tab.path) {
@@ -748,6 +858,9 @@ export function EditorPane({ task, tab, active, onContent }: {
       }
       flushScratchRef.current?.();
       flushScratchRef.current = null;
+      autosaveFlushRef.current?.();
+      autosaveFlushRef.current = null;
+      autosaveScheduleRef.current = null;
       unregisterPadRef.current?.();
       unregisterPadRef.current = null;
       detachScrollRestore?.();
@@ -757,10 +870,6 @@ export function EditorPane({ task, tab, active, onContent }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id, srcKey]);
 
-  // True-editor tabs surface a "file changed on disk" prompt instead of
-  // silently reloading. Pending until the user acts; rendered only while the
-  // tab is focused (see the banner in the return).
-  const [diskChanged, setDiskChanged] = useState(false);
   // Focused = this task is up front AND this tab is the active main-pane tab
   // (edit/diff tabs only open in the main pane, not in split panes).
   const isActive = useApp(s => s.activeTaskId === task.id && s.activeTab[task.id] === tab.id);
@@ -788,67 +897,164 @@ export function EditorPane({ task, tab, active, onContent }: {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [sendRefBinding, task.id, isActive]);
 
-  // Swap fresh disk content into the live view, annotated so it doesn't flip
-  // the dirty dot. Used by both the silent preview-reload path and the user
-  // confirming the true-editor prompt.
-  const applyDiskContent = useCallback((content: string) => {
+  // Puts `docText` (document space) into the live view as one minimal change,
+  // so the selection and scroll position map through it instead of resetting.
+  // Annotated so it doesn't flip the dirty dot.
+  const applyDiskContent = useCallback((docText: string, bufferMatchesDisk: boolean): boolean => {
     const v = viewRef.current;
-    if (!v || !isTaskFile) return;
-    if (content !== v.state.doc.toString())
+    if (!v || !isTaskFile) return false;
+    let didReindent = false;
+    const change = minimalChange(v.state.doc.toString(), docText);
+    if (change) {
       v.dispatch({
-        effects: indentCompRef.current.reconfigure(indentExtension(detectIndent(content))),
-        changes: { from: 0, to: v.state.doc.length, insert: content },
+        effects: indentCompRef.current.reconfigure(indentExtension(detectIndent(docText))),
+        changes: { ...change, insert: change.insert.replace(/\n/g, v.state.lineBreak) },
         annotations: ExternalReload.of(true),
       });
+      didReindent = reindentView(v, langIdRef.current ?? "");
+    }
     // The buffer now matches disk again, so blame can be trusted again. Same
-    // reasoning as the save path, and the same reason docs/ideas/lsp.md wants
-    // this path to fire a full-document didChange.
-    if (usePrefs.getState().inlineBlame) {
+    // reasoning as the save path.
+    if (bufferMatchesDisk && usePrefs.getState().inlineBlame) {
       invalidateBlame(task.id, filePath);
       v.dispatch({ effects: refreshBlame.of() });
     }
-    setDiskChanged(false);
+    return didReindent;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id, filePath, isTaskFile]);
 
-  // React to an external change (GH #57). An UNTOUCHED buffer (no unsaved
-  // edits) just mirrors disk silently — preview tab or not, source or
-  // markdown-preview mode; asking about a file the user never modified was
-  // noise, and in markdown preview mode the banner lived inside the hidden
-  // editor so nothing visibly refreshed at all. Only a DIRTY buffer gets the
-  // banner: reloading would discard real typing, so the user decides.
-  const reloadFromDisk = useCallback(() => {
+  const markBufferClean = useCallback(() => {
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
+    useApp.getState().patchTab(task.id, tab.id, { dirty: false });
+  }, [task.id, tab.id]);
+
+  // React to an external change (GH #57). One re-read per call; a newer read
+  // supersedes an older one still in flight, so a burst of agent writes applies
+  // only the latest text.
+  //
+  // An untouched buffer mirrors disk. A dirty one three way merges (base is
+  // what this editor last loaded or saved): hunks only disk changed come in
+  // silently, and a hunk both sides changed differently raises the conflict
+  // banner and leaves the buffer alone.
+  const syncFromDisk = useCallback(() => {
     const v = viewRef.current;
     // A pad has no file on disk to diverge from. Nothing outside this editor
     // can touch its buffer, so there is nothing to watch and nothing to ask
     // about (GH #244).
     if (!v || !isTaskFile) return;
-    taskFileRead(task.id, filePath).then(content => {
-      const v2 = viewRef.current;
-      if (!v2) return;
-      if (content === v2.state.doc.toString()) { setDiskChanged(false); return; }
-      if (dirtyRef.current) { setDiskChanged(true); return; }
-      applyDiskContent(content);
-    }).catch(() => {});
-  }, [task.id, filePath, isTaskFile, applyDiskContent]);
+    const ticket = readTicketRef.current.next();
+    taskFileRead(task.id, filePath).then(raw => {
+      const isSuperseded = !readTicketRef.current.isLatest(ticket);
+      const live = viewRef.current;
+      if (isSuperseded || !live) return;
 
-  // User accepted the prompt: re-read (content may have moved on since the
-  // change was detected) and swap it in, discarding the buffer's edits — so
-  // the dirty flag must clear too or the dot would lie.
-  const acceptDiskReload = useCallback(() => {
-    taskFileRead(task.id, filePath).then(content => {
-      applyDiskContent(content);
-      dirtyRef.current = false;
-      useApp.getState().patchTab(task.id, tab.id, { dirty: false });
-    }).catch(() => {});
-  }, [task.id, filePath, tab.id, applyDiskContent]);
+      setDiskNote(null);
+      const disk = toDocSpace(raw);
+      const buffer = live.state.doc.toString();
+
+      const action = decideDiskAction({
+        disk,
+        buffer,
+        base: baseTextRef.current,
+        inFlightWrite: inFlightWriteRef.current,
+        isDirty: dirtyRef.current,
+      });
+
+      if (action === "ignore") return;
+      if (action === "adopt") {
+        baseTextRef.current = disk;
+        setConflict(null);
+        markBufferClean();
+        return;
+      }
+      if (action === "unchanged") {
+        setConflict(null);
+        return;
+      }
+      if (action === "replace") {
+        applyDiskContent(disk, true);
+        baseTextRef.current = disk;
+        setConflict(null);
+        return;
+      }
+
+      const merged = threeWayMerge(baseTextRef.current, buffer, disk);
+      if (merged.conflict) {
+        setConflict({ disk });
+        return;
+      }
+
+      const mergeEqualsDisk = merged.text === disk;
+      const didReindent = applyDiskContent(merged.text, mergeEqualsDisk);
+      baseTextRef.current = disk;
+      setConflict(null);
+      if (mergeEqualsDisk && !didReindent) markBufferClean();
+      else autosaveScheduleRef.current?.();
+    }).catch(e => {
+      const isLatest = readTicketRef.current.isLatest(ticket);
+      if (!isLatest || !viewRef.current) return;
+      if (isMissingFileError(e)) {
+        setDiskNote({ kind: "deleted" });
+        return;
+      }
+      const classified = classifyEditorLoadError(e);
+      if (isUnviewable(classified)) setDiskNote({ kind: "unviewable", message: classified.message });
+    });
+  }, [task.id, filePath, isTaskFile, applyDiskContent, markBufferClean, setConflict, setDiskNote]);
+
+  const syncFromDiskRef = useRef(syncFromDisk);
+  syncFromDiskRef.current = syncFromDisk;
+
+  // Keep mine: the disk text becomes the new base, so the next save simply
+  // overwrites it and the next external edit merges against it.
+  const keepMine = useCallback(() => {
+    const pending = conflictRef.current;
+    if (!pending) return;
+    baseTextRef.current = pending.disk;
+    setConflict(null);
+    autosaveScheduleRef.current?.();
+  }, [setConflict]);
+
+  const takeDisk = useCallback(() => {
+    const pending = conflictRef.current;
+    if (!pending) return;
+    const didReindent = applyDiskContent(pending.disk, true);
+    baseTextRef.current = pending.disk;
+    setConflict(null);
+    if (!didReindent) markBufferClean();
+  }, [applyDiskContent, markBufferClean, setConflict]);
+
+  // Watch this file for the life of the tab. The backend debounces, so an
+  // agent's stream of writes arrives as a few events, each one re-read.
+  useEffect(() => {
+    if (!isTaskFile) return;
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    const watchedPath = filePath;
+
+    editorWatchFile(task.id, watchedPath).catch(() => {});
+    onEditorFileChanged(event => {
+      const isThisFile = event.taskId === task.id && event.path === watchedPath;
+      if (isThisFile) syncFromDiskRef.current();
+    }).then(stop => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+      editorUnwatchFile(task.id, watchedPath).catch(() => {});
+    };
+  }, [task.id, filePath, isTaskFile]);
 
   // Reload on window focus: covers external edits while away (another app,
   // a `git` in a real terminal, an agent in a different window).
   useEffect(() => {
-    window.addEventListener("focus", reloadFromDisk);
-    return () => window.removeEventListener("focus", reloadFromDisk);
-  }, [reloadFromDisk]);
+    window.addEventListener("focus", syncFromDisk);
+    return () => window.removeEventListener("focus", syncFromDisk);
+  }, [syncFromDisk]);
 
   // Mirror TerminalPane's active-focus pattern: when this tab becomes the
   // active main tab, focus the editor. Belt-and-suspenders alongside
@@ -871,8 +1077,8 @@ export function EditorPane({ task, tab, active, onContent }: {
   const fsFirstRef = useRef(true);
   useEffect(() => {
     if (fsFirstRef.current) { fsFirstRef.current = false; return; }
-    reloadFromDisk();
-  }, [fsRevision, reloadFromDisk]);
+    syncFromDisk();
+  }, [fsRevision, syncFromDisk]);
 
   // Subsequent jumps: tab.revealAt changes when the user clicks a new
   // Find-in-Files result for an already-open file. Mount effect above
@@ -1100,24 +1306,49 @@ export function EditorPane({ task, tab, active, onContent }: {
       {err && (!isUnviewable(err) || !unviewableAbs) && (
         <div className="p-4 text-[14px] text-[var(--color-err)]">{t("shared.errorWithMessage", { message: err.message })}</div>
       )}
-      {/* Dirty buffers only: disk diverged while the user has unsaved edits,
-          so ask before clobbering (clean buffers reload silently, GH #57). */}
-      {diskChanged && isActive && (
-        <div className="absolute right-3 top-3 z-30 flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-2)] px-3 py-2 text-[13px] text-[var(--color-fg)] shadow-lg">
+      {conflict && isActive && (
+        <div
+          className="absolute right-3 top-3 z-30 flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-2)] px-3 py-2 text-[13px] text-[var(--color-fg)] shadow-lg"
+          data-testid="editor-conflict-banner"
+        >
           <span>{t("editor.diskChanged")}</span>
           <button
-            onClick={acceptDiskReload}
+            onClick={keepMine}
+            data-testid="editor-conflict-keep-mine"
             className="rounded bg-[var(--color-accent)] px-2 py-[3px] font-medium text-[var(--color-accent-fg)] hover:opacity-90"
-          >
-            {t("editor.reload")}
-          </button>
-          <button
-            onClick={() => setDiskChanged(false)}
-            className="rounded px-2 py-[3px] text-[var(--color-fg-dim)] hover:text-[var(--color-fg)]"
           >
             {t("editor.keepMine")}
           </button>
+          <button
+            onClick={takeDisk}
+            data-testid="editor-conflict-take-disk"
+            className="rounded px-2 py-[3px] text-[var(--color-fg-dim)] hover:text-[var(--color-fg)]"
+          >
+            {t("editor.takeDisk")}
+          </button>
+          <button
+            onClick={() => setShowCompare(true)}
+            data-testid="editor-conflict-compare"
+            className="rounded px-2 py-[3px] text-[var(--color-fg-dim)] hover:text-[var(--color-fg)]"
+          >
+            {t("editor.compare")}
+          </button>
         </div>
+      )}
+      {!conflict && diskNote && isActive && (
+        <div
+          className="absolute right-3 top-3 z-30 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-2)] px-3 py-2 text-[13px] text-[var(--color-fg)] shadow-lg"
+          data-testid="editor-disk-note"
+        >
+          {diskNote.kind === "deleted" ? t("editor.fileDeleted") : diskNote.message}
+        </div>
+      )}
+      {conflict && showCompare && viewRef.current && (
+        <ConflictCompare
+          mine={viewRef.current.state.doc.toString()}
+          disk={conflict.disk}
+          onClose={() => setShowCompare(false)}
+        />
       )}
     </div>
   );

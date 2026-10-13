@@ -65,7 +65,7 @@ The Zed-like editor features (git change gutter, inlay hints, multibuffer) must 
 - Mount with `gitRevision` above 0 sends one gutter request. `EditorPane` skips the refresh effect when the view was built at the current revision.
 - Inlay decorations exist only for lines inside the requested range, even if the server answers with more.
 - The gutter request is the only whole-document `toString()` and runs at most once per debounce window. A source check fails if `inlayHints.ts`, `syntaxSelection.ts` or `zedKeymap.ts` gains one, or if `gitChangeGutterExt.ts` or `MultibufferPane.tsx` gains a second (the multibuffer one mirrors a single excerpt, not a file).
-
+- An open file costs one `task_file_read` per debounced `editor-file-changed` (75 ms in Rust), not one per filesystem event. A newer read supersedes an older one in flight, so a burst of agent writes applies once. The reload is one minimal `changes` span, never a whole document replace. Autosave arms one timer per edit burst and clears it on each keystroke.
 Verified by removing the visibility gate from the gutter and watching the hidden-editor case go red.
 
 ## Measuring

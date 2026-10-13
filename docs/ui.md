@@ -2376,6 +2376,25 @@ What a v1 deliberately does not do, and why:
 - **Over 2 MB or not UTF-8**, the editor cannot load the file, so the
   preview has nothing to render and says so after 1.5s.
 
+## Live reload, merge and autosave
+
+An open file follows the disk. `EditorPane` registers a watch (`editor_watch_file`, see [ipc.md](ipc.md)) on mount and drops it on unmount or path change, and re-reads on each `editor-file-changed`. The window-focus and `fsRevision` reloads stay as a fallback and go through the same function (`syncFromDisk`).
+
+What happens to the text depends on the buffer:
+
+- **Clean buffer:** disk replaces it as one minimal change (`lib/editor/externalReload.ts`), so the selection maps through and the scroll position stays. The change carries the `ExternalReload` annotation, so the dirty dot does not flip.
+- **Dirty buffer:** three way merge (`lib/editor/threeWayMerge.ts`, line based diff3). The base is the text the editor last loaded or saved, ours is the buffer, theirs is the disk. Hunks only one side touched merge in silently and the tab stays dirty. A hunk both sides changed differently leaves the buffer alone and shows the conflict banner with Keep mine, Take disk and Compare (a read only `MergeView` of disk against buffer, `ConflictCompare.tsx`). Keep mine and Take disk both make the disk text the new base. A further write while the banner is open is merged against the same base again, so the banner resolves itself if the conflict goes away.
+- **Disk equals the buffer, the base, or the text this editor is writing right now:** nothing happens.
+- **File deleted or renamed away:** the buffer stays, a note says so, and saving recreates the file. **File became binary or over the read cap:** same note with the load error's wording, buffer kept.
+
+Only the newest read applies (a ticket from `createReadTicket`), so a burst of agent writes costs one apply.
+
+**Autosave** is the `editorAutosave` pref, off by default, in Settings, Appearance, Editor and as "Toggle autosave" in the command palette. When on, a dirty buffer is saved 1000 ms after the last edit, on editor blur, and when the tab closes, through the same `saveDoc` as Mod-s (so `gitRevision` bumps and blame refreshes). It never runs while the conflict banner is up, while the deleted or unviewable note is up, or for scratch, external and read only tabs. Autosave saves are silent (no toast). Saving by hand during a conflict is Keep mine by another route.
+
+**With reindent on open** (`editorReindentToThree`): a reindented buffer is dirty from the start, and with autosave on it is written one second later. That write is ignored when its watcher echo arrives (it equals the in-flight text, then the merge base), and the resulting file is never reloaded, so it is not reindented twice. A real external write is reindented after it is applied, whether it replaced a clean buffer or merged into a dirty one.
+
+Save writes `state.sliceDoc()`, not `doc.toString()`, so a pure CRLF file stays CRLF on disk.
+
 ## Editor path bar (breadcrumb + syntax)
 
 The bar under the tab strip, for `edit` and `diff` tabs with a path (`EditorBreadcrumb` in `components/task/TaskView.tsx`). Each path segment is a click target: a folder reveals/expands that folder in the tree, the filename reveals the file, and every segment right-clicks to a copy menu. On the right: copy path, open the containing folder in Finder, locate in the tree.
@@ -2601,6 +2620,14 @@ A git tick is deliberately NOT a re-fetch. `gitRevision` bumps on every stage an
 A result is applied only when the buffer is still the exact document that was sent. Otherwise it is dropped and a new request is scheduled, and a newer request supersedes an older one, so a slow answer can never paint markers on the wrong lines. Markers are mapped through edits in between.
 
 The pref is `editorGitGutter`, ON by default, in Settings → Appearance → Editor and in the command palette as "Toggle Git Gutter". It has its own `Compartment` in `EditorPane`, reconfigured in place, so cursor, undo history and scroll position survive. Scratch and external tabs never get it. Cost notes are in bear trap 10 of [performance.md](performance.md).
+
+## Reindent to 3 spaces on open
+
+`editorReindentToThree` (OFF by default; Settings → Appearance → Editor and the palette's "Toggle reindent to 3 spaces on open") makes `EditorPane` reindent an `edit` tab's buffer to 3 spaces right after the view is created, in the same task as creation so no 2-space frame paints. Nothing is written: it is one ordinary transaction, so it marks the tab dirty, `Mod-z` takes it back in one step, and the file changes only on save. It is deliberately NOT annotated `ExternalReload`, which would hide the dirty dot.
+
+`src/lib/editor/reindent.ts` decides. Allowed languages are TS/JS/JSX/TSX, JSON, CSS/SCSS/LESS, HTML, Rust, C/C++, Java, Kotlin, Swift, PHP and Lua. It skips everything else (Python, YAML, Makefile, Go, Markdown), mixed tab and space files, files with no clear width, files already at 3, files over 1 MB, and any parse that does not finish inside 80ms. Only leading whitespace is edited, and lines that begin inside a string, template literal, raw string, heredoc, block comment or HTML `pre`/`textarea` are left alone, found from the lezer tree. Kotlin, Swift and Lua use CodeMirror 5 stream grammars whose tokens never cross a line, so they get a small scanner instead.
+
+`reindentedFromRef` holds the disk text the buffer was reindented from. The focus reload compares disk to the buffer, which now always differs, so while disk still equals that text the "changed on disk" banner stays down. Saving clears it. A live reload that changes disk re-applies the reindent if the pref is on and the new text is not already 3-space.
 
 ## The dashboard
 
