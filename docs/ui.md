@@ -1366,6 +1366,38 @@ whether `taskBoardColumn` should grow a Merged column so "finished and can
 go" has an answer on both surfaces.
 
 
+## The sidebar's workspace view
+
+A third `sidebarView` beside the tree and STATUS (`"workspace"` in
+`parseSidebarView`, so a stored unknown value still lands on the tree). The
+header's layers button (`sidebar-workspace-view`) swaps it with the tree; the
+swap arrows keep swapping tree and STATUS, and leave the workspace view for
+STATUS. Not on the icon rail, like STATUS.
+
+A workspace is a named, saved set of project ids with one active. It is a
+view filter, not project data: the view draws the ordinary project tree
+filtered to the active set, in the tree's own project order, and the STATUS
+section is not drawn above it (it would list tasks the filter hides). Nothing
+about a project or task is written.
+
+State is `src/store/workspaces.ts`, in scoped localStorage (`workspaces`, the
+list, and `activeWorkspace`, the id), no Rust. A stored active id that names
+no workspace boots as none. A project the user removes from the app leaves
+every set, and only that: `ipc.projectRemove` calls `forgetProject` once the
+backend call succeeds. A project list that merely lacks an id (a partial or
+failed load) prunes nothing, because a lost set costs the user the filter they
+built. An id whose project is gone by another route stays in the set and is
+never drawn, since the tree lists existing projects only.
+Deleting the active workspace activates the first one left.
+
+`WorkspaceSection` is only the picker: chips (`workspace-chip`, one
+`data-active`), the manage button, and the empty states (`workspace-empty-none`
+with no workspaces, `workspace-empty-unselected`, `workspace-empty-projects`
+for an active set with no projects). The manager
+(`WorkspaceManagerDialog`, `React.lazy`, mounted on first open) creates,
+renames and deletes workspaces (delete asks inline, in place of the button) and ticks projects in and out of the selected
+one.
+
 ## The sidebar's status chips
 
 Under the filter bar, a row of chips counts the tasks in action and, after

@@ -1141,11 +1141,11 @@ export function taskLocationIconShown(mode: TaskLocationIconMode, isMainCheckout
 /** Whether the Scheduled nav entry shows. "auto" counts ANY schedule on a
  *  live task, paused ones included: the view is where a paused schedule is
  *  switched back on, so pausing the only one must not remove the way to it. */
-export type SidebarView = "tree" | "status";
+export type SidebarView = "tree" | "status" | "workspace";
 
-/** Anything but "status" is the tree, the view a new install starts on. */
+/** Anything but "status" or "workspace" is the tree, the view a new install starts on. */
 export function parseSidebarView(raw: string): SidebarView {
-  return raw === "status" ? "status" : "tree";
+  return raw === "status" || raw === "workspace" ? raw : "tree";
 }
 
 export function scheduledNavVisible(mode: ScheduledNavMode, hasSchedule: boolean): boolean {

@@ -56,6 +56,8 @@ import { StatusChips } from "./StatusChips";
 import { ChecklistGlyph, CritterGlyph, CollapseAllGlyph, DashedFolderGlyph, DotsHorizontalGlyph, ExpandAllGlyph, FolderGlyph, FolderPlusGlyph, HistoryGlyph, KanbanGlyph, ListOptionsGlyph, PlusGlyph, ScheduleGlyph, SwapGlyph, TintedFolderGlyph, TreeChevron } from "./sidebarIcons";
 import { STATUS_BUCKETS } from "@/lib/sidebarStatus";
 import { StatusSection, StatusViewCount } from "./StatusSection";
+import { WorkspaceSection } from "./WorkspaceSection";
+import { selectActiveProjectIds, useWorkspaces } from "@/store/workspaces";
 import { RollupMarks } from "./RollupMarks";
 import { BoardFilterBar } from "@/components/views/BoardFilterBar";
 import { useTaskQuery } from "@/hooks/useTaskQuery";
@@ -213,6 +215,8 @@ export function Sidebar({ compact: compactProp }: {
   const sidebarView = usePrefs(s => s.sidebarView);
   const setSidebarView = usePrefs(s => s.setSidebarView);
   const statusView = sidebarView === "status" && !compact;
+  const workspaceView = sidebarView === "workspace" && !compact;
+  const workspaceProjectIds = useWorkspaces(selectActiveProjectIds);
   // What the header's expand toggle does next. Not derived from the folds:
   // reading every task's fold to draw one glyph would subscribe the body to
   // all of them. It starts on expand, the glyph the design draws at rest.
@@ -291,6 +295,12 @@ export function Sidebar({ compact: compactProp }: {
     const scroller = projectsScrollRef.current;
     if (scroller) viewScrollTop.current[sidebarView] = scroller.scrollTop;
     setSidebarView(sidebarView === "status" ? "tree" : "status");
+  };
+
+  const toggleWorkspaceView = () => {
+    const scroller = projectsScrollRef.current;
+    if (scroller) viewScrollTop.current[sidebarView] = scroller.scrollTop;
+    setSidebarView(sidebarView === "workspace" ? "tree" : "workspace");
   };
 
   useLayoutEffect(() => {
@@ -1227,10 +1237,12 @@ export function Sidebar({ compact: compactProp }: {
   const queryNamed = queryOn
     ? new Set(taskQuery.query.clauses.filter(c => c.key === "project" && !c.negated).flatMap(c => c.values))
     : null;
-  const activeProjects = queryProjectIds
+  const inWorkspace = (p: typeof projects[number]) =>
+    !workspaceView || (workspaceProjectIds?.includes(p.id) ?? false);
+  const activeProjects = (queryProjectIds
     ? projects.filter(p => queryProjectIds.has(p.id) || !!queryNamed?.has(p.name.toLowerCase()))
-    : projects.filter(shownInline);
-  const inactiveProjects = projects.filter(p => !shownInline(p));
+    : projects.filter(shownInline)).filter(inWorkspace);
+  const inactiveProjects = projects.filter(p => !shownInline(p) && inWorkspace(p));
   const inactiveCount = inactiveProjects.length;
   // If hiding is disabled (or nothing is hidden), keep the reveal latch off so
   // re-enabling starts collapsed.
@@ -1355,10 +1367,10 @@ export function Sidebar({ compact: compactProp }: {
       {!compact && (
         <div
           data-testid="projects-section-header"
-          className="mt-[var(--sidebar-head-pad)] flex h-[28px] shrink-0 select-none items-center gap-[8px] px-[14px]"
+          className={`mt-[var(--sidebar-head-pad)] flex h-[28px] shrink-0 select-none items-center ${workspaceView ? "gap-[4px]" : "gap-[8px]"} px-[14px]`}
         >
           <span data-testid="sidebar-section-eyebrow" className="truncate text-[11px] font-bold uppercase tracking-[0.8px] text-[var(--sidebar-eyebrow)]">
-            {statusView ? t("statusHeader") : t("projectsHeader")}
+            {statusView ? t("statusHeader") : workspaceView ? t("workspaceHeader") : t("projectsHeader")}
           </span>
           {statusView && <StatusViewCount matchIds={queryMatchIds} />}
           <div className="flex-1" />
@@ -1368,6 +1380,14 @@ export function Sidebar({ compact: compactProp }: {
             onClick={swapView}
           >
             <SwapGlyph size={14} />
+          </HeaderButton>
+          <HeaderButton
+            testId="sidebar-workspace-view"
+            label={workspaceView ? t("swapToProjects") : t("workspaceView")}
+            onClick={toggleWorkspaceView}
+            aria-pressed={workspaceView}
+          >
+            <Layers className="h-[14px] w-[14px]" />
           </HeaderButton>
           <HeaderButton
             testId="sidebar-expand-toggle"
@@ -1542,7 +1562,8 @@ export function Sidebar({ compact: compactProp }: {
         {/* STATUS above PROJECTS, in the same scroller (docs/ui.md "The
             sidebar's status section"). Not on the icon rail: the hover
             overlay is a full sidebar and shows it there instead. */}
-        {!statusView && !compact && showStatusSection && <StatusSection matchIds={queryMatchIds} />}
+        {!statusView && !workspaceView && !compact && showStatusSection && <StatusSection matchIds={queryMatchIds} />}
+        {workspaceView && <WorkspaceSection />}
         {compact && (
           <div data-testid="projects-section-header" className="flex flex-col gap-1.5 py-1">
             {/* The ONE Add project button (GH #280 removed the footer copy):

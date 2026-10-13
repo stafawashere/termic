@@ -2,6 +2,19 @@
 // Reached as t("dialogs:<key>"); short shared labels (Cancel, Save, …) live in
 // the common namespace instead.
 export default {
+  workspaceManager: {
+    title: "Workspaces",
+    description: "A workspace is a saved set of projects. The workspace view shows only the active one.",
+    newPlaceholder: "New workspace name",
+    create: "Create",
+    empty: "No workspaces yet. Name one above to create it.",
+    pick: "Pick a workspace to edit it.",
+    rename: "Rename",
+    delete: "Delete",
+    deleteConfirm: "Confirm delete",
+    projects: "Projects in this workspace",
+    noProjects: "No projects to add yet.",
+  },
   broadcast: {
     title: "Broadcast message",
     descProject: "Send one message to the main agent of every task in this project.",
