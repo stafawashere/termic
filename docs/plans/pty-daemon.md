@@ -68,11 +68,22 @@ there (phase 4), and Windows and Linux packaging (phase 6).
    a running exe, so the daemon runs from a copy. An AppImage mount
    disappears on exit, so the daemon spawns from the extracted path.
 
+## Disconnect, quit and the setting
+
+- A lost connection reconnects and resubscribes the PTYs the daemon still
+  runs. Only PTYs it no longer lists exit in the app, so a tab never sees
+  a live agent as exited and spawns a duplicate. A spawn for a tab whose
+  agent the daemon still runs is refused.
+- Quitting with "Keep agents running" off kills every daemon PTY
+  (`cleanup_children` calls `ptyd_host::kill_all`), including ones an
+  earlier session left behind.
+- Turning the setting off kills the daemon PTYs no tab has adopted at
+  once. Agents open in a tab keep their turn and die at quit.
+
 ## Open questions
 
 - Output written during the gap past the 256 KiB ring is dropped.
   Grow the ring for daemon PTYs?
-- Does the quit prompt offer "keep agents running" and "stop agents"?
 - Does Touch ID sudo stay in the app?
 - CLI attach sessions (cli_server.rs:325) need rerouting through
   `subscribe`.

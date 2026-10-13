@@ -23548,6 +23548,11 @@ fn settings_save(app: AppHandle, window: tauri::Window, s: Settings) -> Result<(
     }
     let s = keep_disk_account_fields(&disk, s);
     save_settings_in(&profile, &s)?;
+    let daemon_turned_off = disk.pty_daemon_enabled && !s.pty_daemon_enabled;
+    if daemon_turned_off {
+        let app = app.clone();
+        std::thread::spawn(move || ptyd_host::stop_orphans(&app));
+    }
     // Applies live: flipping the toggle in Settings shouldn't need a restart
     // to show/hide the menu-bar item, matching close_action/cli_enabled's
     // "re-read per use" behavior.
@@ -26040,6 +26045,12 @@ fn cleanup_children(app: &tauri::AppHandle) {
     }
     // 2. PTY children (agent CLIs + scratch shells). PtyManager owns
     //    the registry; iterate every slot and SIGKILL its child pid.
+    // With "Keep agents running" off, the daemon's agents go too, including
+    // ones left by an earlier session that no tab here adopted.
+    let stop_daemon_agents = ptyd_host::stop_agents_at_quit(load_settings_inner().pty_daemon_enabled);
+    if stop_daemon_agents {
+        ptyd_host::kill_all(app);
+    }
     if let Some(mgr) = app.try_state::<PtyManager>() {
         let mut inner = mgr.inner.lock();
         for (_, slot) in inner.drain() {
