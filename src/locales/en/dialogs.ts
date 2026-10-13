@@ -136,6 +136,8 @@ export default {
       filterFiles: "Filter files",
       clearSidebarFilter: "Clear sidebar filter",
       toggleWordWrap: "Toggle word wrap",
+      toggleIndentGuides: "Toggle indent guides",
+      toggleMinimap: "Toggle minimap",
       toggleZedKeymap: "Toggle Zed keymap",
       importZedTheme: "Import Zed theme…",
       changeTheme: "Change theme…",

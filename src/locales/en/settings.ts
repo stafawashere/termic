@@ -441,6 +441,14 @@ export default {
       label: "Word wrap",
       hint: "Wrap long lines to the width of the editor instead of scrolling sideways. Also in the command palette.",
     },
+    indentGuides: {
+      label: "Indent guides",
+      hint: "Draw vertical lines at each indent level and highlight the block around the cursor. Also in the command palette.",
+    },
+    minimap: {
+      label: "Minimap",
+      hint: "Show a canvas overview of the file beside the editor. Off by default. Also in the command palette.",
+    },
     keymap: {
       label: "Editor keymap",
       hint: "Termic keeps CodeMirror's keys. Zed adds Zed's macOS editor keys: select next occurrence, add cursor above and below, expand and shrink selection, move and duplicate line. Also in the command palette.",

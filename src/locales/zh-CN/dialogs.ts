@@ -135,6 +135,8 @@ export default {
       filterFiles: "筛选文件",
       clearSidebarFilter: "清除侧边栏筛选",
       toggleWordWrap: "切换自动换行",
+      toggleIndentGuides: "切换缩进参考线",
+      toggleMinimap: "切换缩略图",
       toggleZedKeymap: "切换 Zed 快捷键",
       importZedTheme: "导入 Zed 主题…",
       changeTheme: "更换主题…",

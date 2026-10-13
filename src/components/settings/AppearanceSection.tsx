@@ -71,6 +71,10 @@ export function AppearanceSection() {
   const editorGitGutter = usePrefs(s => s.editorGitGutter);
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
   const setEditorWordWrap = usePrefs(s => s.setEditorWordWrap);
+  const editorIndentGuides = usePrefs(s => s.editorIndentGuides);
+  const setEditorIndentGuides = usePrefs(s => s.setEditorIndentGuides);
+  const editorMinimap = usePrefs(s => s.editorMinimap);
+  const setEditorMinimap = usePrefs(s => s.setEditorMinimap);
   const editorKeymap = usePrefs(s => s.editorKeymap);
   const setEditorKeymap = usePrefs(s => s.setEditorKeymap);
   const codeIntelligence = usePrefs(s => s.codeIntelligence);
@@ -127,6 +131,8 @@ export function AppearanceSection() {
     inlineBlame           === APPEARANCE_DEFAULTS.inlineBlame &&
     editorGitGutter       === APPEARANCE_DEFAULTS.editorGitGutter &&
     editorWordWrap        === APPEARANCE_DEFAULTS.editorWordWrap &&
+    editorIndentGuides    === APPEARANCE_DEFAULTS.editorIndentGuides &&
+    editorMinimap         === APPEARANCE_DEFAULTS.editorMinimap &&
     editorKeymap          === APPEARANCE_DEFAULTS.editorKeymap &&
     codeIntelligence        === APPEARANCE_DEFAULTS.codeIntelligence &&
     codeIntelDiagnostics    === APPEARANCE_DEFAULTS.codeIntelDiagnostics &&
@@ -312,6 +318,20 @@ export function AppearanceSection() {
         hint={t("appearance.wordWrap.hint")}
         value={editorWordWrap}
         onChange={setEditorWordWrap}
+      />
+
+      <Toggle
+        label={t("appearance.indentGuides.label")}
+        hint={t("appearance.indentGuides.hint")}
+        value={editorIndentGuides}
+        onChange={setEditorIndentGuides}
+      />
+
+      <Toggle
+        label={t("appearance.minimap.label")}
+        hint={t("appearance.minimap.hint")}
+        value={editorMinimap}
+        onChange={setEditorMinimap}
       />
 
       <Field

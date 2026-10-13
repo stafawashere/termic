@@ -78,6 +78,8 @@ const LS_LIGATURES     = "codeLigatures";
 const LS_INLINE_BLAME  = "inlineBlame";
 const LS_EDITOR_GIT_GUTTER = "editorGitGutter";
 const LS_EDITOR_WORD_WRAP = "editorWordWrap";
+const LS_EDITOR_INDENT_GUIDES = "editorIndentGuides";
+const LS_EDITOR_MINIMAP = "editorMinimap";
 const LS_EDITOR_KEYMAP = "editorKeymap";
 const LS_CODE_NAV      = "codeIntelligence";
 const LS_CODE_DIAGS    = "codeIntelDiagnostics";
@@ -800,6 +802,11 @@ interface PrefsState {
    *  is untouched. No toolbar control, on purpose: Settings and the command
    *  palette's "Toggle word wrap" are the two ways in. */
   editorWordWrap: boolean;
+  /** Vertical indent guides in the editor. ON by default. */
+  editorIndentGuides: boolean;
+  /** Canvas minimap in the editor's right gutter. OFF by default; the
+   *  minimap package is only fetched once this is on. */
+  editorMinimap: boolean;
   /** Which key bindings the editor layers over CodeMirror's own. "zed" adds
    *  Zed's macOS editor bindings (lib/editor/zedKeymap.ts). */
   editorKeymap: EditorKeymap;
@@ -1029,6 +1036,10 @@ interface PrefsState {
   setEditorGitGutter: (v: boolean) => void;
   setEditorWordWrap:  (v: boolean) => void;
   toggleEditorWordWrap: () => void;
+  setEditorIndentGuides: (v: boolean) => void;
+  toggleEditorIndentGuides: () => void;
+  setEditorMinimap: (v: boolean) => void;
+  toggleEditorMinimap: () => void;
   setEditorKeymap: (v: EditorKeymap) => void;
   toggleZedKeymap: () => void;
   setCodeIntelligence:  (v: boolean) => void;
@@ -1240,6 +1251,8 @@ export const APPEARANCE_DEFAULTS = {
   inlineBlame:           false,
   editorGitGutter:       true,
   editorWordWrap:        false,
+  editorIndentGuides:    true,
+  editorMinimap:         false,
   editorKeymap:          "default" as EditorKeymap,
   codeIntelligence:        true,
   codeIntelDiagnostics:    false,
@@ -1327,6 +1340,8 @@ function readStoredPrefs() {
   const initialInlineBlame  = lsGetBool(LS_INLINE_BLAME, APPEARANCE_DEFAULTS.inlineBlame);
   const initialEditorGitGutter = lsGetBool(LS_EDITOR_GIT_GUTTER, APPEARANCE_DEFAULTS.editorGitGutter);
   const initialWordWrap     = lsGetBool(LS_EDITOR_WORD_WRAP, APPEARANCE_DEFAULTS.editorWordWrap);
+  const initialIndentGuides = lsGetBool(LS_EDITOR_INDENT_GUIDES, APPEARANCE_DEFAULTS.editorIndentGuides);
+  const initialMinimap       = lsGetBool(LS_EDITOR_MINIMAP, APPEARANCE_DEFAULTS.editorMinimap);
   const initialEditorKeymap: EditorKeymap = lsGet(LS_EDITOR_KEYMAP, "default") === "zed" ? "zed" : "default";
   const initialCodeNav      = lsGetBool(LS_CODE_NAV, APPEARANCE_DEFAULTS.codeIntelligence);
   const initialCodeDiags    = lsGetBool(LS_CODE_DIAGS, APPEARANCE_DEFAULTS.codeIntelDiagnostics);
@@ -1510,6 +1525,8 @@ function readStoredPrefs() {
     inlineBlame: initialInlineBlame,
     editorGitGutter: initialEditorGitGutter,
     editorWordWrap: initialWordWrap,
+    editorIndentGuides: initialIndentGuides,
+    editorMinimap: initialMinimap,
     editorKeymap: initialEditorKeymap,
     codeIntelligence: initialCodeNav,
     codeIntelDiagnostics: initialCodeDiags,
@@ -1681,6 +1698,22 @@ export const usePrefs = create<PrefsState>(set => ({
   toggleEditorWordWrap: () => {
     usePrefs.getState().setEditorWordWrap(!usePrefs.getState().editorWordWrap);
   },
+  setEditorIndentGuides: (v) => {
+    if (usePrefs.getState().editorIndentGuides === v) return;
+    try { localStorage.setItem(LS_EDITOR_INDENT_GUIDES, v ? "1" : "0"); } catch {}
+    set({ editorIndentGuides: v });
+  },
+  toggleEditorIndentGuides: () => {
+    usePrefs.getState().setEditorIndentGuides(!usePrefs.getState().editorIndentGuides);
+  },
+  setEditorMinimap: (v) => {
+    if (usePrefs.getState().editorMinimap === v) return;
+    try { localStorage.setItem(LS_EDITOR_MINIMAP, v ? "1" : "0"); } catch {}
+    set({ editorMinimap: v });
+  },
+  toggleEditorMinimap: () => {
+    usePrefs.getState().setEditorMinimap(!usePrefs.getState().editorMinimap);
+  },
   setEditorKeymap: (v) => {
     if (usePrefs.getState().editorKeymap === v) return;
     try { localStorage.setItem(LS_EDITOR_KEYMAP, v); } catch {}
@@ -1768,6 +1801,8 @@ export const usePrefs = create<PrefsState>(set => ({
     s.setInlineBlame(d.inlineBlame);
     s.setEditorGitGutter(d.editorGitGutter);
     s.setEditorWordWrap(d.editorWordWrap);
+    s.setEditorIndentGuides(d.editorIndentGuides);
+    s.setEditorMinimap(d.editorMinimap);
     s.setEditorKeymap(d.editorKeymap);
     s.setCodeIntelligence(d.codeIntelligence);
     s.setCodeIntelDiagnostics(d.codeIntelDiagnostics);

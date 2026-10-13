@@ -14,7 +14,7 @@ import {
   FolderCog, RefreshCw, ScrollText, CalendarClock, Bug, SlidersHorizontal, Bot, BookText,
   Check, ChevronLeft, ListTodo, Bell, SquareTerminal, FolderPlus, History, Square,
   Play, Swords, Megaphone, Columns2, Rows2, Clock, UserPen, GitPullRequest, Activity, Code2,
-  NotepadText, AlignLeft, Lightbulb, Waypoints, CircleDot, UsersRound, WrapText, ListFilter, ListX, FolderOpen, type LucideIcon } from "lucide-react";
+  NotepadText, AlignLeft, Lightbulb, Waypoints, CircleDot, UsersRound, WrapText, Map as MapIcon, ListFilter, ListX, FolderOpen, type LucideIcon } from "lucide-react";
 import { useUI } from "@/store/ui";
 import { useProfiles } from "@/store/profiles";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -132,6 +132,8 @@ export function CommandPalette() {
   const inlineBlame = usePrefs(s => s.inlineBlame);
   const editorGitGutter = usePrefs(s => s.editorGitGutter);
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
+  const editorIndentGuides = usePrefs(s => s.editorIndentGuides);
+  const editorMinimap = usePrefs(s => s.editorMinimap);
   const editorKeymap = usePrefs(s => s.editorKeymap);
   const useBranchAsTaskName = usePrefs(s => s.useBranchAsTaskName);
   // Only whether there is one: the Clear row comes and goes with it.
@@ -629,6 +631,18 @@ export function CommandPalette() {
       run: act(() => usePrefs.getState().toggleEditorWordWrap()),
     });
     cmds.push({
+      id: "toggle-indent-guides", section: "View", label: t("commandPalette.cmd.toggleIndentGuides"),
+      suffix: editorIndentGuides ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: AlignLeft,
+      keywords: "editor indent guides indentation lines vertical",
+      run: act(() => usePrefs.getState().toggleEditorIndentGuides()),
+    });
+    cmds.push({
+      id: "toggle-minimap", section: "View", label: t("commandPalette.cmd.toggleMinimap"),
+      suffix: editorMinimap ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: MapIcon,
+      keywords: "editor minimap overview scroll canvas",
+      run: act(() => usePrefs.getState().toggleEditorMinimap()),
+    });
+    cmds.push({
       id: "toggle-zed-keymap", section: "View", label: t("commandPalette.cmd.toggleZedKeymap"),
       suffix: editorKeymap === "zed" ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: Keyboard,
       keywords: "editor keymap zed keybindings multi cursor preset",
@@ -738,7 +752,7 @@ export function CommandPalette() {
     }
 
     return cmds;
-  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorGitGutter, editorWordWrap, editorKeymap, useBranchAsTaskName, activeEditTab, sidebarFiltered, open, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorGitGutter, editorWordWrap, editorIndentGuides, editorMinimap, editorKeymap, useBranchAsTaskName, activeEditTab, sidebarFiltered, open, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Recents, re-read on every open so an hour spent with the palette closed
   // expires them (the list is only ever consulted at build time). Empty query

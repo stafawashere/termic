@@ -207,6 +207,10 @@
   --color-ok-fg:     #ffffff;
   --color-warn:      #f0b13a;
   --color-err:       #ef5350;
+  /* Editor indent guides. Mixed from the foreground so every theme, light or
+     dark, gets guides of matching contrast. */
+  --color-indent-guide:        color-mix(in srgb, var(--color-fg) 12%, transparent);
+  --color-indent-guide-active: color-mix(in srgb, var(--color-fg) 38%, transparent);
   /* The Windows caption bar's Close button (WindowControls): Windows' own
      red with a white glyph on hover, the same in every theme because it is
      the system's colour, not the app's. */
