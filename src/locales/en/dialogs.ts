@@ -114,6 +114,7 @@ export default {
       filterFiles: "Filter files",
       clearSidebarFilter: "Clear sidebar filter",
       toggleWordWrap: "Toggle word wrap",
+      toggleZedKeymap: "Toggle Zed keymap",
       changeTheme: "Change theme…",
       keyboardShortcuts: "Keyboard shortcuts",
       profileRow: "Profile: {{name}}",

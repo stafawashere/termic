@@ -129,6 +129,7 @@ export function CommandPalette() {
   const binds = usePrefs(s => s.shortcuts);
   const inlineBlame = usePrefs(s => s.inlineBlame);
   const editorWordWrap = usePrefs(s => s.editorWordWrap);
+  const editorKeymap = usePrefs(s => s.editorKeymap);
   const useBranchAsTaskName = usePrefs(s => s.useBranchAsTaskName);
   // Only whether there is one: the Clear row comes and goes with it.
   const sidebarFiltered = useUI(s => s.sidebarQuery.trim() !== "");
@@ -594,6 +595,12 @@ export function CommandPalette() {
       run: act(() => usePrefs.getState().toggleEditorWordWrap()),
     });
     cmds.push({
+      id: "toggle-zed-keymap", section: "View", label: t("commandPalette.cmd.toggleZedKeymap"),
+      suffix: editorKeymap === "zed" ? t("commandPalette.stateOn") : t("commandPalette.stateOff"), icon: Keyboard,
+      keywords: "editor keymap zed keybindings multi cursor preset",
+      run: act(() => usePrefs.getState().toggleZedKeymap()),
+    });
+    cmds.push({
       id: "change-theme", section: "View", label: t("commandPalette.cmd.changeTheme"),
       suffix: themeLabel(committedTheme), icon: Palette, keywords: "appearance color dark light",
       shortcutId: "change-theme",
@@ -692,7 +699,7 @@ export function CommandPalette() {
     }
 
     return cmds;
-  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorWordWrap, useBranchAsTaskName, activeEditTab, sidebarFiltered, open, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, task, proj, committedTheme, visibleThemes, inlineBlame, editorWordWrap, editorKeymap, useBranchAsTaskName, activeEditTab, sidebarFiltered, open, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Recents, re-read on every open so an hour spent with the palette closed
   // expires them (the list is only ever consulted at build time). Empty query

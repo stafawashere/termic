@@ -349,6 +349,30 @@ whichever element was previously focused.
 
 It does not send anything. It opens the review-comment composer (`dispatchSelectionComment` in `reviewCommentsExt.ts`) on the selected lines — the same surface the diff pane uses, so editor remarks queue in the `reviewComments` store alongside diff ones and go to the agent as ONE batch from the pending-comments bar. The pointer route is the gutter icon that appears next to a selection (the diff's labelled pill stays on the diff, see [ui.md](ui.md#inline-review-comments-two-surfaces)). Both paths land in the same place; neither writes to a PTY on its own.
 
+## Zed preset (`prefs.editorKeymap`)
+
+Settings > Appearance > Editor keymap, or the palette's "Toggle Zed keymap", switches the editor from `"default"` (CodeMirror's own keys, untouched) to `"zed"`. The preset is `zedKeymap()` in `src/lib/editor/zedKeymap.ts`, held in its own `Compartment` inside `Prec.high` in `EditorPane`, so a switch reconfigures in place and the cursor and undo history survive. Under `"default"` the compartment is empty.
+
+| Key | Command |
+|---|---|
+| ⌘D | select next occurrence |
+| ⇧⌘L | select all occurrences |
+| ⌥⌘↑ / ⌥⌘↓ | add cursor above / below |
+| ⌥↑ / ⌥↓ | expand / shrink syntax selection |
+| ⌃⌘↑ / ⌃⌘↓ | move line up / down |
+| ⇧⌘D | duplicate line |
+| ⌃⇧K | delete line |
+| ⌘L | select line |
+| ⌘↩ / ⇧⌘↩ | insert line below / above |
+| ⌘/ | toggle comment |
+| ⇧⌘I | format document (only when code intelligence is armed for that editor) |
+
+Most of these already exist in CodeMirror's defaults. What the preset actually changes is ⌥↑ / ⌥↓ (CodeMirror moves the line, Zed grows the selection), ⌃⌘↑ / ⌃⌘↓, ⇧⌘D, ⌃⇧K, ⌘L, ⇧⌘↩ and ⇧⌘I. A refused expand or shrink still consumes ⌥↑ / ⌥↓ so the line never moves under this preset.
+
+Keys that are also app shortcuts carry `stopPropagation`, so the editor wins only while it has focus and a terminal still gets the task switch on ⌥⌘↑ / ⌥⌘↓. `zedKeymap.test.ts` fails if a binding collides with a default in `SHORTCUT_DEFS` and does not set it. ⇧⌘L is the exception: "Add selection to agent" listens in the window's capture phase, so its handler stands down (`zedKeymapOwnsKey`) when the preset is on and the event target is inside a `.cm-editor`, and the editor's select-all-occurrences wins there. In a terminal or diff the agent shortcut still fires.
+
+Not ported: Zed's ⌘[ and ⌘] (outdent and indent). Termic binds them to Back and Forward, and Tab and Shift-Tab already indent and dedent.
+
 ## ⌘W on an empty window closes the profile
 
 `close-tab` closes the innermost thing there is to close, and when a window has

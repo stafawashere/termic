@@ -75,6 +75,7 @@ const LS_EDITOR_SIZE   = "editorFontSize";
 const LS_LIGATURES     = "codeLigatures";
 const LS_INLINE_BLAME  = "inlineBlame";
 const LS_EDITOR_WORD_WRAP = "editorWordWrap";
+const LS_EDITOR_KEYMAP = "editorKeymap";
 const LS_CODE_NAV      = "codeIntelligence";
 const LS_CODE_DIAGS    = "codeIntelDiagnostics";
 const LS_CODE_SERVERS  = "codeIntelServers";
@@ -165,6 +166,9 @@ export type MarkdownView = "source" | "preview" | "split";
  *  2D canvas rather than a live GL surface. "dom" is xterm's fallback, which
  *  builds real DOM nodes per cell. */
 export type TerminalRendererKind = "webgl" | "canvas" | "dom";
+
+/** Which editor key preset is active. */
+export type EditorKeymap = "default" | "zed";
 
 /** Narrow an untrusted localStorage string to a renderer kind. */
 export const parseTerminalRenderer = (
@@ -781,6 +785,9 @@ interface PrefsState {
    *  is untouched. No toolbar control, on purpose: Settings and the command
    *  palette's "Toggle word wrap" are the two ways in. */
   editorWordWrap: boolean;
+  /** Which key bindings the editor layers over CodeMirror's own. "zed" adds
+   *  Zed's macOS editor bindings (lib/editor/zedKeymap.ts). */
+  editorKeymap: EditorKeymap;
   /** Whether the editor OFFERS code intelligence (GH #174). ON by default: the
    *  offer costs one IPC call per editor open and nothing else, while burying
    *  it behind a settings toggle meant nobody found the feature. It never
@@ -1004,6 +1011,8 @@ interface PrefsState {
   setInlineBlame:     (v: boolean) => void;
   setEditorWordWrap:  (v: boolean) => void;
   toggleEditorWordWrap: () => void;
+  setEditorKeymap: (v: EditorKeymap) => void;
+  toggleZedKeymap: () => void;
   setCodeIntelligence:  (v: boolean) => void;
   setCodeIntelDiagnostics: (v: boolean) => void;
   /** Pick the server for a language, or `null` to go back to termic's order. */
@@ -1204,6 +1213,7 @@ export const APPEARANCE_DEFAULTS = {
   codeLigatures:         true,
   inlineBlame:           false,
   editorWordWrap:        false,
+  editorKeymap:          "default" as EditorKeymap,
   codeIntelligence:        true,
   codeIntelDiagnostics:    false,
   codeIntelServers:        {},
@@ -1288,6 +1298,7 @@ function readStoredPrefs() {
   const initialLigatures    = lsGetBool(LS_LIGATURES, APPEARANCE_DEFAULTS.codeLigatures);
   const initialInlineBlame  = lsGetBool(LS_INLINE_BLAME, APPEARANCE_DEFAULTS.inlineBlame);
   const initialWordWrap     = lsGetBool(LS_EDITOR_WORD_WRAP, APPEARANCE_DEFAULTS.editorWordWrap);
+  const initialEditorKeymap: EditorKeymap = lsGet(LS_EDITOR_KEYMAP, "default") === "zed" ? "zed" : "default";
   const initialCodeNav      = lsGetBool(LS_CODE_NAV, APPEARANCE_DEFAULTS.codeIntelligence);
   const initialCodeDiags    = lsGetBool(LS_CODE_DIAGS, APPEARANCE_DEFAULTS.codeIntelDiagnostics);
   const initialCodeServers = lsRecord(LS_CODE_SERVERS);
@@ -1464,6 +1475,7 @@ function readStoredPrefs() {
     codeLigatures: initialLigatures,
     inlineBlame: initialInlineBlame,
     editorWordWrap: initialWordWrap,
+    editorKeymap: initialEditorKeymap,
     codeIntelligence: initialCodeNav,
     codeIntelDiagnostics: initialCodeDiags,
     codeIntelServers: initialCodeServers,
@@ -1622,6 +1634,14 @@ export const usePrefs = create<PrefsState>(set => ({
   toggleEditorWordWrap: () => {
     usePrefs.getState().setEditorWordWrap(!usePrefs.getState().editorWordWrap);
   },
+  setEditorKeymap: (v) => {
+    if (usePrefs.getState().editorKeymap === v) return;
+    try { localStorage.setItem(LS_EDITOR_KEYMAP, v); } catch {}
+    set({ editorKeymap: v });
+  },
+  toggleZedKeymap: () => {
+    usePrefs.getState().setEditorKeymap(usePrefs.getState().editorKeymap === "zed" ? "default" : "zed");
+  },
   setConfirmBeforeCodeIntel: (v) => {
     if (usePrefs.getState().confirmBeforeCodeIntel === v) return;
     try { localStorage.setItem(LS_CONFIRM_CODE_NAV, v ? "1" : "0"); } catch {}
@@ -1697,6 +1717,7 @@ export const usePrefs = create<PrefsState>(set => ({
     s.setCodeLigatures(d.codeLigatures);
     s.setInlineBlame(d.inlineBlame);
     s.setEditorWordWrap(d.editorWordWrap);
+    s.setEditorKeymap(d.editorKeymap);
     s.setCodeIntelligence(d.codeIntelligence);
     s.setCodeIntelDiagnostics(d.codeIntelDiagnostics);
     s.setShowAllInstalledFonts(d.showAllInstalledFonts);

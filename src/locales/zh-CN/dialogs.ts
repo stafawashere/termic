@@ -113,6 +113,7 @@ export default {
       filterFiles: "筛选文件",
       clearSidebarFilter: "清除侧边栏筛选",
       toggleWordWrap: "切换自动换行",
+      toggleZedKeymap: "切换 Zed 快捷键",
       changeTheme: "更换主题…",
       keyboardShortcuts: "键盘快捷键",
       profileRow: "配置：{{name}}",

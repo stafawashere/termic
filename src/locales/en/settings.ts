@@ -437,6 +437,12 @@ export default {
       label: "Word wrap",
       hint: "Wrap long lines to the width of the editor instead of scrolling sideways. Also in the command palette.",
     },
+    keymap: {
+      label: "Editor keymap",
+      hint: "Termic keeps CodeMirror's keys. Zed adds Zed's macOS editor keys: select next occurrence, add cursor above and below, expand and shrink selection, move and duplicate line. Also in the command palette.",
+      default: "Termic",
+      zed: "Zed",
+    },
     blame: {
       label: "Inline git blame",
       hint: "Show who last changed the line the cursor is on, after the code. Click it to open that commit's diff.",

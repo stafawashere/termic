@@ -436,6 +436,12 @@ export default {
       label: "自动换行",
       hint: "长行按编辑器宽度折行，而不是横向滚动。命令面板中也有此开关。",
     },
+    keymap: {
+      label: "编辑器快捷键",
+      hint: "Termic 沿用 CodeMirror 的按键。Zed 会加入 Zed 的 macOS 编辑器按键：选择下一个匹配项、在上方和下方添加光标、扩大和缩小选区、移动和复制行。命令面板中也有此开关。",
+      default: "Termic",
+      zed: "Zed",
+    },
     blame: {
       label: "内联 git blame",
       hint: "在代码之后显示光标所在行的最后修改者。点击可打开该提交的差异。",
