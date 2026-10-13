@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { compareRecency, orderTasksByRecency, sortByRecency, taskRecencyKey } from "./recencyOrder";
+import {
+  compareRecency, createTaskOrderSelector, freezeDisplayOrder, orderTasksByRecency, parseTaskOrderKey, rankTasks, sortByRecency, taskRecencyKey,
+} from "./recencyOrder";
 import type { Task } from "./types";
 
 const task = (id: string, created: string, extra: Partial<Task> = {}): Task =>
@@ -81,5 +83,50 @@ describe("orderTasksByRecency", () => {
     const dragged = task("drag", "2026-01-01T00:00:00Z", { order: 0 });
 
     expect(ids(orderTasksByRecency([dragged, oldest, newest], {}))).toEqual(["drag", "new", "old"]);
+  });
+});
+
+describe("createTaskOrderSelector", () => {
+  const a = task("a", "2026-01-01T00:00:00Z");
+  const b = task("b", "2026-01-02T00:00:00Z");
+  const other = task("x", "2026-01-03T00:00:00Z", { project_id: "q" });
+
+  it("returns the same string until an order changes, and skips archived tasks", () => {
+    const select = createTaskOrderSelector();
+    const tasks = [a, b, other, task("gone", "2026-01-04T00:00:00Z", { archived: true })];
+    const first = select({ tasks, activityAt: {} });
+
+    expect(first).toBe("b,a,x");
+    expect(select({ tasks: [...tasks], activityAt: {} })).toBe(first);
+  });
+
+  it("changes when a stamp moves a task", () => {
+    const select = createTaskOrderSelector();
+    const tasks = [a, b];
+
+    expect(select({ tasks, activityAt: {} })).toBe("b,a");
+    expect(select({ tasks, activityAt: { a: Date.parse("2026-02-01T00:00:00Z") } })).toBe("a,b");
+  });
+});
+
+describe("rankTasks", () => {
+  it("follows the key and puts an unknown task last", () => {
+    const ranks = parseTaskOrderKey("c,a");
+
+    expect(ids(rankTasks([task("a", ""), task("z", ""), task("c", "")], ranks))).toEqual(["c", "a", "z"]);
+  });
+});
+
+describe("freezeDisplayOrder", () => {
+  it("rewrites one project to its drawn order in the slots it held, and numbers it", () => {
+    const old = task("old", "2026-01-01T00:00:00Z");
+    const fresh = task("new", "2026-01-03T00:00:00Z");
+    const elsewhere = task("x", "2026-01-02T00:00:00Z", { project_id: "q" });
+
+    const frozen = freezeDisplayOrder([old, elsewhere, fresh], "p", {});
+
+    expect(ids(frozen)).toEqual(["new", "x", "old"]);
+    expect(frozen.map(t => t.order)).toEqual([0, undefined, 1]);
+    expect(frozen[1]).toBe(elsewhere);
   });
 });

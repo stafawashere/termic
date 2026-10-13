@@ -64,7 +64,7 @@ import { useTaskQuery } from "@/hooks/useTaskQuery";
 import { useAutoExpand } from "@/components/sidebar/useAutoExpand";
 import { setTreeFold, treeFoldKey, type TreeFold } from "@/lib/treeFold";
 import { SpawnedFromMark, SpawnLinksOverlay } from "./SpawnLinks";
-import { orderTasksByRecency } from "@/lib/recencyOrder";
+import { createTaskOrderSelector, freezeDisplayOrder, parseTaskOrderKey, rankTasks } from "@/lib/recencyOrder";
 import { crossProjectStrays, flattenSegments, groupColorCss as taskGroupColorCss, groupLabel, layoutTaskList, liveGroups, nextGroupColor } from "@/lib/taskGroups";
 import { taskNeedsAttention, taskWorkDone, taskWorking, taskDelegated } from "@/lib/taskWorkState";
 import { delegatedTitle } from "@/lib/delegatedWork";
@@ -152,7 +152,9 @@ export function Sidebar({ compact: compactProp }: {
   const sidebarWidth = useApp(s => s.sidebarWidth);
   const setSidebarWidth = useApp(s => s.setSidebarWidth);
   const tasks = useApp(s => s.tasks);
-  const activityAt = useApp(s => s.activityAt);
+  const [selectTaskOrder] = useState(createTaskOrderSelector);
+  const taskOrderKey = useApp(selectTaskOrder);
+  const taskRanks = useMemo(() => parseTaskOrderKey(taskOrderKey), [taskOrderKey]);
   const activeTask = useApp(s => s.activeTaskId);
   const setActive = useApp(s => s.setActiveTask);
   const setView = useApp(s => s.setView);
@@ -555,6 +557,9 @@ export function Sidebar({ compact: compactProp }: {
       const dy = e.clientY - armed.y;
       if (dx * dx + dy * dy < 16) return;
       armed.started = true;
+      // The store array is not the order on screen (rows run newest activity
+      // first), so pin the drawn order before the splice below indexes it.
+      useApp.setState(s => ({ tasks: freezeDisplayOrder(s.tasks, armed.projectId, s.activityAt) }));
       setDragTaskId(armed.id);
     }
     // Stashed for the post-reorder re-anchor effect, which has no event to
@@ -1589,7 +1594,7 @@ export function Sidebar({ compact: compactProp }: {
           // `depth`: 0 for a loose project, 1 inside a folder or the Inactive
           // fold. Everything under the row indents from it on the 18px grid.
           const renderProject = (p: typeof projects[number], depth = 0) => {
-            const taskList = orderTasksByRecency(tasks.filter(w => w.project_id === p.id && !w.archived), activityAt);
+            const taskList = rankTasks(tasks.filter(w => w.project_id === p.id && !w.archived), taskRanks);
             const pendingForProject = pendingTaskList.filter(t => t.projectId === p.id);
             // Empty projects default to collapsed (no point pinning a blank
             // expanded row). User overrides stick: explicit true / false

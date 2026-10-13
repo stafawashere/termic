@@ -43,3 +43,72 @@ export function orderTasksByRecency(tasks: readonly Task[], activityAt: Readonly
 
   return [...pinned, ...sortByRecency(loose, task => taskRecencyKey(task, activityAt))];
 }
+
+interface OrderInputs {
+  tasks: Task[];
+  activityAt: Record<string, number>;
+}
+
+/** Every project's display order as one string, so a subscriber re-renders
+ *  when an ORDER changes and not on each stamp or unrelated task write. The
+ *  result is cached on the identity of its two inputs, because a selector
+ *  runs on every store write and the PTY-driven ones leave both untouched. */
+export function createTaskOrderSelector(): (state: OrderInputs) => string {
+  let lastTasks: Task[] | null = null;
+  let lastActivity: Record<string, number> | null = null;
+  let lastKey = "";
+
+  return state => {
+    const unchanged = state.tasks === lastTasks && state.activityAt === lastActivity;
+    if (unchanged) return lastKey;
+
+    const byProject = new Map<string, Task[]>();
+    for (const task of state.tasks) {
+      if (task.archived) continue;
+
+      const list = byProject.get(task.project_id);
+      if (list) list.push(task);
+      else byProject.set(task.project_id, [task]);
+    }
+
+    const ordered = [...byProject.values()].flatMap(list => orderTasksByRecency(list, state.activityAt));
+    lastTasks = state.tasks;
+    lastActivity = state.activityAt;
+    lastKey = ordered.map(task => task.id).join(",");
+    return lastKey;
+  };
+}
+
+export function parseTaskOrderKey(key: string): ReadonlyMap<string, number> {
+  const ranks = new Map<string, number>();
+  key.split(",").forEach((id, index) => { if (id) ranks.set(id, index); });
+  return ranks;
+}
+
+/** Tasks in the order a key ranks them. A task the key does not know yet
+ *  sorts last, in its incoming position. */
+export function rankTasks(tasks: readonly Task[], ranks: ReadonlyMap<string, number>): Task[] {
+  return sortByRecency(tasks, task => {
+    const rank = ranks.get(task.id);
+    return rank === undefined ? null : -rank;
+  });
+}
+
+/** The store's task array with one project's tasks rewritten to the order the
+ *  sidebar draws them in, each carrying that position as its manual `order`.
+ *  A drag splices the store array and persists the result, so it has to start
+ *  from what the user sees. The project's tasks keep the slots they held. */
+export function freezeDisplayOrder(
+  all: readonly Task[],
+  projectId: string,
+  activityAt: Readonly<Record<string, number>>,
+): Task[] {
+  const members = all.filter(task => task.project_id === projectId && !task.archived);
+  const displayed = orderTasksByRecency(members, activityAt).map((task, index) => ({ ...task, order: index }));
+
+  let next = 0;
+  return all.map(task => {
+    const isMember = task.project_id === projectId && !task.archived;
+    return isMember ? displayed[next++] : task;
+  });
+}

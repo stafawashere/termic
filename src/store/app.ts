@@ -504,10 +504,15 @@ export interface AppState {
    *  for an FS watcher: the file tree, open editor tabs, and the Git panel
    *  re-read on the rising edge. Ephemeral (not persisted). */
   fsRevision: Record<string, number>;
-  /** When each task last had activity the sidebar orders by: a turn ending
-   *  or the user opening it, never PTY output (src/lib/recencyOrder.ts).
-   *  Ephemeral; a task with no entry orders by its creation time. */
+  /** When each task last had activity the sidebar orders by, never PTY output
+   *  (src/lib/recencyOrder.ts). Only a turn ending writes it, so every reorder
+   *  lands at a turn end. Ephemeral; a task with no entry orders by its
+   *  creation time. */
   activityAt: Record<string, number>;
+  /** The user opening a task or sending it a prompt, waiting for the next
+   *  turn end to be folded into `activityAt` so no row moves under the user. */
+  pendingActivityAt: Record<string, number>;
+  noteTaskPrompt: (taskId: string) => void;
   bumpFsRevision: (taskId: string) => void;
   /** Per-task "git status may have changed" tick — the lighter sibling of
    *  `fsRevision` for mutations that can't have changed the visible file
@@ -781,6 +786,7 @@ export const useApp = create<AppState>((set, get) => ({
   closedTabs: {},
   fsRevision: {},
   activityAt: {},
+  pendingActivityAt: {},
   gitRevision: {},
   view: { page: "dashboard" },
   compactSidebar: initialCompact,
@@ -1074,7 +1080,7 @@ export const useApp = create<AppState>((set, get) => ({
     }
     const opened = id !== null && id !== prev;
     set({
-      ...(opened ? { activityAt: { ...get().activityAt, [id]: Date.now() } } : null),
+      ...(opened ? { pendingActivityAt: { ...get().pendingActivityAt, [id]: Date.now() } } : null),
       activeTaskId: id,
       view: { page: id ? "dashboard" : get().view.page },
       mountedTasks: nextMounted,
@@ -3118,11 +3124,16 @@ export const useApp = create<AppState>((set, get) => ({
       ...(settled
         ? {
           fsRevision: { ...s.fsRevision, [taskId]: (s.fsRevision[taskId] ?? 0) + 1 },
-          activityAt: { ...s.activityAt, [taskId]: Date.now() },
+          activityAt: { ...s.activityAt, ...s.pendingActivityAt, [taskId]: Date.now() },
+          pendingActivityAt: {},
         }
         : null),
     };
   }),
+
+  noteTaskPrompt: (taskId) => set(s => ({
+    pendingActivityAt: { ...s.pendingActivityAt, [taskId]: Date.now() },
+  })),
 
   bumpFsRevision: (taskId) => set(s => ({
     fsRevision: { ...s.fsRevision, [taskId]: (s.fsRevision[taskId] ?? 0) + 1 },

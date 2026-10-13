@@ -1298,12 +1298,16 @@ field, so it agrees; the section has no rule of its own.
 Rows run newest activity first (`src/lib/recencyOrder.ts`), ties in TREE
 order: `visualProjectOrder`, then each project's rows as the tree lays them
 out (`layoutTaskList`, so a task group is one block, keyed by its newest
-member). Activity is `activityAt` in the app store, stamped when a turn ends
-(the `working` to not-working edge) or the user opens the task, never by PTY
-output, so a row moves only on one of those or when its bucket changes. A
+member). Activity is `activityAt` in the app store, written only when a turn
+ends (the `working` to not-working edge), never by PTY output. Opening a task
+or sending it a prompt is held in `pendingActivityAt` and folded in at the
+next turn end, so every reorder lands at a turn end and nothing moves under
+the user. A row also moves when its bucket changes. Keyboard task navigation
+(`useShortcuts.ts`) walks the same order. A
 task with no stamp orders by its creation time. The tree orders the same
 way, except that a task the user dragged (`order` set) keeps its manual slot
-ahead of the rest. Subagent rows list the newest start first, a workflow run
+ahead of the rest; a drag first pins the drawn order (`freezeDisplayOrder`)
+so its indices match what is on screen. Subagent rows list the newest start first, a workflow run
 counting as one block at its newest agent. The section walks projects rather
 than tasks, so a task whose project left the profile is skipped exactly as
 the tree skips it. The per-project task filter (#324) does not apply here; the

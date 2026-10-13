@@ -848,7 +848,7 @@ describe("sidebar status section", () => {
     await waitVisible(SECTION);
   });
 
-  it("orders rows newest activity first, moving one only when a turn ends or the user opens it", async () => {
+  it("orders rows newest activity first, every reorder landing when a turn ends", async () => {
     const treeIds = () => browser.execute(
       () => [...document.querySelectorAll<HTMLElement>("[data-sidebar-task-id]")]
         .map(el => el.dataset.sidebarTaskId as string));
@@ -856,9 +856,11 @@ describe("sidebar status section", () => {
       const ids = await treeIds();
       return ids.indexOf(upper) >= 0 && ids.indexOf(lower) >= 0 && ids.indexOf(upper) < ids.indexOf(lower);
     };
-    const finishTurn = (id: string, working: boolean) => browser.execute((tid, w) => {
+    const setTurn = (id: string, working: boolean) => browser.execute((tid, w) => {
       const app = window.__termic!.useApp.getState();
       const tab = (app.tabs[tid] ?? []).find((t: any) => t.type === "terminal");
+      // A finished turn's "done" refuses a bare "working", so start from idle.
+      if (w) app.setWorkState(tid, tab.id, "idle");
       app.setWorkState(tid, tab.id, w ? "working" : "done");
     }, id, working);
 
@@ -866,32 +868,49 @@ describe("sidebar status section", () => {
     recentOld = await openTask("recency-old", false);
     recentNew = await openTask("recency-new", false);
 
-    // Opening counts: each task is opened in turn, and the last one opened sits on top.
+    // Created order: the newer task is on top.
+    await browser.waitUntil(() => above(recentNew, recentOld), {
+      timeout: 5_000, timeoutMsg: "the newer task did not sit above the older one",
+    });
+
+    // Opening the older task is held back, not applied: its row stays put.
     await ensureActiveTask(recentOld);
     await waitForAgentReady(recentOld);
-    await ensureActiveTask(recentNew);
-    await waitForAgentReady(recentNew);
-    await browser.waitUntil(() => above(recentNew, recentOld), {
-      timeout: 5_000, timeoutMsg: "the task opened last did not sit above the one opened before it",
-    });
-    expect(await above(recentNew, fresh)).toBe(true);
-
-    // A turn that has started but not ended moves nothing.
-    await finishTurn(recentOld, true);
-    await browser.waitUntil(async () => (await sidebarBadge(recentOld)) === "working", {
-      timeout: 5_000, timeoutMsg: "the started turn never drew its working badge",
-    });
     expect(await above(recentNew, recentOld)).toBe(true);
 
-    // The turn ending moves the older task to the top.
-    await finishTurn(recentOld, false);
+    // Another task's turn ending folds the held open in, and that task goes on top.
+    await ensureActiveTask(blocked);
+    await waitForAgentReady(blocked);
+    await ensureActiveTask(recentOld);
+    await setTurn(blocked, true);
+    await setTurn(blocked, false);
     await browser.waitUntil(() => above(recentOld, recentNew), {
+      timeout: 5_000, timeoutMsg: "a turn ending did not apply the held open",
+    });
+    expect(await above(blocked, recentOld)).toBe(true);
+
+    // A turn that has started but not ended moves nothing.
+    await ensureActiveTask(recentNew);
+    await waitForAgentReady(recentNew);
+    await setTurn(recentNew, true);
+    await browser.waitUntil(async () => (await sidebarBadge(recentNew)) === "working", {
+      timeout: 5_000, timeoutMsg: "the started turn never drew its working badge",
+    });
+    expect(await above(recentOld, recentNew)).toBe(true);
+
+    // The turn ending moves it to the top.
+    await setTurn(recentNew, false);
+    await browser.waitUntil(() => above(recentNew, recentOld), {
       timeout: 5_000, timeoutMsg: "a finished turn did not move its task to the top",
     });
 
-    // The status section lists the same two in the same order.
-    await finishTurn(recentNew, true);
-    await finishTurn(recentNew, false);
+    // The status section lists the same two in the same order, once both
+    // have finished a turn with the user looking elsewhere.
+    await ensureActiveTask(blocked);
+    await setTurn(recentOld, true);
+    await setTurn(recentOld, false);
+    await setTurn(recentNew, true);
+    await setTurn(recentNew, false);
     await browser.waitUntil(() => above(recentNew, recentOld), { timeout: 5_000 });
     await setBucketOpen("settled", true);
     const sectionIds = await browser.execute(
